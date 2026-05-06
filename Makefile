@@ -35,7 +35,11 @@ install:
 	fi
 
 run:
-	@powershell -ExecutionPolicy Bypass -File "scripts/$(RUN_SCRIPT)"
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		powershell -ExecutionPolicy Bypass -File "scripts/$(RUN_SCRIPT)"; \
+	else \
+		./scripts/$(RUN_SCRIPT); \
+	fi
 
 dev: run
 

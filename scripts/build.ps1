@@ -25,7 +25,7 @@ $ExePath = Join-Path $ServerDir "bin\auth-gate.exe"
 Write-Host ""
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow
 Set-Location $WebDir
-npm install --include=dev
+npm ci --include=dev
 npm run build
 
 Write-Host "[2/2] Building server..." -ForegroundColor Yellow

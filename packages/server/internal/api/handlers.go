@@ -1,7 +1,10 @@
 package api
 
 import (
+	"database/sql"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
@@ -9,6 +12,108 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var validAuthRuleTypes = map[string]struct{}{
+	"none":   {},
+	"apikey": {},
+	"bearer": {},
+	"basic":  {},
+}
+
+var validRoles = map[string]struct{}{
+	store.RoleAdmin:  {},
+	store.RoleEditor: {},
+	store.RoleViewer: {},
+}
+
+func normalizeAndValidateAuthRule(rule *store.AuthRule) error {
+	rule.Type = strings.ToLower(strings.TrimSpace(rule.Type))
+	if rule.Type == "" {
+		rule.Type = "none"
+	}
+	if _, ok := validAuthRuleTypes[rule.Type]; !ok {
+		return errInvalidAuthRuleType
+	}
+
+	switch rule.Type {
+	case "apikey":
+		if strings.TrimSpace(rule.Config.Secret) == "" {
+			return errMissingAPIKeySecret
+		}
+	case "bearer":
+		if strings.TrimSpace(rule.Config.Secret) == "" {
+			return errMissingBearerSecret
+		}
+	case "basic":
+		if strings.TrimSpace(rule.Config.Username) == "" || rule.Config.Password == "" {
+			return errMissingBasicCredentials
+		}
+	}
+
+	return nil
+}
+
+var (
+	errInvalidAuthRuleType     = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "invalid auth rule type"}
+	errMissingAPIKeySecret     = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "apikey secret required"}
+	errMissingBearerSecret     = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "bearer secret required"}
+	errMissingBasicCredentials = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "basic username and password required"}
+)
+
+func authRuleValidationMessage(err error) string {
+	if ginErr, ok := err.(gin.Error); ok {
+		if msg, ok := ginErr.Meta.(string); ok && msg != "" {
+			return msg
+		}
+	}
+	return "invalid auth rule configuration"
+}
+
+func normalizeAndValidateRole(role string) (string, bool) {
+	role = strings.ToLower(strings.TrimSpace(role))
+	if role == "" {
+		role = store.RoleViewer
+	}
+	_, ok := validRoles[role]
+	return role, ok
+}
+
+func validateRoute(route *store.Route) error {
+	route.PathPrefix = strings.TrimSpace(route.PathPrefix)
+	route.Backend = strings.TrimSpace(route.Backend)
+	route.Host = strings.TrimSpace(route.Host)
+
+	if route.PathPrefix == "" || route.Backend == "" {
+		return errMissingRouteFields
+	}
+	if !strings.HasPrefix(route.PathPrefix, "/") {
+		return errInvalidPathPrefix
+	}
+	backendURL, err := url.Parse(route.Backend)
+	if err != nil || backendURL.Scheme == "" || backendURL.Host == "" {
+		return errInvalidBackend
+	}
+	if backendURL.Scheme != "http" && backendURL.Scheme != "https" {
+		return errInvalidBackend
+	}
+	return nil
+}
+
+var (
+	errMissingRouteFields = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "path_prefix and backend required"}
+	errInvalidPathPrefix  = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "path_prefix must start with /"}
+	errInvalidBackend     = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "backend must be a valid http or https URL"}
+	errInvalidRole        = gin.Error{Err: sql.ErrTxDone, Type: gin.ErrorTypePublic, Meta: "invalid role"}
+)
+
+func publicMessage(err error, fallback string) string {
+	if ginErr, ok := err.(gin.Error); ok {
+		if msg, ok := ginErr.Meta.(string); ok && msg != "" {
+			return msg
+		}
+	}
+	return fallback
+}
 
 func RegisterHandlers(r *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite) {
 	// Auth
@@ -106,8 +211,8 @@ func createRoute(db *store.SQLite, routerMgr *router.Manager) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if route.PathPrefix == "" || route.Backend == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "path_prefix and backend required"})
+		if err := validateRoute(&route); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": publicMessage(err, "invalid route")})
 			return
 		}
 		if err := db.CreateRoute(&route); err != nil {
@@ -128,6 +233,10 @@ func updateRoute(db *store.SQLite, routerMgr *router.Manager) gin.HandlerFunc {
 			return
 		}
 		route.ID = id
+		if err := validateRoute(&route); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": publicMessage(err, "invalid route")})
+			return
+		}
 		if err := db.UpdateRoute(&route); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -189,7 +298,15 @@ func createAuthRule(db *store.SQLite, routerMgr *router.Manager) gin.HandlerFunc
 			c.JSON(http.StatusBadRequest, gin.H{"error": "route not found"})
 			return
 		}
+		if err := normalizeAndValidateAuthRule(&rule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": authRuleValidationMessage(err)})
+			return
+		}
 		if err := db.CreateAuthRule(&rule); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "unique") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "route already has an auth rule"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -207,7 +324,27 @@ func updateAuthRule(db *store.SQLite, routerMgr *router.Manager) gin.HandlerFunc
 			return
 		}
 		rule.ID = id
+		if rule.RouteID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "route_id required"})
+			return
+		}
+		if _, err := db.GetRoute(rule.RouteID); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "route not found"})
+			return
+		}
+		if err := normalizeAndValidateAuthRule(&rule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": authRuleValidationMessage(err)})
+			return
+		}
 		if err := db.UpdateAuthRule(&rule); err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotFound, gin.H{"error": "auth rule not found"})
+				return
+			}
+			if strings.Contains(strings.ToLower(err.Error()), "unique") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "route already has an auth rule"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -254,8 +391,10 @@ func createUser(db *store.SQLite) gin.HandlerFunc {
 		}
 
 		role := req.Role
-		if role == "" {
-			role = store.RoleViewer
+		var ok bool
+		if role, ok = normalizeAndValidateRole(role); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": publicMessage(errInvalidRole, "invalid role")})
+			return
 		}
 
 		hash, err := store.HashPassword(req.Password)
@@ -300,7 +439,12 @@ func updateUser(db *store.SQLite) gin.HandlerFunc {
 		}
 
 		user.Username = req.Username
-		user.Role = req.Role
+		role, ok := normalizeAndValidateRole(req.Role)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": publicMessage(errInvalidRole, "invalid role")})
+			return
+		}
+		user.Role = role
 		user.Enabled = req.Enabled
 
 		if err := db.UpdateUser(user); err != nil {

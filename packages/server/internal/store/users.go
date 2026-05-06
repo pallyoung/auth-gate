@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,22 +137,32 @@ func HashPassword(password string) (string, error) {
 	return string(bytes), err
 }
 
-func (s *SQLite) EnsureAdmin() error {
+func (s *SQLite) EnsureAdmin(username, password string) (bool, error) {
+	if strings.TrimSpace(username) == "" {
+		username = "admin"
+	}
+	if password == "" {
+		return false, errors.New("bootstrap admin password required")
+	}
+
 	users, err := s.ListUsers()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(users) == 0 {
-		hash, err := HashPassword("admin")
+		hash, err := HashPassword(password)
 		if err != nil {
-			return err
+			return false, err
 		}
-		return s.CreateUser(&User{
+		if err := s.CreateUser(&User{
 			Username:     "admin",
 			PasswordHash: hash,
 			Role:         RoleAdmin,
 			Enabled:      true,
-		})
+		}); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }

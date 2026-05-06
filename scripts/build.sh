@@ -1,12 +1,19 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-cd "$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Building frontend..."
-cd packages/web && npm install && npm run build && cd ..
+(
+    cd "$PROJECT_ROOT/packages/web"
+    npm ci --include=dev
+    npm run build
+)
 
 echo "Building server..."
-cd packages/server && go build -o bin/auth-gate ./cmd/server
+(
+    cd "$PROJECT_ROOT/packages/server"
+    go build -o bin/auth-gate ./cmd/server
+)
 
-echo "Build complete: packages/server/bin/auth-gate"
+echo "Build complete: $PROJECT_ROOT/packages/server/bin/auth-gate"

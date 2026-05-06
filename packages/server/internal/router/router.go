@@ -92,12 +92,22 @@ func (m *Manager) Match(host, path string) *Route {
 		if r.Host != "" && r.Host != host {
 			continue
 		}
-		// 路径前缀匹配
-		if strings.HasPrefix(path, r.PathPrefix) {
+		// 路径边界匹配: "/api" 只匹配 "/api" 或 "/api/..."
+		if pathMatchesPrefix(path, r.PathPrefix) {
 			return r
 		}
 	}
 	return nil
+}
+
+func pathMatchesPrefix(path, prefix string) bool {
+	if prefix == "" || prefix == "/" {
+		return true
+	}
+	if path == prefix {
+		return true
+	}
+	return strings.HasPrefix(path, prefix+"/")
 }
 
 func (m *Manager) GetRoutes() []Route {

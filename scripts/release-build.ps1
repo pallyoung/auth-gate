@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 # Build frontend
 Write-Host "[1/4] Building frontend..." -ForegroundColor Yellow
 Set-Location (Join-Path $ProjectRoot "packages\web")
-npm install
+npm ci --include=dev
 npm run build
 
 # Build Linux binaries

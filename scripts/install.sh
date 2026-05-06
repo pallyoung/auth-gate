@@ -1,7 +1,7 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-cd "$(dirname "$0")/.."
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== Auth Gate Install & Run ==="
 
@@ -19,15 +19,24 @@ fi
 
 # Install frontend deps
 echo "[1/4] Installing frontend dependencies..."
-cd packages/web && npm install && cd ../..
+(
+    cd "$PROJECT_ROOT/packages/web"
+    npm ci --include=dev
+)
 
 # Build frontend
 echo "[2/4] Building frontend..."
-cd packages/web && npm run build && cd ../..
+(
+    cd "$PROJECT_ROOT/packages/web"
+    npm run build
+)
 
 # Build server
 echo "[3/4] Building server..."
-cd packages/server && go build -o bin/auth-gate ./cmd/server && cd ..
+(
+    cd "$PROJECT_ROOT/packages/server"
+    go build -o bin/auth-gate ./cmd/server
+)
 
 echo "[4/4] Build complete!"
 echo ""

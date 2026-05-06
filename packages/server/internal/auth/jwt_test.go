@@ -1,13 +1,27 @@
 package auth
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+func withJWTSecret(t *testing.T, secret string) {
+	t.Helper()
+
+	previousSecret := currentJWTSecret()
+	previousGenerated := UsingGeneratedJWTSecret()
+	setJWTSecret([]byte(secret), false)
+	t.Cleanup(func() {
+		setJWTSecret(previousSecret, previousGenerated)
+	})
+}
+
 func TestGenerateToken(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	token, err := GenerateToken("user-123", "testuser", "admin")
 	if err != nil {
 		t.Fatalf("GenerateToken failed: %v", err)
@@ -18,6 +32,8 @@ func TestGenerateToken(t *testing.T) {
 }
 
 func TestValidateToken(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	token, err := GenerateToken("user-123", "testuser", "editor")
 	if err != nil {
 		t.Fatalf("GenerateToken failed: %v", err)
@@ -40,6 +56,8 @@ func TestValidateToken(t *testing.T) {
 }
 
 func TestValidateToken_Invalid(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	_, err := ValidateToken("not-a-valid-jwt")
 	if err == nil {
 		t.Fatal("ValidateToken should fail for invalid token")
@@ -47,6 +65,8 @@ func TestValidateToken_Invalid(t *testing.T) {
 }
 
 func TestValidateToken_WrongSecret(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	token, err := GenerateToken("user-123", "testuser", "admin")
 	if err != nil {
 		t.Fatalf("GenerateToken failed: %v", err)
@@ -60,12 +80,14 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 }
 
 func TestValidateTokenWithSecret(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	token, err := GenerateToken("user-456", "router", "viewer")
 	if err != nil {
 		t.Fatalf("GenerateToken failed: %v", err)
 	}
 
-	claims, err := ValidateTokenWithSecret(token, JWTSecret)
+	claims, err := ValidateTokenWithSecret(token, currentJWTSecret())
 	if err != nil {
 		t.Fatalf("ValidateTokenWithSecret failed: %v", err)
 	}
@@ -76,6 +98,8 @@ func TestValidateTokenWithSecret(t *testing.T) {
 }
 
 func TestValidateTokenWithSecret_WrongKey(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	token, err := GenerateToken("user-456", "router", "viewer")
 	if err != nil {
 		t.Fatalf("GenerateToken failed: %v", err)
@@ -88,6 +112,8 @@ func TestValidateTokenWithSecret_WrongKey(t *testing.T) {
 }
 
 func TestValidateTokenWithSecret_RejectsAlgNone(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	// Craft a token with alg=none to simulate algorithm confusion attack
 	claims := &Claims{
 		UserID:   "attacker",
@@ -108,6 +134,8 @@ func TestValidateTokenWithSecret_RejectsAlgNone(t *testing.T) {
 }
 
 func TestGenerateToken_Expiry(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	// Tokens generated now should be valid for 24 hours
 	token, _ := GenerateToken("user", "test", "admin")
 	claims, _ := ValidateToken(token)
@@ -121,5 +149,22 @@ func TestGenerateToken_Expiry(t *testing.T) {
 	}
 	if expiry.After(time.Now().Add(25 * time.Hour)) {
 		t.Errorf("Expiry too late: %v", expiry)
+	}
+}
+
+func TestConfigureJWTSecret(t *testing.T) {
+	previousSecret := currentJWTSecret()
+	previousGenerated := UsingGeneratedJWTSecret()
+	t.Cleanup(func() {
+		setJWTSecret(previousSecret, previousGenerated)
+	})
+
+	ConfigureJWTSecret("configured-secret")
+	got := currentJWTSecret()
+	if !bytes.Equal(got, []byte("configured-secret")) {
+		t.Fatalf("currentJWTSecret() = %q, want %q", got, "configured-secret")
+	}
+	if UsingGeneratedJWTSecret() {
+		t.Fatal("UsingGeneratedJWTSecret() = true, want false after explicit configuration")
 	}
 }

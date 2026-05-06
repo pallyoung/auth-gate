@@ -14,7 +14,7 @@ $ExePath = Join-Path $DistDir "auth-gate.exe"
 
 # Build if needed
 if (-not (Test-Path $ExePath)) {
-    Write-Host "Binary not found, building..." -ForegroundColor Yellow
+    Write-Host "Distribution not found, deploying..." -ForegroundColor Yellow
     & "$ProjectRoot\scripts\deploy.ps1"
     return
 }

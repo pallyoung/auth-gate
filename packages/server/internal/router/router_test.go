@@ -43,6 +43,7 @@ func TestMatch_Basic(t *testing.T) {
 	}{
 		{"example.com", "/api/users", "1"},
 		{"example.com", "/api", "1"},
+		{"example.com", "/apifoo", ""},
 		{"example.com", "/other", ""},
 		{"other.com", "/api/users", ""},
 	}

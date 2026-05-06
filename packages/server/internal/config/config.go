@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,7 +22,9 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	AdminToken string `yaml:"admin_token"`
+	JWTSecret              string `yaml:"jwt_secret"`
+	BootstrapAdminPassword string `yaml:"bootstrap_admin_password"`
+	LegacyAdminToken       string `yaml:"admin_token"`
 }
 
 func Load(path string) (*Config, error) {
@@ -46,8 +49,21 @@ func DefaultConfig() *Config {
 		Database: DatabaseConfig{
 			Path: "data/auth-gate.db",
 		},
-		Auth: AuthConfig{
-			AdminToken: "admin-secret-token",
-		},
+		Auth: AuthConfig{},
 	}
+}
+
+func (c AuthConfig) JWTSecretValue() string {
+	return strings.TrimSpace(c.JWTSecret)
+}
+
+func (c AuthConfig) BootstrapPasswordValue() string {
+	if strings.TrimSpace(c.BootstrapAdminPassword) == "" {
+		return ""
+	}
+	return c.BootstrapAdminPassword
+}
+
+func (c AuthConfig) HasLegacyAdminToken() bool {
+	return strings.TrimSpace(c.LegacyAdminToken) != ""
 }

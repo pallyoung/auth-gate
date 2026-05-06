@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -18,7 +19,7 @@ func NewSQLite(path string) (*SQLite, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=foreign_keys(1)", path))
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,7 @@ func NewSQLite(path string) (*SQLite, error) {
 
 	CREATE INDEX IF NOT EXISTS idx_routes_host ON routes(host);
 	CREATE INDEX IF NOT EXISTS idx_routes_enabled ON routes(enabled);
-	CREATE INDEX IF NOT EXISTS idx_auth_rules_route_id ON auth_rules(route_id);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_rules_route_id ON auth_rules(route_id);
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	`
 

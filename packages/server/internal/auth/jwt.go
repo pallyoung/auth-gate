@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"crypto/rand"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,14 +19,53 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-var JWTSecret []byte
+var (
+	jwtSecretMu             sync.RWMutex
+	jwtSecret               []byte
+	usingGeneratedJWTSecret bool
+)
 
 func init() {
 	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "auth-gate-secret-change-in-production"
+	if strings.TrimSpace(secret) != "" {
+		setJWTSecret([]byte(secret), false)
+		return
 	}
-	JWTSecret = []byte(secret)
+
+	generatedSecret := make([]byte, 32)
+	if _, err := rand.Read(generatedSecret); err != nil {
+		panic("failed to generate JWT secret")
+	}
+	setJWTSecret(generatedSecret, true)
+}
+
+func setJWTSecret(secret []byte, generated bool) {
+	jwtSecretMu.Lock()
+	defer jwtSecretMu.Unlock()
+
+	jwtSecret = append([]byte(nil), secret...)
+	usingGeneratedJWTSecret = generated
+}
+
+func currentJWTSecret() []byte {
+	jwtSecretMu.RLock()
+	defer jwtSecretMu.RUnlock()
+
+	return append([]byte(nil), jwtSecret...)
+}
+
+func ConfigureJWTSecret(secret string) {
+	if strings.TrimSpace(secret) == "" {
+		return
+	}
+	setJWTSecret([]byte(secret), false)
+}
+
+func UsingGeneratedJWTSecret() bool {
+	jwtSecretMu.RLock()
+	defer jwtSecretMu.RUnlock()
+
+	return usingGeneratedJWTSecret
 }
 
 func GenerateToken(userID, username, role string) (string, error) {
@@ -39,12 +80,13 @@ func GenerateToken(userID, username, role string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JWTSecret)
+	return token.SignedString(currentJWTSecret())
 }
 
 func ValidateToken(tokenString string) (*Claims, error) {
+	secret := currentJWTSecret()
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return JWTSecret, nil
+		return secret, nil
 	})
 
 	if err != nil {

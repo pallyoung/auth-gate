@@ -5,4 +5,5 @@ database:
   path: "./data/auth-gate.db"
 
 auth:
-  admin_token: "change-me-in-production"
+  jwt_secret: ""
+  bootstrap_admin_password: ""

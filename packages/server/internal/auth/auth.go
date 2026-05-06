@@ -13,6 +13,8 @@ import (
 
 func Check(c *gin.Context, rule *store.AuthRule) bool {
 	switch rule.Type {
+	case "none":
+		return true
 	case "apikey":
 		return checkAPIKey(c, rule)
 	case "bearer":
@@ -20,7 +22,7 @@ func Check(c *gin.Context, rule *store.AuthRule) bool {
 	case "basic":
 		return checkBasic(c, rule)
 	default:
-		return true
+		return false
 	}
 }
 

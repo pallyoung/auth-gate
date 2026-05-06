@@ -77,8 +77,10 @@ func TestCheck_APIKey_CustomHeader(t *testing.T) {
 }
 
 func TestCheck_Bearer_JWT(t *testing.T) {
-	// Generate tokens using the module's JWTSecret (used by GenerateToken).
+	withJWTSecret(t, "test-secret")
+
 	validToken, _ := GenerateToken("user-bearer", "bearertest", "viewer")
+	secret := currentJWTSecret()
 
 	tests := []struct {
 		name      string
@@ -86,12 +88,12 @@ func TestCheck_Bearer_JWT(t *testing.T) {
 		secret    []byte
 		want      bool
 	}{
-		{"Valid bearer token", "Bearer " + validToken, JWTSecret, true},
-		{"lowercase bearer", "bearer " + validToken, JWTSecret, true},
+		{"Valid bearer token", "Bearer " + validToken, secret, true},
+		{"lowercase bearer", "bearer " + validToken, secret, true},
 		{"Wrong secret", "Bearer " + validToken, []byte("wrong-secret"), false},
-		{"Missing token", "Bearer", JWTSecret, false},
-		{"Empty header", "", JWTSecret, false},
-		{"No bearer prefix", "Basic dXNlcjpwYXNz", JWTSecret, false},
+		{"Missing token", "Bearer", secret, false},
+		{"Empty header", "", secret, false},
+		{"No bearer prefix", "Basic dXNlcjpwYXNz", secret, false},
 	}
 
 	for _, tt := range tests {
@@ -106,6 +108,8 @@ func TestCheck_Bearer_JWT(t *testing.T) {
 }
 
 func TestCheck_Bearer_NoSecretConfigured(t *testing.T) {
+	withJWTSecret(t, "test-secret")
+
 	rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: ""}}
 	c, _ := makeTestContext("GET", "/api/test", withHeader("Authorization", "Bearer somerandomtoken"))
 	if got := checkBearer(c, rule); got {
@@ -114,9 +118,10 @@ func TestCheck_Bearer_NoSecretConfigured(t *testing.T) {
 }
 
 func TestCheck_Bearer_StoresClaims(t *testing.T) {
-	// Generate token with module JWTSecret so it validates with the rule's secret.
+	withJWTSecret(t, "test-secret")
+
 	token, _ := GenerateToken("claim-user", "claimtest", "editor")
-	rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: string(JWTSecret)}}
+	rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: string(currentJWTSecret())}}
 	c, _ := makeTestContext("GET", "/api/test", withHeader("Authorization", "Bearer "+token))
 
 	checkBearer(c, rule)
@@ -167,8 +172,8 @@ func TestCheck_TypeNone(t *testing.T) {
 func TestCheck_UnknownType(t *testing.T) {
 	rule := &store.AuthRule{Type: "unknown"}
 	c, _ := makeTestContext("GET", "/api/test")
-	if got := Check(c, rule); !got {
-		t.Errorf("Check(type=unknown) = %v, want true (fallback)", got)
+	if got := Check(c, rule); got {
+		t.Errorf("Check(type=unknown) = %v, want false (fail closed)", got)
 	}
 }
 
