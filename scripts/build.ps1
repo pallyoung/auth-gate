@@ -13,15 +13,16 @@ Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
 
 # Build frontend
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow
-Push-Location "$ProjectRoot\packages\web"
-npm install
+$webDir = Join-Path $ProjectRoot "packages\web"
+Set-Location $webDir
+npm install --legacy-peer-deps
 npm run build
-Pop-Location
 
 # Build server
 Write-Host "[2/2] Building server..." -ForegroundColor Yellow
-Push-Location "$ProjectRoot\packages\server"
+$serverDir = Join-Path $ProjectRoot "packages\server"
+Set-Location $serverDir
 go build -o bin\auth-gate.exe .\cmd\server
-Pop-Location
 
+Set-Location $ProjectRoot
 Write-Host "Build complete: packages\server\bin\auth-gate.exe" -ForegroundColor Green

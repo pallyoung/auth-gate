@@ -25,22 +25,19 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 
 # Install frontend deps
 Write-Host "[1/4] Installing frontend dependencies..." -ForegroundColor Yellow
-Push-Location "$ProjectRoot\packages\web"
-npm install
-Pop-Location
+Set-Location (Join-Path $ProjectRoot "packages\web")
+npm install --legacy-peer-deps
 
 # Build frontend
 Write-Host "[2/4] Building frontend..." -ForegroundColor Yellow
-Push-Location "$ProjectRoot\packages\web"
 npm run build
-Pop-Location
 
 # Build server
 Write-Host "[3/4] Building server..." -ForegroundColor Yellow
-Push-Location "$ProjectRoot\packages\server"
+Set-Location (Join-Path $ProjectRoot "packages\server")
 go build -o bin\auth-gate.exe .\cmd\server
-Pop-Location
 
+Set-Location $ProjectRoot
 Write-Host "[4/4] Build complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Binary: packages\server\bin\auth-gate.exe" -ForegroundColor Cyan

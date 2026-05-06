@@ -10,25 +10,24 @@ if ($PSScriptRoot) {
 }
 
 # Install deps if needed
-if (-not (Test-Path "$ProjectRoot\packages\web\node_modules")) {
+$webDir = Join-Path $ProjectRoot "packages\web"
+if (-not (Test-Path (Join-Path $webDir "node_modules"))) {
     Write-Host "Installing frontend dependencies..." -ForegroundColor Yellow
-    Push-Location "$ProjectRoot\packages\web"
-    npm install
-    Pop-Location
+    Set-Location $webDir
+    npm install --legacy-peer-deps
 }
 
 # Build if needed
-if (-not (Test-Path "$ProjectRoot\packages\server\bin\auth-gate.exe")) {
+$serverBin = Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe"
+if (-not (Test-Path $serverBin)) {
     Write-Host "Building..." -ForegroundColor Yellow
-    Push-Location "$ProjectRoot\packages\web"
+    Set-Location $webDir
     npm run build
-    Pop-Location
-    Push-Location "$ProjectRoot\packages\server"
+    
+    Set-Location (Join-Path $ProjectRoot "packages\server")
     go build -o bin\auth-gate.exe .\cmd\server
-    Pop-Location
 }
 
 # Run
-Push-Location "$ProjectRoot\packages\server"
+Set-Location (Join-Path $ProjectRoot "packages\server")
 .\bin\auth-gate.exe
-Pop-Location
