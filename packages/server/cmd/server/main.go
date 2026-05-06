@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/api"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
@@ -14,8 +15,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func getWebRoot() string {
+	// Try executable directory first
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		webDist := filepath.Join(exeDir, "web", "dist")
+		if _, err := os.Stat(webDist); err == nil {
+			return webDist
+		}
+	}
+
+	// Fallback to current working directory
+	cwd, _ := os.Getwd()
+	return filepath.Join(cwd, "web", "dist")
+}
+
 func main() {
-	cfg, err := config.Load("configs/config.yaml")
+	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Printf("Warning: config load failed: %v, using defaults", err)
 		cfg = config.DefaultConfig()
@@ -41,9 +57,12 @@ func main() {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
-	engine.Static("/assets", "../web/dist/assets")
-	engine.StaticFile("/", "../web/dist/index.html")
-	engine.StaticFile("/favicon.ico", "../web/dist/favicon.ico")
+	webRoot := getWebRoot()
+	log.Printf("Serving web from: %s", webRoot)
+
+	engine.Static("/assets", filepath.Join(webRoot, "assets"))
+	engine.StaticFile("/", filepath.Join(webRoot, "index.html"))
+	engine.StaticFile("/favicon.ico", filepath.Join(webRoot, "favicon.ico"))
 
 	// Public routes
 	engine.POST("/api/auth/login", api.LoginHandler(db))

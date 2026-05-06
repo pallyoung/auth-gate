@@ -18,6 +18,7 @@ Write-Host "[1/3] Building..." -ForegroundColor Yellow
 # Create dist directory
 $DistDir = Join-Path $ProjectRoot "dist"
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "web") | Out-Null
 
 # Stop existing service
 Write-Host "[2/3] Stopping existing service..." -ForegroundColor Yellow
@@ -30,33 +31,16 @@ if ($svc) {
 
 # Copy files to dist
 Write-Host "[3/3] Copying to dist..." -ForegroundColor Yellow
-$srcBin = Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe"
-$dstBin = Join-Path $DistDir "auth-gate.exe"
-$srcConfig = Join-Path $ProjectRoot "packages\server\configs\config.yaml"
-$dstConfig = Join-Path $DistDir "config.yaml"
-$srcWebDist = Join-Path $ProjectRoot "packages\web\dist"
-
-if (Test-Path $dstBin) {
-    Remove-Item $dstBin -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 200
-}
-
-Copy-Item $srcBin -Destination $DistDir -Force
-Copy-Item $srcConfig -Destination $DistDir -Force
+Copy-Item (Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe") -Destination $DistDir -Force
+Copy-Item (Join-Path $ProjectRoot "packages\server\configs\config.yaml") -Destination $DistDir -Force
 
 # Copy web dist
-if (Test-Path $srcWebDist) {
-    $dstWebDist = Join-Path $DistDir "web"
-    if (Test-Path $dstWebDist) {
-        Remove-Item $dstWebDist -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    Copy-Item $srcWebDist -Destination $dstWebDist -Recurse -Force
-}
+$srcWeb = Join-Path $ProjectRoot "packages\web\dist"
+$dstWeb = Join-Path $DistDir "web"
+Copy-Item $srcWeb -Destination $dstWeb -Recurse -Force
 
 Write-Host ""
 Write-Host "=== Deploy complete ===" -ForegroundColor Green
 Write-Host ""
-Write-Host "Files in dist:" -ForegroundColor Cyan
-Get-ChildItem $DistDir -Recurse | Select-Object FullName
-Write-Host ""
-Write-Host "Run with: & '$dstBin'" -ForegroundColor Green
+Write-Host "Run: cd dist; .\auth-gate.exe" -ForegroundColor Cyan
+Write-Host "Then visit: http://localhost:8080" -ForegroundColor Cyan
