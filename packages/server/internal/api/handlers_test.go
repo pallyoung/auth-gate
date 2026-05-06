@@ -97,6 +97,48 @@ func TestCreateAuthRule_RejectsDuplicateRoute(t *testing.T) {
 	}
 }
 
+func TestListRoutes_ReturnsEmptyArrayWhenNoRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newHandlerTestDB(t)
+
+	w := performJSONRequest(t, listRoutes(db), http.MethodGet, "/api/routes", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if w.Body.String() != "[]" {
+		t.Fatalf("body = %s, want []", w.Body.String())
+	}
+}
+
+func TestListAuthRules_ReturnsEmptyArrayWhenNoRules(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newHandlerTestDB(t)
+
+	w := performJSONRequest(t, listAuthRules(db), http.MethodGet, "/api/auth-rules", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if w.Body.String() != "[]" {
+		t.Fatalf("body = %s, want []", w.Body.String())
+	}
+}
+
+func TestListUsers_ReturnsEmptyArrayWhenNoUsers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newHandlerTestDB(t)
+
+	w := performJSONRequest(t, listUsers(db), http.MethodGet, "/api/users", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if w.Body.String() != "[]" {
+		t.Fatalf("body = %s, want []", w.Body.String())
+	}
+}
+
 func TestCreateAuthRule_RejectsMissingSecret(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

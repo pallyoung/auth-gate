@@ -51,7 +51,7 @@ func (s *SQLite) ListUsers() ([]User, error) {
 	}
 	defer rows.Close()
 
-	var users []User
+	users := make([]User, 0)
 	for rows.Next() {
 		var u User
 		var enabled int

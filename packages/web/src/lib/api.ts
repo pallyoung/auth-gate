@@ -1,5 +1,7 @@
 const getToken = () => localStorage.getItem('token')
 
+const ensureArray = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : []
+
 const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const token = getToken()
   const headers: Record<string, string> = {
@@ -71,21 +73,21 @@ export const api = {
     logout: () => request('/auth/logout', { method: 'POST' }),
   },
   routes: {
-    list: () => request<Route[]>('/routes'),
+    list: async () => ensureArray<Route>(await request<unknown>('/routes')),
     get: (id: string) => request<Route>(`/routes/${id}`),
     create: (data: Partial<Route>) => request<Route>('/routes', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<Route>) => request<Route>(`/routes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/routes/${id}`, { method: 'DELETE' }),
   },
   authRules: {
-    list: () => request<AuthRule[]>('/auth-rules'),
+    list: async () => ensureArray<AuthRule>(await request<unknown>('/auth-rules')),
     get: (id: string) => request<AuthRule>(`/auth-rules/${id}`),
     create: (data: Partial<AuthRule>) => request<AuthRule>('/auth-rules', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<AuthRule>) => request<AuthRule>(`/auth-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/auth-rules/${id}`, { method: 'DELETE' }),
   },
   users: {
-    list: () => request<User[]>('/users'),
+    list: async () => ensureArray<User>(await request<unknown>('/users')),
     create: (data: { username: string; password: string; role: string }) =>
       request<User>('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<User>) => request<User>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

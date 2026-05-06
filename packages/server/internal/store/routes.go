@@ -18,7 +18,7 @@ func (s *SQLite) ListRoutes() ([]Route, error) {
 	}
 	defer rows.Close()
 
-	var routes []Route
+	routes := make([]Route, 0)
 	for rows.Next() {
 		var r Route
 		var stripPrefix, enabled int

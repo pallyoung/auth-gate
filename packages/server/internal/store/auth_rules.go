@@ -18,7 +18,7 @@ func (s *SQLite) ListAuthRules() ([]AuthRule, error) {
 	}
 	defer rows.Close()
 
-	var rules []AuthRule
+	rules := make([]AuthRule, 0)
 	for rows.Next() {
 		var r AuthRule
 		var configStr, whitelistStr string
