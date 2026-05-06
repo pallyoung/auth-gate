@@ -10,32 +10,28 @@ if ($PSScriptRoot) {
 }
 
 Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
-Write-Host "Project: $ProjectRoot" -ForegroundColor Gray
 
 # Check Go
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Go is not installed" -ForegroundColor Red
     exit 1
 }
-Write-Host "Go: $(go version)" -ForegroundColor Green
 
 # Paths
 $WebDir = Join-Path $ProjectRoot "packages\web"
 $ServerDir = Join-Path $ProjectRoot "packages\server"
-$BinDir = Join-Path $ServerDir "bin"
-$ExePath = Join-Path $BinDir "auth-gate.exe"
+$ExePath = Join-Path $ServerDir "bin\auth-gate.exe"
 
 Write-Host ""
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow
 Set-Location $WebDir
-npm install --legacy-peer-deps
+npm install --include=dev
 npm run build
 
 Write-Host "[2/2] Building server..." -ForegroundColor Yellow
 Set-Location $ServerDir
 
 if (Test-Path $ExePath) {
-    Write-Host "Removing old binary..." -ForegroundColor Gray
     Remove-Item $ExePath -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
@@ -49,4 +45,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Set-Location $ProjectRoot
 Write-Host ""
-Write-Host "Build complete: $ExePath" -ForegroundColor Green
+Write-Host "Build complete!" -ForegroundColor Green

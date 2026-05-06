@@ -27,6 +27,7 @@ Copy-Item (Join-Path $ProjectRoot "packages\server\configs\config.yaml") -Destin
 
 $srcWeb = Join-Path $ProjectRoot "packages\web\dist"
 $dstWeb = Join-Path $DistDir "web"
+Remove-Item $dstWeb -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item $srcWeb -Destination $dstWeb -Recurse -Force
 
 # Start service
@@ -38,10 +39,8 @@ if ($proc) {
     Write-Host ""
     Write-Host "=== Deploy complete ===" -ForegroundColor Green
     Write-Host "Service started on http://localhost:8080" -ForegroundColor Cyan
-    Write-Host "PID: $($proc.Id)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
     
-    # Wait for process
     $proc.WaitForExit()
 }

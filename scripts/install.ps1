@@ -34,7 +34,7 @@ $ServerDir = Join-Path $ProjectRoot "packages\server"
 Write-Host ""
 Write-Host "[1/4] Installing frontend dependencies..." -ForegroundColor Yellow
 Set-Location $WebDir
-npm install --legacy-peer-deps
+npm install --include=dev --legacy-peer-deps
 
 Write-Host "[2/4] Building frontend..." -ForegroundColor Yellow
 npm run build
