@@ -10,57 +10,49 @@ if ($PSScriptRoot) {
 }
 
 Write-Host "=== Auth Gate Install ===" -ForegroundColor Cyan
+Write-Host "Project: $ProjectRoot" -ForegroundColor Gray
 
 # Check Go
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Go is not installed" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Please install Go first:" -ForegroundColor Yellow
-    Write-Host "  https://go.dev/dl/" -ForegroundColor White
-    Write-Host ""
-    Write-Host "After installation, restart PowerShell and try again." -ForegroundColor Yellow
     exit 1
 }
-
-Write-Host "Go found: $(go version)" -ForegroundColor Green
+Write-Host "Go: $(go version)" -ForegroundColor Green
 
 # Check Node
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Node.js is not installed" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Please install Node.js first:" -ForegroundColor Yellow
-    Write-Host "  https://nodejs.org/" -ForegroundColor White
     exit 1
 }
+Write-Host "Node: $(node --version), npm: $(npm --version)" -ForegroundColor Green
 
-Write-Host "Node found: $(node --version)" -ForegroundColor Green
-Write-Host "npm found: $(npm --version)" -ForegroundColor Green
-
-# Use user-writable directories to avoid permission issues
+# Paths
 $BinDir = Join-Path $ProjectRoot "packages\server\bin"
-$WebDistDir = Join-Path $ProjectRoot "packages\web\dist"
+$WebDir = Join-Path $ProjectRoot "packages\web"
+$ServerDir = Join-Path $ProjectRoot "packages\server"
 
-# Ensure directories exist and are writable
-Write-Host "Preparing directories..." -ForegroundColor Yellow
-New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-
-# Install frontend deps
+Write-Host ""
 Write-Host "[1/4] Installing frontend dependencies..." -ForegroundColor Yellow
-Set-Location (Join-Path $ProjectRoot "packages\web")
+Set-Location $WebDir
 npm install --legacy-peer-deps
 
-# Build frontend
 Write-Host "[2/4] Building frontend..." -ForegroundColor Yellow
 npm run build
 
-# Build server
 Write-Host "[3/4] Building server..." -ForegroundColor Yellow
-Set-Location (Join-Path $ProjectRoot "packages\server")
+Set-Location $ServerDir
+
+# Clean old binary first
+$exePath = Join-Path $BinDir "auth-gate.exe"
+if (Test-Path $exePath) {
+    Write-Host "Removing old binary..." -ForegroundColor Gray
+    Remove-Item $exePath -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
 & go build -ldflags="-s -w" -o bin\auth-gate.exe .\cmd\server
 
 Set-Location $ProjectRoot
-Write-Host "[4/4] Build complete!" -ForegroundColor Green
+Write-Host "[4/4] Done!" -ForegroundColor Green
 Write-Host ""
-Write-Host "Binary: packages\server\bin\auth-gate.exe" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Run with: .\scripts\run.ps1" -ForegroundColor Green
+Write-Host "Binary: $exePath" -ForegroundColor Cyan
