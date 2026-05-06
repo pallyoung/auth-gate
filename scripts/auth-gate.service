@@ -1,0 +1,17 @@
+[Unit]
+Description=Auth Gate API Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/auth-gate
+ExecStart=/usr/local/bin/auth-gate
+Restart=always
+RestartSec=5
+
+# Environment
+EnvironmentFile=/etc/auth-gate/env
+
+[Install]
+WantedBy=multi-user.target
