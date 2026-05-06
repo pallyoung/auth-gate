@@ -10,7 +10,7 @@ echo "[1/3] Building..."
 ./scripts/build.sh
 
 # Create dist directory
-mkdir -p dist
+mkdir -p dist/web
 
 # Stop existing service
 echo "[2/3] Stopping existing service..."
@@ -22,10 +22,10 @@ fi
 echo "[3/3] Copying to dist..."
 cp packages/server/bin/auth-gate dist/
 cp packages/server/configs/config.yaml dist/
+rm -rf dist/web
 cp -r packages/web/dist dist/web
 
 echo "=== Deploy complete ==="
-echo "Files in dist:"
-ls -la dist/
 echo ""
-echo "Run with: ./dist/auth-gate"
+echo "Run: cd dist; ./auth-gate"
+echo "Then visit: http://localhost:8080"
