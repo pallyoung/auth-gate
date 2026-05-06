@@ -1,11 +1,13 @@
 .PHONY: all build run dev clean test install deploy docker-build docker-run docker-deploy
 
 ifeq ($(OS),Windows_NT)
-    EXT := .exe
-    RUN_SCRIPT := run.ps1
+    DOCKER_BUILD := scripts/docker-build.ps1
+    DOCKER_RUN := scripts/docker-run.ps1
+    DOCKER_DEPLOY := scripts/docker-deploy.ps1
 else
-    EXT :=
-    RUN_SCRIPT := run.sh
+    DOCKER_BUILD := scripts/docker-build.sh
+    DOCKER_RUN := scripts/docker-run.sh
+    DOCKER_DEPLOY := scripts/docker-deploy.sh
 endif
 
 all: build
@@ -25,7 +27,7 @@ install:
 	fi
 
 run:
-	@powershell -ExecutionPolicy Bypass -File "scripts/$(RUN_SCRIPT)"
+	@powershell -ExecutionPolicy Bypass -File scripts/run.ps1
 
 dev: run
 
@@ -37,13 +39,13 @@ deploy:
 	fi
 
 docker-build:
-	./scripts/docker-build.sh
+	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_BUILD)"
 
 docker-run:
-	./scripts/docker-run.sh
+	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_RUN)"
 
 docker-deploy:
-	./scripts/docker-deploy.sh
+	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_DEPLOY)"
 
 clean:
 	rm -rf packages/server/bin packages/web/dist
