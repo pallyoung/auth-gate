@@ -1,4 +1,4 @@
-.PHONY: all build run dev clean test install deploy
+.PHONY: all build run dev clean test install deploy docker-build docker-run docker-deploy
 
 ifeq ($(OS),Windows_NT)
     EXT := .exe
@@ -35,6 +35,15 @@ deploy:
 	else \
 		./scripts/deploy.sh; \
 	fi
+
+docker-build:
+	./scripts/docker-build.sh
+
+docker-run:
+	./scripts/docker-run.sh
+
+docker-deploy:
+	./scripts/docker-deploy.sh
 
 clean:
 	rm -rf packages/server/bin packages/web/dist

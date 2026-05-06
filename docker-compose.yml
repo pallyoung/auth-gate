@@ -1,0 +1,14 @@
+services:
+  auth-gate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - auth-gate-data:/app/data
+      - ./packages/server/configs/config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  auth-gate-data:
