@@ -1,13 +1,21 @@
-.PHONY: all build run dev clean test install deploy docker-build docker-run docker-deploy
+.PHONY: all build run dev clean test install deploy docker-build docker-run docker-deploy release
 
 ifeq ($(OS),Windows_NT)
-    DOCKER_BUILD := scripts/docker-build.ps1
-    DOCKER_RUN := scripts/docker-run.ps1
-    DOCKER_DEPLOY := scripts/docker-deploy.ps1
+    EXT := .exe
+    RUN_SCRIPT := run.ps1
+    BUILD_SCRIPT := build.ps1
+    DOCKER_BUILD := docker-build.ps1
+    DOCKER_RUN := docker-run.ps1
+    DOCKER_DEPLOY := docker-deploy.ps1
+    RELEASE_SCRIPT := release-build.ps1
 else
-    DOCKER_BUILD := scripts/docker-build.sh
-    DOCKER_RUN := scripts/docker-run.sh
-    DOCKER_DEPLOY := scripts/docker-deploy.sh
+    EXT :=
+    RUN_SCRIPT := run.sh
+    BUILD_SCRIPT := build.sh
+    DOCKER_BUILD := docker-build.sh
+    DOCKER_RUN := docker-run.sh
+    DOCKER_DEPLOY := docker-deploy.sh
+    RELEASE_SCRIPT := release-build.sh
 endif
 
 all: build
@@ -27,7 +35,7 @@ install:
 	fi
 
 run:
-	@powershell -ExecutionPolicy Bypass -File scripts/run.ps1
+	@powershell -ExecutionPolicy Bypass -File "scripts/$(RUN_SCRIPT)"
 
 dev: run
 
@@ -39,16 +47,19 @@ deploy:
 	fi
 
 docker-build:
-	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_BUILD)"
+	./scripts/$(DOCKER_BUILD)
 
 docker-run:
-	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_RUN)"
+	./scripts/$(DOCKER_RUN)
 
 docker-deploy:
-	@powershell -ExecutionPolicy Bypass -File "$(DOCKER_DEPLOY)"
+	./scripts/$(DOCKER_DEPLOY)
+
+release:
+	./scripts/$(RELEASE_SCRIPT)
 
 clean:
-	rm -rf packages/server/bin packages/web/dist
+	rm -rf packages/server/bin packages/web/dist dist
 	-rm -rf packages/web/node_modules
 
 test:

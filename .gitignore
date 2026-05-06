@@ -40,3 +40,6 @@ logs/
 # Build artifacts
 *.tar.gz
 *.zip
+
+# Release output
+dist/
