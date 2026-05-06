@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
 type Route struct {

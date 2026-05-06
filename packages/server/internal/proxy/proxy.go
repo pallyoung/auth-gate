@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"auth-gate/internal/auth"
-	"auth-gate/internal/router"
+	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 
 	"github.com/gin-gonic/gin"
 )

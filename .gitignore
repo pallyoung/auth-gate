@@ -17,10 +17,6 @@ vendor/
 # Go workspace file
 go.work
 
-# Build output
-bin/
-dist/
-
 # IDE
 .idea/
 .vscode/
@@ -32,11 +28,6 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
 # Logs
 *.log
 logs/
@@ -46,14 +37,6 @@ logs/
 .env.local
 .env.*.local
 
-# Node (frontend)
-web/node_modules/
-web/dist/
-web/.vite/
-
 # Build artifacts
 *.tar.gz
 *.zip
-
-# Config overrides (local)
-configs/config.local.yaml

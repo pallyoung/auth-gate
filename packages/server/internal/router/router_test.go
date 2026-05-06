@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
 // newTestManager creates a Manager backed by an in-memory SQLite DB.

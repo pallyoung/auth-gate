@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

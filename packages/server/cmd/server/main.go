@@ -4,12 +4,12 @@ import (
 	"log"
 	"os"
 
-	"auth-gate/internal/api"
-	"auth-gate/internal/auth"
-	"auth-gate/internal/config"
-	"auth-gate/internal/proxy"
-	"auth-gate/internal/router"
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/api"
+	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/config"
+	"github.com/pallyoung/auth-gate/packages/server/internal/proxy"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,9 +41,9 @@ func main() {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
-	engine.Static("/assets", "./web/dist/assets")
-	engine.StaticFile("/", "./web/dist/index.html")
-	engine.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
+	engine.Static("/assets", "../web/dist/assets")
+	engine.StaticFile("/", "../web/dist/index.html")
+	engine.StaticFile("/favicon.ico", "../web/dist/favicon.ico")
 
 	// Public routes
 	engine.POST("/api/auth/login", api.LoginHandler(db))

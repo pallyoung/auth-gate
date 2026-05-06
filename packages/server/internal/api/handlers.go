@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"auth-gate/internal/auth"
-	"auth-gate/internal/router"
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 )

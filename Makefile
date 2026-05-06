@@ -1,22 +1,18 @@
-.PHONY: all build run dev clean
+.PHONY: all build run dev clean test
 
 all: build
 
-build: web-build
-	go build -o bin/auth-gate ./cmd/server
+build:
+	$(MAKE) -C packages/server build
 
-run: build
-	./bin/auth-gate
+run:
+	$(MAKE) -C packages/server run
 
 dev:
-	DEBUG=true go run ./cmd/server
-
-web-deps:
-	cd web && npm install
-
-web-build: web-deps
-	cd web && npm run build
+	$(MAKE) -C packages/server dev
 
 clean:
-	rm -rf bin web/dist web/node_modules data
-*** End Patch
+	$(MAKE) -C packages/server clean
+
+test:
+	$(MAKE) -C packages/server test

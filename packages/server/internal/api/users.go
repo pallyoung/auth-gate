@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"auth-gate/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
