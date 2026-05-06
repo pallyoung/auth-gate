@@ -31,6 +31,7 @@ func getWebRoot() string {
 }
 
 func main() {
+    ensureDataDir()
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Printf("Warning: config load failed: %v, using defaults", err)
@@ -82,4 +83,8 @@ func main() {
 	if err := engine.Run(addr); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+func ensureDataDir() {
+    os.MkdirAll("data", 0755)
 }
