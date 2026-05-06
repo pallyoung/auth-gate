@@ -12,20 +12,37 @@ if ($PSScriptRoot) {
 Write-Host "=== Auth Gate Install ===" -ForegroundColor Cyan
 
 # Check Go
-$goCmd = Get-Command go -ErrorAction SilentlyContinue
-if (-not $goCmd) {
-    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
-    Write-Host "Please install Go from: https://go.dev/dl/" -ForegroundColor Yellow
+if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+    Write-Host "Error: Go is not installed" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Please install Go first:" -ForegroundColor Yellow
+    Write-Host "  https://go.dev/dl/" -ForegroundColor White
+    Write-Host ""
+    Write-Host "After installation, restart PowerShell and try again." -ForegroundColor Yellow
     exit 1
 }
 
+Write-Host "Go found: $(go version)" -ForegroundColor Green
+
 # Check Node
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    Write-Host "Error: Node.js is not installed or not in PATH" -ForegroundColor Red
-    Write-Host "Please install Node.js from: https://nodejs.org/" -ForegroundColor Yellow
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Host "Error: Node.js is not installed" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Please install Node.js first:" -ForegroundColor Yellow
+    Write-Host "  https://nodejs.org/" -ForegroundColor White
     exit 1
 }
+
+Write-Host "Node found: $(node --version)" -ForegroundColor Green
+Write-Host "npm found: $(npm --version)" -ForegroundColor Green
+
+# Use user-writable directories to avoid permission issues
+$BinDir = Join-Path $ProjectRoot "packages\server\bin"
+$WebDistDir = Join-Path $ProjectRoot "packages\web\dist"
+
+# Ensure directories exist and are writable
+Write-Host "Preparing directories..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 # Install frontend deps
 Write-Host "[1/4] Installing frontend dependencies..." -ForegroundColor Yellow
@@ -39,7 +56,7 @@ npm run build
 # Build server
 Write-Host "[3/4] Building server..." -ForegroundColor Yellow
 Set-Location (Join-Path $ProjectRoot "packages\server")
-& go build -o bin\auth-gate.exe .\cmd\server
+& go build -ldflags="-s -w" -o bin\auth-gate.exe .\cmd\server
 
 Set-Location $ProjectRoot
 Write-Host "[4/4] Build complete!" -ForegroundColor Green
