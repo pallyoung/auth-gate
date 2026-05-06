@@ -1,0 +1,8 @@
+server:
+  addr: ":8080"
+
+database:
+  path: "data/auth-gate.db"
+
+auth:
+  admin_token: "change-me-in-production"
