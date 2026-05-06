@@ -85,7 +85,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         </form>
 
         <p className="text-center text-[var(--text-xs)] text-[var(--text-muted)] mt-6">
-          Default: admin / admin
+          Use your configured administrator credentials
         </p>
       </Card>
     </div>
