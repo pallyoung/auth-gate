@@ -2,8 +2,10 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/api"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
@@ -16,7 +18,6 @@ import (
 )
 
 func getWebRoot() string {
-	// Try executable directory first
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		webDist := filepath.Join(exeDir, "web", "dist")
@@ -24,14 +25,13 @@ func getWebRoot() string {
 			return webDist
 		}
 	}
-
-	// Fallback to current working directory
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, "web", "dist")
 }
 
 func main() {
-    ensureDataDir()
+	ensureDataDir()
+
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Printf("Warning: config load failed: %v, using defaults", err)
@@ -62,8 +62,16 @@ func main() {
 	log.Printf("Serving web from: %s", webRoot)
 
 	engine.Static("/assets", filepath.Join(webRoot, "assets"))
-	engine.StaticFile("/", filepath.Join(webRoot, "index.html"))
 	engine.StaticFile("/favicon.ico", filepath.Join(webRoot, "favicon.ico"))
+
+	// SPA fallback
+	engine.GET("/*path", func(c *gin.Context) {
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.File(filepath.Join(webRoot, "index.html"))
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	})
 
 	// Public routes
 	engine.POST("/api/auth/login", api.LoginHandler(db))
@@ -73,6 +81,7 @@ func main() {
 	apiGroup.Use(auth.AuthMiddleware())
 	api.RegisterHandlers(apiGroup, routerMgr, db)
 
+	// Proxy for matched routes
 	engine.NoRoute(proxy.Handler(routerMgr))
 
 	addr := cfg.Server.Addr
@@ -86,5 +95,5 @@ func main() {
 }
 
 func ensureDataDir() {
-    os.MkdirAll("data", 0755)
+	os.MkdirAll("data", 0755)
 }
