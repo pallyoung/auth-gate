@@ -2,6 +2,13 @@
 
 $ErrorActionPreference = "Stop"
 
+# Get project root
+if ($PSScriptRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+} else {
+    $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
+}
+
 Write-Host "=== Auth Gate Install ===" -ForegroundColor Cyan
 
 # Check Go
@@ -15,8 +22,6 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Node.js is not installed" -ForegroundColor Red
     exit 1
 }
-
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
 
 # Install frontend deps
 Write-Host "[1/4] Installing frontend dependencies..." -ForegroundColor Yellow

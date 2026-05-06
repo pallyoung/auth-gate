@@ -1,7 +1,13 @@
 # Docker Run Script for Windows
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+
+# Get project root
+if ($PSScriptRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+} else {
+    $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
+}
 
 Write-Host "=== Docker Run ===" -ForegroundColor Cyan
 
@@ -13,11 +19,12 @@ if ($existing) {
 }
 
 # Start new container
+$configPath = "$ProjectRoot\packages\server\configs\config.yaml"
 docker run -d `
     --name auth-gate `
     -p 8080:8080 `
     -v auth-gate-data:/app/data `
-    -v "$ProjectRoot\packages\server\configs\config.yaml:C:\app\config.yaml:ro" `
+    -v "${configPath}:C:\app\config.yaml:ro" `
     --restart unless-stopped `
     auth-gate:latest
 

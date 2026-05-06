@@ -1,7 +1,13 @@
 # Auth Gate Run Script for Windows
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+
+# Get project root
+if ($PSScriptRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+} else {
+    $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
+}
 
 # Install deps if needed
 if (-not (Test-Path "$ProjectRoot\packages\web\node_modules")) {

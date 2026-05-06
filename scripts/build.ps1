@@ -2,9 +2,14 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
+# Get project root
+if ($PSScriptRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+} else {
+    $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
+}
 
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
 
 # Build frontend
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow

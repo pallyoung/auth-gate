@@ -2,9 +2,14 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Auth Gate Deploy (Windows) ===" -ForegroundColor Cyan
+# Get project root
+if ($PSScriptRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+} else {
+    $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
+}
 
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Write-Host "=== Auth Gate Deploy (Windows) ===" -ForegroundColor Cyan
 
 # Build
 Write-Host "[1/3] Building..." -ForegroundColor Yellow
@@ -32,13 +37,18 @@ if (-not (Test-Path "$configDir\config.yaml")) {
     Copy-Item "$ProjectRoot\packages\server\configs\config.yaml" "$configDir\config.yaml"
 }
 
-# Register as Windows Service using NSSM or sc
+# Register as Windows Service
 Write-Host "Registering service..." -ForegroundColor Yellow
-sc.exe create AuthGate binPath= "$installDir\auth-gate.exe" start= auto DisplayName= "Auth Gate API Gateway"
-sc.exe config AuthGate obj= "NT AUTHORITY\LocalService"
+sc.exe create AuthGate binPath= "$installDir\auth-gate.exe" start= auto DisplayName= "Auth Gate API Gateway" 2>$null
+sc.exe config AuthGate obj= "NT AUTHORITY\LocalService" 2>$null
 
 # Start service
-Start-Service -Name AuthGate
+Start-Service -Name AuthGate -ErrorAction SilentlyContinue
+if (-not $?) {
+    # Fallback: run directly if service failed
+    Write-Host "Service registration failed, starting directly..." -ForegroundColor Yellow
+    Start-Process "$installDir\auth-gate.exe"
+}
 
 Write-Host "=== Deploy complete ===" -ForegroundColor Green
-Get-Service -Name AuthGate | Format-Table Name, Status, DisplayName -AutoSize
+Get-Service -Name AuthGate -ErrorAction SilentlyContinue | Format-Table Name, Status, DisplayName -AutoSize
