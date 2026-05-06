@@ -1,51 +1,44 @@
-.PHONY: all build run dev clean test install
+.PHONY: all build run dev clean test install deploy
 
-# Detect OS
 ifeq ($(OS),Windows_NT)
-    DETECTED_OS := windows
     EXT := .exe
-    NODE_modules := node_modules
+    RUN_SCRIPT := run.ps1
 else
-    DETECTED_OS := unix
     EXT :=
-    NODE_modules := node_modules
+    RUN_SCRIPT := run.sh
 endif
 
 all: build
 
 build:
-	@if [ "$(DETECTED_OS)" = "windows" ]; then \
+	@if [ "$(OS)" = "Windows_NT" ]; then \
 		powershell -ExecutionPolicy Bypass -File scripts/build.ps1; \
 	else \
 		./scripts/build.sh; \
 	fi
 
 install:
-	@if [ "$(DETECTED_OS)" = "windows" ]; then \
+	@if [ "$(OS)" = "Windows_NT" ]; then \
 		powershell -ExecutionPolicy Bypass -File scripts/install.ps1; \
 	else \
 		./scripts/install.sh; \
 	fi
 
 run:
-	@if [ "$(DETECTED_OS)" = "windows" ]; then \
-		powershell -ExecutionPolicy Bypass -File scripts/run.ps1; \
-	else \
-		./scripts/run.sh; \
-	fi
+	@powershell -ExecutionPolicy Bypass -File "scripts/$(RUN_SCRIPT)"
 
-dev:
-	@if [ "$(DETECTED_OS)" = "windows" ]; then \
-		powershell -ExecutionPolicy Bypass -File scripts/run.ps1; \
+dev: run
+
+deploy:
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1; \
 	else \
-		./scripts/dev.sh; \
+		./scripts/deploy.sh; \
 	fi
 
 clean:
 	rm -rf packages/server/bin packages/web/dist
-	@if [ "$(DETECTED_OS)" != "windows" ]; then \
-		rm -rf packages/web/node_modules; \
-	fi
+	-rm -rf packages/web/node_modules
 
 test:
 	cd packages/server && go test ./...
