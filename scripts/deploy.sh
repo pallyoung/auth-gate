@@ -9,28 +9,23 @@ echo "=== Auth Gate Deploy ==="
 echo "[1/3] Building..."
 ./scripts/build.sh
 
+# Create dist directory
+mkdir -p dist
+
 # Stop existing service
 echo "[2/3] Stopping existing service..."
-if systemctl is-active --quiet auth-gate; then
+if systemctl is-active --quiet auth-gate 2>/dev/null; then
     sudo systemctl stop auth-gate
 fi
 
-# Install binary
-echo "[3/3] Installing..."
-sudo cp packages/server/bin/auth-gate /usr/local/bin/auth-gate
-
-# Copy config if not exists
-if [ ! -f /etc/auth-gate/config.yaml ]; then
-    sudo mkdir -p /etc/auth-gate
-    sudo cp packages/server/configs/config.yaml /etc/auth-gate/config.yaml
-fi
-
-# Start service
-echo "Starting service..."
-sudo systemctl daemon-reload
-sudo systemctl enable auth-gate
-sudo systemctl start auth-gate
+# Copy files to dist
+echo "[3/3] Copying to dist..."
+cp packages/server/bin/auth-gate dist/
+cp packages/server/configs/config.yaml dist/
+cp -r packages/web/dist dist/web
 
 echo "=== Deploy complete ==="
-echo "Service status:"
-sudo systemctl status auth-gate --no-pager
+echo "Files in dist:"
+ls -la dist/
+echo ""
+echo "Run with: ./dist/auth-gate"

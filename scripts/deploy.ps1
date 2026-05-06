@@ -15,13 +15,9 @@ Write-Host "=== Auth Gate Deploy (Windows) ===" -ForegroundColor Cyan
 Write-Host "[1/3] Building..." -ForegroundColor Yellow
 & "$ProjectRoot\scripts\build.ps1"
 
-# Determine install directory (use user dir if no admin rights)
-$installDir = Join-Path $env:LOCALAPPDATA "AuthGate"
-$configDir = Join-Path $env:LOCALAPPDATA "AuthGate"
-
-Write-Host ""
-Write-Host "Installing to: $installDir" -ForegroundColor Gray
-Write-Host ""
+# Create dist directory
+$DistDir = Join-Path $ProjectRoot "dist"
+New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
 # Stop existing service
 Write-Host "[2/3] Stopping existing service..." -ForegroundColor Yellow
@@ -32,32 +28,35 @@ if ($svc) {
     sc.exe delete $serviceName 2>$null
 }
 
-# Install binary
-Write-Host "[3/3] Installing..." -ForegroundColor Yellow
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+# Copy files to dist
+Write-Host "[3/3] Copying to dist..." -ForegroundColor Yellow
 $srcBin = Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe"
-$dstBin = Join-Path $installDir "auth-gate.exe"
+$dstBin = Join-Path $DistDir "auth-gate.exe"
+$srcConfig = Join-Path $ProjectRoot "packages\server\configs\config.yaml"
+$dstConfig = Join-Path $DistDir "config.yaml"
+$srcWebDist = Join-Path $ProjectRoot "packages\web\dist"
 
 if (Test-Path $dstBin) {
-    Write-Host "Removing old binary..." -ForegroundColor Gray
     Remove-Item $dstBin -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds 200
 }
 
-Copy-Item $srcBin -Destination $installDir -Force
+Copy-Item $srcBin -Destination $DistDir -Force
+Copy-Item $srcConfig -Destination $DistDir -Force
 
-# Copy config
-New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-$srcConfig = Join-Path $ProjectRoot "packages\server\configs\config.yaml"
-$dstConfig = Join-Path $configDir "config.yaml"
-if (-not (Test-Path $dstConfig)) {
-    Copy-Item $srcConfig -Destination $configDir -Force
+# Copy web dist
+if (Test-Path $srcWebDist) {
+    $dstWebDist = Join-Path $DistDir "web"
+    if (Test-Path $dstWebDist) {
+        Remove-Item $dstWebDist -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Copy-Item $srcWebDist -Destination $dstWebDist -Recurse -Force
 }
 
 Write-Host ""
 Write-Host "=== Deploy complete ===" -ForegroundColor Green
 Write-Host ""
-Write-Host "Binary: $dstBin" -ForegroundColor Cyan
-Write-Host "Config: $dstConfig" -ForegroundColor Cyan
+Write-Host "Files in dist:" -ForegroundColor Cyan
+Get-ChildItem $DistDir -Recurse | Select-Object FullName
 Write-Host ""
 Write-Host "Run with: & '$dstBin'" -ForegroundColor Green
