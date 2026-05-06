@@ -10,27 +10,43 @@ if ($PSScriptRoot) {
 }
 
 Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
+Write-Host "Project: $ProjectRoot" -ForegroundColor Gray
 
 # Check Go
-$goCmd = Get-Command go -ErrorAction SilentlyContinue
-if (-not $goCmd) {
-    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
-    Write-Host "Please install Go from: https://go.dev/dl/" -ForegroundColor Yellow
+if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+    Write-Host "Error: Go is not installed" -ForegroundColor Red
     exit 1
 }
+Write-Host "Go: $(go version)" -ForegroundColor Green
 
-# Build frontend
+# Paths
+$WebDir = Join-Path $ProjectRoot "packages\web"
+$ServerDir = Join-Path $ProjectRoot "packages\server"
+$BinDir = Join-Path $ServerDir "bin"
+$ExePath = Join-Path $BinDir "auth-gate.exe"
+
+Write-Host ""
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow
-$webDir = Join-Path $ProjectRoot "packages\web"
-Set-Location $webDir
+Set-Location $WebDir
 npm install --legacy-peer-deps
 npm run build
 
-# Build server
 Write-Host "[2/2] Building server..." -ForegroundColor Yellow
-$serverDir = Join-Path $ProjectRoot "packages\server"
-Set-Location $serverDir
-& go build -o bin\auth-gate.exe .\cmd\server
+Set-Location $ServerDir
+
+if (Test-Path $ExePath) {
+    Write-Host "Removing old binary..." -ForegroundColor Gray
+    Remove-Item $ExePath -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
+& go build -ldflags="-s -w" -o bin\auth-gate.exe .\cmd\server
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build failed!" -ForegroundColor Red
+    exit 1
+}
 
 Set-Location $ProjectRoot
-Write-Host "Build complete: packages\server\bin\auth-gate.exe" -ForegroundColor Green
+Write-Host ""
+Write-Host "Build complete: $ExePath" -ForegroundColor Green

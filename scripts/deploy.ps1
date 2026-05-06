@@ -15,40 +15,49 @@ Write-Host "=== Auth Gate Deploy (Windows) ===" -ForegroundColor Cyan
 Write-Host "[1/3] Building..." -ForegroundColor Yellow
 & "$ProjectRoot\scripts\build.ps1"
 
+# Determine install directory (use user dir if no admin rights)
+$installDir = Join-Path $env:LOCALAPPDATA "AuthGate"
+$configDir = Join-Path $env:LOCALAPPDATA "AuthGate"
+
+Write-Host ""
+Write-Host "Installing to: $installDir" -ForegroundColor Gray
+Write-Host ""
+
 # Stop existing service
 Write-Host "[2/3] Stopping existing service..." -ForegroundColor Yellow
 $serviceName = "AuthGate"
 $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($svc) {
-    Stop-Service -Name $serviceName -Force
-    sc.exe delete $serviceName
+    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+    sc.exe delete $serviceName 2>$null
 }
 
-# Install binary to Program Files
+# Install binary
 Write-Host "[3/3] Installing..." -ForegroundColor Yellow
-$installDir = "$env:PROGRAMFILES\AuthGate"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Copy-Item "$ProjectRoot\packages\server\bin\auth-gate.exe" "$installDir\auth-gate.exe"
+$srcBin = Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe"
+$dstBin = Join-Path $installDir "auth-gate.exe"
+
+if (Test-Path $dstBin) {
+    Write-Host "Removing old binary..." -ForegroundColor Gray
+    Remove-Item $dstBin -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 300
+}
+
+Copy-Item $srcBin -Destination $installDir -Force
 
 # Copy config
-$configDir = "$env:PROGRAMDATA\AuthGate"
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-if (-not (Test-Path "$configDir\config.yaml")) {
-    Copy-Item "$ProjectRoot\packages\server\configs\config.yaml" "$configDir\config.yaml"
+$srcConfig = Join-Path $ProjectRoot "packages\server\configs\config.yaml"
+$dstConfig = Join-Path $configDir "config.yaml"
+if (-not (Test-Path $dstConfig)) {
+    Copy-Item $srcConfig -Destination $configDir -Force
 }
 
-# Register as Windows Service
-Write-Host "Registering service..." -ForegroundColor Yellow
-sc.exe create AuthGate binPath= "$installDir\auth-gate.exe" start= auto DisplayName= "Auth Gate API Gateway" 2>$null
-sc.exe config AuthGate obj= "NT AUTHORITY\LocalService" 2>$null
-
-# Start service
-Start-Service -Name AuthGate -ErrorAction SilentlyContinue
-if (-not $?) {
-    # Fallback: run directly if service failed
-    Write-Host "Service registration failed, starting directly..." -ForegroundColor Yellow
-    Start-Process "$installDir\auth-gate.exe"
-}
-
+Write-Host ""
 Write-Host "=== Deploy complete ===" -ForegroundColor Green
-Get-Service -Name AuthGate -ErrorAction SilentlyContinue | Format-Table Name, Status, DisplayName -AutoSize
+Write-Host ""
+Write-Host "Binary: $dstBin" -ForegroundColor Cyan
+Write-Host "Config: $dstConfig" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Run with: & '$dstBin'" -ForegroundColor Green
