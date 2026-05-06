@@ -25,6 +25,7 @@ type AuthConfig struct {
 	JWTSecret              string `yaml:"jwt_secret"`
 	BootstrapAdminPassword string `yaml:"bootstrap_admin_password"`
 	LegacyAdminToken       string `yaml:"admin_token"`
+	AllowEphemeralSecret   bool   `yaml:"allow_ephemeral_secret"`
 }
 
 func Load(path string) (*Config, error) {
@@ -66,4 +67,18 @@ func (c AuthConfig) BootstrapPasswordValue() string {
 
 func (c AuthConfig) HasLegacyAdminToken() bool {
 	return strings.TrimSpace(c.LegacyAdminToken) != ""
+}
+
+func (c AuthConfig) AllowEphemeralJWT() bool {
+	if c.AllowEphemeralSecret {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV"))) {
+	case "", "dev", "development", "test":
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("DEBUG")), "true") {
+		return true
+	}
+	return false
 }

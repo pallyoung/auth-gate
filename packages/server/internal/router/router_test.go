@@ -232,7 +232,7 @@ func TestMatch_NoRoute(t *testing.T) {
 }
 
 func TestRoute_AuthRule(t *testing.T) {
-	rule := &store.AuthRule{ID: "rule-1", Type: "apikey"}
+	rule := &AuthRule{ID: "rule-1", Type: "apikey"}
 	r := Route{ID: "1", AuthRule: rule}
 	if r.AuthRule != rule {
 		t.Error("Route.AuthRule not set correctly")

@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pallyoung/auth-gate/packages/server/internal/store"
+	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func Check(c *gin.Context, rule *store.AuthRule) bool {
+func Check(c *gin.Context, rule *router.AuthRule) bool {
 	switch rule.Type {
 	case "none":
 		return true
@@ -26,7 +27,7 @@ func Check(c *gin.Context, rule *store.AuthRule) bool {
 	}
 }
 
-func checkAPIKey(c *gin.Context, rule *store.AuthRule) bool {
+func checkAPIKey(c *gin.Context, rule *router.AuthRule) bool {
 	headerName := rule.Config.HeaderName
 	if headerName == "" {
 		headerName = "X-API-Key"
@@ -41,7 +42,7 @@ func checkAPIKey(c *gin.Context, rule *store.AuthRule) bool {
 	return key != "" && key == rule.Config.Secret
 }
 
-func checkBearer(c *gin.Context, rule *store.AuthRule) bool {
+func checkBearer(c *gin.Context, rule *router.AuthRule) bool {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
 		return false
@@ -76,7 +77,7 @@ func checkBearer(c *gin.Context, rule *store.AuthRule) bool {
 	return true
 }
 
-func checkBasic(c *gin.Context, rule *store.AuthRule) bool {
+func checkBasic(c *gin.Context, rule *router.AuthRule) bool {
 	username, password, ok := c.Request.BasicAuth()
 	if !ok {
 		return false
@@ -88,7 +89,12 @@ func checkBasic(c *gin.Context, rule *store.AuthRule) bool {
 func RequireAuth(authType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("WWW-Authenticate", authType)
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+			Error: httpresponse.ErrorDetail{
+				Code:    "unauthorized",
+				Message: "unauthorized",
+			},
+		})
 	}
 }
 

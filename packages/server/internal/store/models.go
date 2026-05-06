@@ -21,10 +21,8 @@ type Route struct {
 type AuthRule struct {
 	ID        string     `json:"id"`
 	RouteID   string     `json:"route_id"`
-	Type       string    `json:"type"` // none, apikey, bearer, basic
-	Config     AuthConfig `json:"config"`
-	Whitelist  []string  `json:"whitelist"`
-	RateLimit  int       `json:"rate_limit"`
+	Type      string     `json:"type"` // none, apikey, bearer, basic
+	Config    AuthConfig `json:"config"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
@@ -32,9 +30,6 @@ type AuthRule struct {
 type AuthConfig struct {
 	HeaderName string `json:"header_name,omitempty"`
 	Secret     string `json:"secret,omitempty"`
-	JWKSUrl    string `json:"jwks_url,omitempty"`
-	Issuer     string `json:"issuer,omitempty"`
-	Audience   string `json:"audience,omitempty"`
 	Username   string `json:"username,omitempty"` // for basic auth
 	Password   string `json:"password,omitempty"` // for basic auth
 }

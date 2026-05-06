@@ -1,11 +1,11 @@
 import React from 'react'
-import { AuthRule, Route } from '../lib/api'
+import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 import { Button, Input, Select } from './ui'
 
 interface AuthRuleFormProps {
   rule: AuthRule | null
   routes: Route[]
-  onSubmit: (data: Partial<AuthRule>) => Promise<void> | void
+  onSubmit: (data: AuthRuleInput) => Promise<void> | void
   onCancel: () => void
 }
 
@@ -17,23 +17,21 @@ const ruleTypeOptions = [
 ]
 
 export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
-  const [form, setForm] = React.useState<Partial<AuthRule>>({
+  const [form, setForm] = React.useState<AuthRuleInput>({
     route_id: rule?.route_id || (routes[0]?.id ?? ''),
     type: rule?.type || 'none',
     config: {
       header_name: rule?.config?.header_name || 'X-API-Key',
-      secret: rule?.config?.secret || '',
+      secret: '',
       username: rule?.config?.username || '',
-      password: rule?.config?.password || '',
+      password: '',
     },
-    whitelist: rule?.whitelist || [],
-    rate_limit: rule?.rate_limit || 0,
   })
 
   const type = form.type || 'none'
   const config = form.config || {}
 
-  const updateConfig = (next: Partial<NonNullable<AuthRule['config']>>) => {
+  const updateConfig = (next: Partial<AuthRuleInput['config']>) => {
     setForm((current) => ({
       ...current,
       config: {

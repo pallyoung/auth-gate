@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pallyoung/auth-gate/packages/server/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,7 +38,7 @@ func withQuery(query string) func(*http.Request) {
 }
 
 func TestCheck_APIKey(t *testing.T) {
-	rule := &store.AuthRule{Type: "apikey", Config: store.AuthConfig{Secret: "secret-abc"}}
+	rule := &router.AuthRule{Type: "apikey", Config: router.AuthConfig{Secret: "secret-abc"}}
 
 	tests := []struct {
 		name  string
@@ -63,7 +63,7 @@ func TestCheck_APIKey(t *testing.T) {
 }
 
 func TestCheck_APIKey_CustomHeader(t *testing.T) {
-	rule := &store.AuthRule{Type: "apikey", Config: store.AuthConfig{HeaderName: "X-Custom-Auth", Secret: "my-secret"}}
+	rule := &router.AuthRule{Type: "apikey", Config: router.AuthConfig{HeaderName: "X-Custom-Auth", Secret: "my-secret"}}
 
 	c, _ := makeTestContext("GET", "/api/test", withHeader("X-Custom-Auth", "my-secret"))
 	if got := checkAPIKey(c, rule); !got {
@@ -98,7 +98,7 @@ func TestCheck_Bearer_JWT(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: string(tt.secret)}}
+			rule := &router.AuthRule{Type: "bearer", Config: router.AuthConfig{Secret: string(tt.secret)}}
 			c, _ := makeTestContext("GET", "/api/test", withHeader("Authorization", tt.authHdr))
 			if got := checkBearer(c, rule); got != tt.want {
 				t.Errorf("checkBearer() = %v, want %v", got, tt.want)
@@ -110,7 +110,7 @@ func TestCheck_Bearer_JWT(t *testing.T) {
 func TestCheck_Bearer_NoSecretConfigured(t *testing.T) {
 	withJWTSecret(t, "test-secret")
 
-	rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: ""}}
+	rule := &router.AuthRule{Type: "bearer", Config: router.AuthConfig{Secret: ""}}
 	c, _ := makeTestContext("GET", "/api/test", withHeader("Authorization", "Bearer somerandomtoken"))
 	if got := checkBearer(c, rule); got {
 		t.Errorf("checkBearer() = %v, want false when no secret is configured", got)
@@ -121,7 +121,7 @@ func TestCheck_Bearer_StoresClaims(t *testing.T) {
 	withJWTSecret(t, "test-secret")
 
 	token, _ := GenerateToken("claim-user", "claimtest", "editor")
-	rule := &store.AuthRule{Type: "bearer", Config: store.AuthConfig{Secret: string(currentJWTSecret())}}
+	rule := &router.AuthRule{Type: "bearer", Config: router.AuthConfig{Secret: string(currentJWTSecret())}}
 	c, _ := makeTestContext("GET", "/api/test", withHeader("Authorization", "Bearer "+token))
 
 	checkBearer(c, rule)
@@ -138,7 +138,7 @@ func TestCheck_Bearer_StoresClaims(t *testing.T) {
 }
 
 func TestCheck_Basic(t *testing.T) {
-	rule := &store.AuthRule{Type: "basic", Config: store.AuthConfig{Username: "admin", Password: "supersecret"}}
+	rule := &router.AuthRule{Type: "basic", Config: router.AuthConfig{Username: "admin", Password: "supersecret"}}
 
 	tests := []struct {
 		name  string
@@ -162,7 +162,7 @@ func TestCheck_Basic(t *testing.T) {
 }
 
 func TestCheck_TypeNone(t *testing.T) {
-	rule := &store.AuthRule{Type: "none"}
+	rule := &router.AuthRule{Type: "none"}
 	c, _ := makeTestContext("GET", "/api/test")
 	if got := Check(c, rule); !got {
 		t.Errorf("Check(type=none) = %v, want true", got)
@@ -170,7 +170,7 @@ func TestCheck_TypeNone(t *testing.T) {
 }
 
 func TestCheck_UnknownType(t *testing.T) {
-	rule := &store.AuthRule{Type: "unknown"}
+	rule := &router.AuthRule{Type: "unknown"}
 	c, _ := makeTestContext("GET", "/api/test")
 	if got := Check(c, rule); got {
 		t.Errorf("Check(type=unknown) = %v, want false (fail closed)", got)

@@ -1,9 +1,11 @@
 import React from 'react'
 import { Button, Input, Card } from '../components/ui'
 import { Shield, Lock, User } from 'lucide-react'
+import { ApiError } from '../lib/api/client'
+import type { LoginResponse } from '../lib/api/types'
 
 interface LoginPageProps {
-  onLogin: (token: string, user: any) => void
+  onLogin: (username: string, password: string) => Promise<LoginResponse>
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
@@ -18,24 +20,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || 'Login failed')
-        return
-      }
-
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
-      onLogin(data.token, data.user)
+      await onLogin(username, password)
     } catch (err) {
-      setError('Network error')
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Network error')
+      }
     } finally {
       setLoading(false)
     }

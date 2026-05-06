@@ -70,6 +70,56 @@ func TestBuildEngine_ServesIndexWithoutSwallowingProxyPaths(t *testing.T) {
 	}
 }
 
+func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
+	db, cleanup := newTestSQLite(t)
+	defer cleanup()
+
+	auth.ConfigureJWTSecret("test-secret")
+	passwordHash, err := store.HashPassword("password123")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+	if err := db.CreateUser(&store.User{
+		ID:           "admin-1",
+		Username:     "admin",
+		PasswordHash: passwordHash,
+		Role:         store.RoleAdmin,
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	webRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<html>auth gate</html>"), 0644); err != nil {
+		t.Fatalf("WriteFile(index.html) error = %v", err)
+	}
+
+	engine := buildEngine(router.NewManager(db), webRoot, db)
+
+	token, err := auth.GenerateToken("admin-1", "admin", store.RoleAdmin)
+	if err != nil {
+		t.Fatalf("GenerateToken() error = %v", err)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/config/reload", nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getResp := httptest.NewRecorder()
+	engine.ServeHTTP(getResp, getReq)
+
+	if getResp.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/config/reload status = %d, want %d", getResp.Code, http.StatusNotFound)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/config/reload", nil)
+	postReq.Header.Set("Authorization", "Bearer "+token)
+	postResp := httptest.NewRecorder()
+	engine.ServeHTTP(postResp, postReq)
+
+	if postResp.Code != http.StatusOK {
+		t.Fatalf("POST /api/config/reload status = %d, want %d, body=%s", postResp.Code, http.StatusOK, postResp.Body.String())
+	}
+}
+
 func TestConfigureJWTSecret_UsesConfigValue(t *testing.T) {
 	previous := os.Getenv("JWT_SECRET")
 	if err := os.Unsetenv("JWT_SECRET"); err != nil {

@@ -2,24 +2,40 @@ import React from 'react'
 import { Button, Card } from '../components/ui'
 import { PageHeader } from '../components/PageHeader'
 import { RefreshCw, Database, Shield, Server } from 'lucide-react'
+import { ApiError } from '../lib/api/client'
+import { configApi } from '../lib/api/config'
+import { getSessionUser } from '../lib/session-store'
 
 export function SettingsPage() {
   const [reloading, setReloading] = React.useState(false)
+  const [message, setMessage] = React.useState('')
+  const [error, setError] = React.useState('')
+  const canReload = (getSessionUser()?.permissions?.can_manage_routes ?? false) || (getSessionUser()?.permissions?.can_manage_auth ?? false)
 
   const handleReload = async () => {
     setReloading(true)
+    setMessage('')
+    setError('')
     try {
-      await fetch('/api/config/reload')
-      alert('Configuration reloaded')
+      const result = await configApi.reload()
+      setMessage(result.message)
     } catch (e) {
-      alert('Failed to reload: ' + e)
+      if (e instanceof ApiError) {
+        setError(e.message)
+      } else {
+        setError('Failed to reload configuration')
+      }
+    } finally {
+      setReloading(false)
     }
-    setReloading(false)
   }
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="Settings" description="Manage your Auth Gate configuration" />
+
+      {message && <div className="mb-4 p-3 rounded-[var(--radius-md)] bg-[var(--success-light)] text-[var(--success)]">{message}</div>}
+      {error && <div className="mb-4 p-3 rounded-[var(--radius-md)] bg-[var(--error-light)] text-[var(--error)]">{error}</div>}
 
       <div className="space-y-6">
         <Card>
@@ -35,6 +51,7 @@ export function SettingsPage() {
               <Button
                 className="mt-3"
                 loading={reloading}
+                disabled={!canReload}
                 onClick={handleReload}
               >
                 {reloading ? 'Reloading...' : 'Reload Config'}
@@ -65,7 +82,7 @@ export function SettingsPage() {
             <div className="flex-1">
               <h3 className="text-base font-medium text-[var(--text-primary)]">Security</h3>
               <p className="text-sm text-[var(--text-muted)] mt-1">
-                Remember to change the admin token in production. Configure it in <code className="text-xs bg-[var(--neutral-100)] px-1 py-0.5 rounded">configs/config.yaml</code>
+                Configure a strong <code className="text-xs bg-[var(--neutral-100)] px-1 py-0.5 rounded">auth.jwt_secret</code> before production deployment. Ephemeral JWT secrets should remain development-only.
               </p>
             </div>
           </div>

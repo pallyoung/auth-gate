@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pallyoung/auth-gate/packages/server/internal/api"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
-	"github.com/pallyoung/auth-gate/packages/server/internal/proxy"
+	adminhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/admin"
+	proxyhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/proxy"
+	statichttp "github.com/pallyoung/auth-gate/packages/server/internal/http/static"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
@@ -85,46 +86,20 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite) *g
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
-	registerStaticRoutes(engine, webRoot)
-	engine.GET("/", serveIndex(webRoot))
+	statichttp.RegisterRoutes(engine, webRoot)
 
 	// Public routes
-	engine.POST("/api/auth/login", api.LoginHandler(db))
+	engine.POST("/api/auth/login", adminhttp.LoginRoute(db))
 
 	// Protected API routes
 	apiGroup := engine.Group("/api")
 	apiGroup.Use(auth.AuthMiddleware())
-	api.RegisterHandlers(apiGroup, routerMgr, db)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db)
 
 	// Proxy for unmatched routes
-	engine.NoRoute(proxy.Handler(routerMgr))
+	proxyhttp.RegisterRoutes(engine, routerMgr)
 
 	return engine
-}
-
-func registerStaticRoutes(engine *gin.Engine, webRoot string) {
-	assetsDir := filepath.Join(webRoot, "assets")
-	if info, err := os.Stat(assetsDir); err == nil && info.IsDir() {
-		engine.Static("/assets", assetsDir)
-	}
-
-	registerStaticFile(engine, "/favicon.svg", filepath.Join(webRoot, "favicon.svg"))
-	registerStaticFile(engine, "/favicon.ico", filepath.Join(webRoot, "favicon.ico"))
-}
-
-func registerStaticFile(engine *gin.Engine, route, path string) {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return
-	}
-	engine.StaticFile(route, path)
-}
-
-func serveIndex(webRoot string) gin.HandlerFunc {
-	indexPath := filepath.Join(webRoot, "index.html")
-	return func(c *gin.Context) {
-		c.File(indexPath)
-	}
 }
 
 func configureJWTSecret(cfg config.AuthConfig) {
@@ -138,6 +113,9 @@ func configureJWTSecret(cfg config.AuthConfig) {
 	if secret := cfg.JWTSecretValue(); secret != "" {
 		auth.ConfigureJWTSecret(secret)
 		return
+	}
+	if !cfg.AllowEphemeralJWT() {
+		log.Fatalf("JWT secret not configured; set JWT_SECRET or auth.jwt_secret")
 	}
 	if auth.UsingGeneratedJWTSecret() {
 		log.Printf("Warning: JWT secret not configured; using an ephemeral secret for this process")

@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+
+	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 )
 
 type Claims struct {
@@ -118,14 +120,24 @@ func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := GetTokenFromRequest(c)
 		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "unauthorized",
+					Message: "unauthorized",
+				},
+			})
 			c.Abort()
 			return
 		}
 
 		claims, err := ValidateToken(tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "invalid_token",
+					Message: "invalid token",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -141,7 +153,12 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "unauthorized",
+					Message: "unauthorized",
+				},
+			})
 			c.Abort()
 			return
 		}
@@ -154,7 +171,12 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+		c.JSON(http.StatusForbidden, httpresponse.ErrorEnvelope{
+			Error: httpresponse.ErrorDetail{
+				Code:    "insufficient_permissions",
+				Message: "insufficient permissions",
+			},
+		})
 		c.Abort()
 	}
 }

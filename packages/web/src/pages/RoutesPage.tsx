@@ -3,7 +3,9 @@ import { Button, Card, Badge, Modal, EmptyState } from '../components/ui'
 import { PageHeader } from '../components/PageHeader'
 import { DataTable } from '../components/DataTable'
 import { RouteForm } from '../components/RouteForm'
-import { api, Route } from '../lib/api'
+import { routesApi } from '../lib/api/routes'
+import type { Route, RouteInput } from '../lib/api/types'
+import { getSessionUser } from '../lib/session-store'
 import { Plus, Route as RouteIcon } from 'lucide-react'
 
 export function RoutesPage() {
@@ -12,10 +14,11 @@ export function RoutesPage() {
   const [showForm, setShowForm] = React.useState(false)
   const [editingRoute, setEditingRoute] = React.useState<Route | null>(null)
   const [error, setError] = React.useState('')
+  const canManageRoutes = getSessionUser()?.permissions?.can_manage_routes ?? false
 
   const fetchRoutes = React.useCallback(async () => {
     try {
-      const data = await api.routes.list()
+      const data = await routesApi.list()
       setRoutes(data)
     } catch (e) {
       setError((e as Error).message)
@@ -26,9 +29,9 @@ export function RoutesPage() {
 
   React.useEffect(() => { fetchRoutes() }, [fetchRoutes])
 
-  const handleCreate = async (data: Partial<Route>) => {
+  const handleCreate = async (data: RouteInput) => {
     try {
-      await api.routes.create(data)
+      await routesApi.create(data)
       setShowForm(false)
       fetchRoutes()
     } catch (e) {
@@ -36,10 +39,10 @@ export function RoutesPage() {
     }
   }
 
-  const handleUpdate = async (data: Partial<Route>) => {
+  const handleUpdate = async (data: RouteInput) => {
     if (!editingRoute) return
     try {
-      await api.routes.update(editingRoute.id, data)
+      await routesApi.update(editingRoute.id, data)
       setShowForm(false)
       setEditingRoute(null)
       fetchRoutes()
@@ -51,7 +54,7 @@ export function RoutesPage() {
   const handleDelete = async (route: Route) => {
     if (!confirm('Delete route "' + (route.name || route.path_prefix) + '"?')) return
     try {
-      await api.routes.delete(route.id)
+      await routesApi.delete(route.id)
       fetchRoutes()
     } catch (e) {
       setError((e as Error).message)
@@ -73,7 +76,7 @@ export function RoutesPage() {
   return (
     <div className="animate-fade-in">
       <PageHeader title="Routes" description="Configure routing rules for your services"
-        action={<Button icon={<Plus className="w-4 h-4" />} onClick={() => { setEditingRoute(null); setShowForm(true) }}>Add Route</Button>} />
+        action={canManageRoutes ? <Button icon={<Plus className="w-4 h-4" />} onClick={() => { setEditingRoute(null); setShowForm(true) }}>Add Route</Button> : null} />
       
       {error && <div className="mb-4 p-3 rounded-[var(--radius-md)] bg-[var(--error-light)] text-[var(--error)]">{error}</div>}
       
@@ -81,15 +84,15 @@ export function RoutesPage() {
         {routes.length === 0 ? (
           <EmptyState icon={<RouteIcon className="w-12 h-12" />} title="No routes configured"
             description="Add your first route to start routing traffic to your services"
-            action={<Button onClick={() => setShowForm(true)}>Add Route</Button>} />
+            action={canManageRoutes ? <Button onClick={() => setShowForm(true)}>Add Route</Button> : undefined} />
         ) : (
           <DataTable columns={columns} data={routes}
-            onEdit={(r) => { setEditingRoute(r); setShowForm(true) }}
-            onDelete={handleDelete} />
+            onEdit={canManageRoutes ? (r) => { setEditingRoute(r); setShowForm(true) } : undefined}
+            onDelete={canManageRoutes ? handleDelete : undefined} />
         )}
       </Card>
 
-      <Modal open={showForm} onClose={() => { setShowForm(false); setEditingRoute(null) }}
+      <Modal open={canManageRoutes && showForm} onClose={() => { setShowForm(false); setEditingRoute(null) }}
         title={editingRoute ? 'Edit Route' : 'Add Route'}>
         <RouteForm route={editingRoute} onSubmit={editingRoute ? handleUpdate : handleCreate}
           onCancel={() => { setShowForm(false); setEditingRoute(null) }} />

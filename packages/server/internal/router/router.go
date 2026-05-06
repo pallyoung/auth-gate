@@ -8,6 +8,20 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
+type AuthConfig struct {
+	HeaderName string
+	Secret     string
+	Username   string
+	Password   string
+}
+
+type AuthRule struct {
+	ID        string
+	RouteID   string
+	Type      string
+	Config    AuthConfig
+}
+
 type Route struct {
 	ID          string
 	Name        string
@@ -17,7 +31,7 @@ type Route struct {
 	StripPrefix bool
 	Enabled     bool
 	Priority    int
-	AuthRule    *store.AuthRule
+	AuthRule    *AuthRule
 }
 
 type Manager struct {
@@ -39,28 +53,7 @@ func (m *Manager) loadRoutes() {
 	}
 
 	authRules, _ := m.db.ListAuthRules()
-	authMap := make(map[string]*store.AuthRule)
-	for i := range authRules {
-		authMap[authRules[i].RouteID] = &authRules[i]
-	}
-
-	var result []Route
-	for _, r := range routes {
-		route := Route{
-			ID:          r.ID,
-			Name:        r.Name,
-			Host:        r.Host,
-			PathPrefix:  r.PathPrefix,
-			Backend:     r.Backend,
-			StripPrefix: r.StripPrefix,
-			Enabled:     r.Enabled,
-			Priority:    r.Priority,
-		}
-		if auth, ok := authMap[r.ID]; ok {
-			route.AuthRule = auth
-		}
-		result = append(result, route)
-	}
+	result := compileRoutes(routes, authRules)
 
 	// 按 priority 降序，path_prefix 长度降序排序
 	sort.Slice(result, func(i, j int) bool {
@@ -114,6 +107,12 @@ func (m *Manager) GetRoutes() []Route {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	result := make([]Route, len(m.routes))
-	copy(result, m.routes)
+	for i, route := range m.routes {
+		result[i] = route
+		if route.AuthRule != nil {
+			authRuleCopy := *route.AuthRule
+			result[i].AuthRule = &authRuleCopy
+		}
+	}
 	return result
 }

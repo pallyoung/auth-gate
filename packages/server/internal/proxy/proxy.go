@@ -2,12 +2,14 @@ package proxy
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 
 	"github.com/gin-gonic/gin"
@@ -24,14 +26,26 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 		route := routerMgr.Match(host, path)
 		if route == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "no route found"})
+			log.Printf("proxy match miss host=%s path=%s", host, path)
+			c.JSON(http.StatusNotFound, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "route_not_found",
+					Message: "no route found",
+				},
+			})
 			return
 		}
+		log.Printf("proxy match route_id=%s host=%s path=%s backend=%s", route.ID, host, path, route.Backend)
 
 		// 鉴权
 		if route.AuthRule != nil && route.AuthRule.Type != "none" {
 			if !auth.Check(c, route.AuthRule) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "unauthorized",
+						Message: "unauthorized",
+					},
+				})
 				return
 			}
 		}
@@ -39,7 +53,12 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 		// 反向代理
 		backend, err := url.Parse(route.Backend)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid backend"})
+			c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "invalid_backend",
+					Message: "invalid backend",
+				},
+			})
 			return
 		}
 
@@ -67,7 +86,13 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 		// 错误处理
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("backend error: %v", err)})
+			log.Printf("proxy upstream error route_id=%s backend=%s err=%v", route.ID, route.Backend, err)
+			c.JSON(http.StatusBadGateway, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "backend_error",
+					Message: fmt.Sprintf("backend error: %v", err),
+				},
+			})
 		}
 
 		proxy.ServeHTTP(c.Writer, c.Request)

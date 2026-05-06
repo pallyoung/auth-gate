@@ -2,8 +2,11 @@ import React from 'react'
 import { Button, Card, Badge, Modal, EmptyState } from '../components/ui'
 import { PageHeader } from '../components/PageHeader'
 import { DataTable } from '../components/DataTable'
-import { AuthRule, Route, api } from '../lib/api'
+import { authRulesApi } from '../lib/api/auth-rules'
+import { routesApi } from '../lib/api/routes'
+import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 import { AuthRuleForm } from '../components/AuthRuleForm'
+import { getSessionUser } from '../lib/session-store'
 import { Plus, Shield } from 'lucide-react'
 
 export function AuthRulesPage() {
@@ -13,13 +16,14 @@ export function AuthRulesPage() {
   const [showForm, setShowForm] = React.useState(false)
   const [editingRule, setEditingRule] = React.useState<AuthRule | null>(null)
   const [error, setError] = React.useState('')
+  const canManageAuth = getSessionUser()?.permissions?.can_manage_auth ?? false
 
   const fetchData = React.useCallback(async () => {
     try {
       setError('')
       const [routesRes, rulesRes] = await Promise.all([
-        api.routes.list(),
-        api.authRules.list(),
+        routesApi.list(),
+        authRulesApi.list(),
       ])
       setRoutes(routesRes)
       setRules(rulesRes)
@@ -37,16 +41,16 @@ export function AuthRulesPage() {
   const handleDelete = async (rule: AuthRule) => {
     if (!confirm('Delete this auth rule?')) return
     try {
-      await api.authRules.delete(rule.id)
+      await authRulesApi.delete(rule.id)
       await fetchData()
     } catch (e) {
       setError((e as Error).message)
     }
   }
 
-  const handleCreate = async (data: Partial<AuthRule>) => {
+  const handleCreate = async (data: AuthRuleInput) => {
     try {
-      await api.authRules.create(data)
+      await authRulesApi.create(data)
       setShowForm(false)
       await fetchData()
     } catch (e) {
@@ -54,10 +58,10 @@ export function AuthRulesPage() {
     }
   }
 
-  const handleUpdate = async (data: Partial<AuthRule>) => {
+  const handleUpdate = async (data: AuthRuleInput) => {
     if (!editingRule) return
     try {
-      await api.authRules.update(editingRule.id, data)
+      await authRulesApi.update(editingRule.id, data)
       setShowForm(false)
       setEditingRule(null)
       await fetchData()
@@ -91,19 +95,19 @@ export function AuthRulesPage() {
   return (
     <div className="animate-fade-in">
       <PageHeader title="Auth Rules" description="Configure authentication for your routes" action={
-        <Button icon={<Plus className="w-4 h-4" />} onClick={() => { setEditingRule(null); setShowForm(true) }}>Add Rule</Button>
+        canManageAuth ? <Button icon={<Plus className="w-4 h-4" />} onClick={() => { setEditingRule(null); setShowForm(true) }}>Add Rule</Button> : null
       } />
       {error && <div className="mb-4 p-3 rounded-[var(--radius-md)] bg-[var(--error-light)] text-[var(--error)]">{error}</div>}
       <Card padding="none">
         {rules.length === 0 ? (
-          <EmptyState icon={<Shield className="w-12 h-12" />} title="No auth rules configured" description="Add authentication rules to protect your routes" action={<Button onClick={() => setShowForm(true)}>Add Rule</Button>} />
+          <EmptyState icon={<Shield className="w-12 h-12" />} title="No auth rules configured" description="Add authentication rules to protect your routes" action={canManageAuth ? <Button onClick={() => setShowForm(true)}>Add Rule</Button> : undefined} />
         ) : (
-          <DataTable columns={columns} data={rules} onEdit={(r) => { setEditingRule(r); setShowForm(true) }} onDelete={handleDelete} />
+          <DataTable columns={columns} data={rules} onEdit={canManageAuth ? (r) => { setEditingRule(r); setShowForm(true) } : undefined} onDelete={canManageAuth ? handleDelete : undefined} />
         )}
       </Card>
 
       <Modal
-        open={showForm}
+        open={canManageAuth && showForm}
         onClose={() => { setShowForm(false); setEditingRule(null) }}
         title={editingRule ? 'Edit Auth Rule' : 'Add Auth Rule'}
       >

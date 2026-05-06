@@ -5,19 +5,20 @@ import { Shield, Route as RouteIcon, Settings, KeyRound, Menu, X, LogOut, User a
 interface LayoutProps {
   children: React.ReactNode
   currentPath: string
-  user?: { username: string; role: string }
+  user?: { username: string; role: string; permissions?: { can_manage_routes: boolean; can_manage_auth: boolean; can_manage_users: boolean; can_view_logs: boolean } }
   onLogout?: () => void
 }
 
-const navItems = [
-  { path: '/', icon: RouteIcon, label: 'Routes' },
-  { path: '/auth', icon: KeyRound, label: 'Auth Rules' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
-]
-
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
-  const [userMenuOpen, setUserMenuOpen] = React.useState(false)
+  const navItems = React.useMemo(() => {
+    const items = [
+      { path: '/', icon: RouteIcon, label: 'Routes', visible: user?.permissions?.can_manage_routes !== false },
+      { path: '/auth', icon: KeyRound, label: 'Auth Rules', visible: user?.permissions?.can_manage_auth !== false },
+      { path: '/settings', icon: Settings, label: 'Settings', visible: true },
+    ]
+    return items.filter((item) => item.visible)
+  }, [user])
 
   const closeSidebar = () => setSidebarOpen(false)
 

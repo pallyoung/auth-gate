@@ -1,0 +1,309 @@
+openapi: 3.0.3
+info:
+  title: Auth Gate Admin API
+  version: 0.2.0
+servers:
+  - url: /api
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+    Permissions:
+      type: object
+      properties:
+        can_manage_routes: { type: boolean }
+        can_manage_auth: { type: boolean }
+        can_manage_users: { type: boolean }
+        can_view_logs: { type: boolean }
+    SessionUser:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string }
+        permissions:
+          $ref: '#/components/schemas/Permissions'
+    Route:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        path_prefix: { type: string }
+        backend: { type: string }
+        strip_prefix: { type: boolean }
+        enabled: { type: boolean }
+        priority: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RouteInput:
+      type: object
+      required: [path_prefix, backend]
+      properties:
+        name: { type: string }
+        host: { type: string }
+        path_prefix: { type: string }
+        backend: { type: string }
+        strip_prefix: { type: boolean }
+        enabled: { type: boolean }
+        priority: { type: integer }
+    AuthRule:
+      type: object
+      properties:
+        id: { type: string }
+        route_id: { type: string }
+        type: { type: string }
+        config:
+          type: object
+          properties:
+            header_name: { type: string }
+            username: { type: string }
+    AuthRuleInput:
+      type: object
+      required: [route_id]
+      properties:
+        route_id: { type: string }
+        type: { type: string }
+        config:
+          type: object
+          properties:
+            header_name: { type: string }
+            secret: { type: string }
+            username: { type: string }
+            password: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user:
+          $ref: '#/components/schemas/SessionUser'
+        permissions:
+          $ref: '#/components/schemas/Permissions'
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/logout:
+    post:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+  /auth/me:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+  /routes:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteInput'
+      responses:
+        '201':
+          description: Created
+  /routes/{id}:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    put:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteInput'
+      responses:
+        '200':
+          description: OK
+    delete:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /auth-rules:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRuleInput'
+      responses:
+        '201':
+          description: Created
+  /auth-rules/{id}:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    put:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRuleInput'
+      responses:
+        '200':
+          description: OK
+    delete:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /users:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    post:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Created
+  /users/{id}:
+    put:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    delete:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /config/reload:
+    post:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK

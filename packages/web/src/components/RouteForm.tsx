@@ -1,16 +1,16 @@
 import React from 'react'
-import { Button, Card } from './ui'
-import { Input, Select, Switch } from './ui'
-import { Route } from '../lib/api'
+import { Input, Switch } from './ui'
+import { Button } from './ui'
+import type { Route, RouteInput } from '../lib/api/types'
 
 interface RouteFormProps {
   route: Route | null
-  onSubmit: (data: Partial<Route>) => void
+  onSubmit: (data: RouteInput) => void
   onCancel: () => void
 }
 
 export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
-  const [form, setForm] = React.useState<Partial<Route>>({
+  const [form, setForm] = React.useState<RouteInput>({
     name: route?.name || '',
     host: route?.host || '',
     path_prefix: route?.path_prefix || '',
