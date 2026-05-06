@@ -3,18 +3,18 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Install deps if needed
-if [ ! -d "packages/web/node_modules" ]; then
-    echo "Installing frontend dependencies..."
-    cd packages/web && npm install && cd ../..
-fi
+DIST_DIR="$(pwd)/dist"
+EXE="$DIST_DIR/auth-gate"
 
 # Build if needed
-if [ ! -f "packages/server/bin/auth-gate" ]; then
-    echo "Building..."
-    cd packages/web && npm run build && cd ../..
-    cd packages/server && go build -o bin/auth-gate ./cmd/server && cd ..
+if [ ! -f "$EXE" ]; then
+    echo "Binary not found, building..."
+    ./scripts/deploy.sh
 fi
 
-# Run with hot-reload (go run watches code changes)
-cd packages/server && go run ./cmd/server
+# Start service
+cd "$DIST_DIR"
+echo "Starting Auth Gate on http://localhost:8080"
+echo "Press Ctrl+C to stop"
+echo ""
+./auth-gate

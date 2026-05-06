@@ -9,32 +9,19 @@ if ($PSScriptRoot) {
     $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
 }
 
-# Check Go
-$goCmd = Get-Command go -ErrorAction SilentlyContinue
-if (-not $goCmd) {
-    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
-    exit 1
-}
-
-# Install deps if needed
-$webDir = Join-Path $ProjectRoot "packages\web"
-if (-not (Test-Path (Join-Path $webDir "node_modules"))) {
-    Write-Host "Installing frontend dependencies..." -ForegroundColor Yellow
-    Set-Location $webDir
-    npm install --legacy-peer-deps
-}
+$DistDir = Join-Path $ProjectRoot "dist"
+$ExePath = Join-Path $DistDir "auth-gate.exe"
 
 # Build if needed
-$serverBin = Join-Path $ProjectRoot "packages\server\bin\auth-gate.exe"
-if (-not (Test-Path $serverBin)) {
-    Write-Host "Building..." -ForegroundColor Yellow
-    Set-Location $webDir
-    npm run build
-    
-    Set-Location (Join-Path $ProjectRoot "packages\server")
-    & go build -o bin\auth-gate.exe .\cmd\server
+if (-not (Test-Path $ExePath)) {
+    Write-Host "Binary not found, building..." -ForegroundColor Yellow
+    & "$ProjectRoot\scripts\deploy.ps1"
+    return
 }
 
-# Run
-Set-Location (Join-Path $ProjectRoot "packages\server")
-.\bin\auth-gate.exe
+# Start service
+Set-Location $DistDir
+Write-Host "Starting Auth Gate on http://localhost:8080" -ForegroundColor Cyan
+Write-Host "Press Ctrl+C to stop" -ForegroundColor Gray
+Write-Host ""
+.\auth-gate.exe
