@@ -12,14 +12,18 @@ if ($PSScriptRoot) {
 Write-Host "=== Auth Gate Install ===" -ForegroundColor Cyan
 
 # Check Go
-if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    Write-Host "Error: Go is not installed" -ForegroundColor Red
+$goCmd = Get-Command go -ErrorAction SilentlyContinue
+if (-not $goCmd) {
+    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
+    Write-Host "Please install Go from: https://go.dev/dl/" -ForegroundColor Yellow
     exit 1
 }
 
 # Check Node
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "Error: Node.js is not installed" -ForegroundColor Red
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    Write-Host "Error: Node.js is not installed or not in PATH" -ForegroundColor Red
+    Write-Host "Please install Node.js from: https://nodejs.org/" -ForegroundColor Yellow
     exit 1
 }
 
@@ -35,7 +39,7 @@ npm run build
 # Build server
 Write-Host "[3/4] Building server..." -ForegroundColor Yellow
 Set-Location (Join-Path $ProjectRoot "packages\server")
-go build -o bin\auth-gate.exe .\cmd\server
+& go build -o bin\auth-gate.exe .\cmd\server
 
 Set-Location $ProjectRoot
 Write-Host "[4/4] Build complete!" -ForegroundColor Green

@@ -9,6 +9,13 @@ if ($PSScriptRoot) {
     $ProjectRoot = $PSCommandPath | Split-Path | Split-Path
 }
 
+# Check Go
+$goCmd = Get-Command go -ErrorAction SilentlyContinue
+if (-not $goCmd) {
+    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
+    exit 1
+}
+
 # Install deps if needed
 $webDir = Join-Path $ProjectRoot "packages\web"
 if (-not (Test-Path (Join-Path $webDir "node_modules"))) {
@@ -25,7 +32,7 @@ if (-not (Test-Path $serverBin)) {
     npm run build
     
     Set-Location (Join-Path $ProjectRoot "packages\server")
-    go build -o bin\auth-gate.exe .\cmd\server
+    & go build -o bin\auth-gate.exe .\cmd\server
 }
 
 # Run

@@ -11,6 +11,14 @@ if ($PSScriptRoot) {
 
 Write-Host "=== Auth Gate Build ===" -ForegroundColor Cyan
 
+# Check Go
+$goCmd = Get-Command go -ErrorAction SilentlyContinue
+if (-not $goCmd) {
+    Write-Host "Error: Go is not installed or not in PATH" -ForegroundColor Red
+    Write-Host "Please install Go from: https://go.dev/dl/" -ForegroundColor Yellow
+    exit 1
+}
+
 # Build frontend
 Write-Host "[1/2] Building frontend..." -ForegroundColor Yellow
 $webDir = Join-Path $ProjectRoot "packages\web"
@@ -22,7 +30,7 @@ npm run build
 Write-Host "[2/2] Building server..." -ForegroundColor Yellow
 $serverDir = Join-Path $ProjectRoot "packages\server"
 Set-Location $serverDir
-go build -o bin\auth-gate.exe .\cmd\server
+& go build -o bin\auth-gate.exe .\cmd\server
 
 Set-Location $ProjectRoot
 Write-Host "Build complete: packages\server\bin\auth-gate.exe" -ForegroundColor Green
