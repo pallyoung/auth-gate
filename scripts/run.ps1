@@ -2,10 +2,10 @@
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
-# Build if needed
+# Install deps + build if needed
 if (-not (Test-Path "$ProjectRoot\packages\server\bin\auth-gate.exe")) {
-    Write-Host "Binary not found, building first..." -ForegroundColor Yellow
-    & "$ProjectRoot\scripts\build.ps1"
+    Write-Host "Binary not found, running install..." -ForegroundColor Yellow
+    & "$ProjectRoot\scripts\install.ps1"
 }
 
 # Run

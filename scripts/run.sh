@@ -3,10 +3,10 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Build if needed
+# Install deps + build if needed
 if [ ! -f packages/server/bin/auth-gate ]; then
-    echo "Binary not found, building first..."
-    ./scripts/build.sh
+    echo "Binary not found, running install..."
+    ./scripts/install.sh
 fi
 
 # Run
