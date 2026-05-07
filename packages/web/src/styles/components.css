@@ -1,26 +1,22 @@
-/* Button animations */
+@tailwind components;
+@tailwind utilities;
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-/* Modal animations */
 @keyframes modal-enter {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.96) translateY(18px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
-.animate-modal-enter {
-  animation: modal-enter 0.2s var(--ease-out);
-}
-
-/* Toast animations */
 @keyframes toast-enter {
   from {
     opacity: 0;
@@ -43,6 +39,35 @@
   }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(15, 143, 139, 0.24);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(15, 143, 139, 0);
+  }
+}
+
+.animate-modal-enter {
+  animation: modal-enter 0.24s var(--ease-out);
+}
+
 .animate-toast-enter {
   animation: toast-enter 0.3s var(--ease-out);
 }
@@ -51,12 +76,60 @@
   animation: toast-exit 0.2s var(--ease-in);
 }
 
-/* Page transitions */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.animate-fade-in {
+  animation: fade-in 0.24s var(--ease-out);
 }
 
-.animate-fade-in {
-  animation: fade-in 0.2s var(--ease-out);
+.animate-rise-in {
+  animation: rise-in 0.45s var(--ease-out);
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.2s var(--ease-in-out) infinite;
+}
+
+.glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-panel-strong {
+  background: var(--bg-card-strong);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-lg);
+}
+
+.app-shell-grid {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-shell-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 30%),
+    linear-gradient(180deg, rgba(15, 143, 139, 0.06), transparent 40%);
+}
+
+.sidebar-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top right, rgba(56, 199, 186, 0.18), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(214, 164, 61, 0.14), transparent 24%);
+  mix-blend-mode: screen;
+}
+
+.surface-border {
+  border: 1px solid var(--border-default);
 }

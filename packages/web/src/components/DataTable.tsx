@@ -1,7 +1,15 @@
 import React from 'react'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyRow, MobileCardList } from './ui'
 import { Pencil, Trash2 } from 'lucide-react'
-import { cn } from '../lib/utils'
+import {
+  EmptyRow,
+  MobileCardList,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui'
 
 interface Column<T> {
   key: keyof T | string
@@ -20,6 +28,33 @@ interface DataTableProps<T> {
   emptyMessage?: string
 }
 
+function ActionButton({
+  label,
+  danger = false,
+  onClick,
+  children,
+}: {
+  label: string
+  danger?: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-[var(--duration-fast)]',
+        danger
+          ? 'border-[rgba(208,71,75,0.14)] text-[var(--error)] hover:bg-[var(--error-light)]'
+          : 'border-[var(--border-default)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
+      ].join(' ')}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function DataTable<T extends { id: string }>({
   columns,
   data,
@@ -28,43 +63,43 @@ export function DataTable<T extends { id: string }>({
   renderMobileCard,
   emptyMessage = 'No data',
 }: DataTableProps<T>) {
-  const mobileCardRenderer = renderMobileCard || ((row: T) => (
-    <div className="space-y-2">
-      {columns
-        .filter(col => !col.hideOnMobile)
-        .map(col => {
-          const value = (row as any)[col.key]
-          return (
-            <div key={col.key as string} className="flex justify-between items-start">
-              <span className="text-[var(--text-muted)] text-xs">{col.header}</span>
-              <span className="text-[var(--text-sm)] text-right">
-                {col.render ? col.render(value, row) : String(value ?? '-')}
-              </span>
-            </div>
-          )
-        })}
-      {(onEdit || onDelete) && (
-        <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-default)]">
-          {onEdit && (
-            <button
-              onClick={() => onEdit(row)}
-              className="p-2 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)]"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={() => onDelete(row)}
-              className="p-2 rounded hover:bg-[var(--error-light)] text-[var(--text-muted)]"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
+  const mobileCardRenderer =
+    renderMobileCard ||
+    ((row: T) => (
+      <div className="space-y-4">
+        <div className="space-y-3">
+          {columns
+            .filter((col) => !col.hideOnMobile)
+            .map((col) => {
+              const value = (row as any)[col.key]
+              return (
+                <div key={col.key as string} className="flex items-start justify-between gap-4">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    {col.header}
+                  </span>
+                  <span className="min-w-0 text-right text-sm text-[var(--text-primary)]">
+                    {col.render ? col.render(value, row) : String(value ?? '-')}
+                  </span>
+                </div>
+              )
+            })}
         </div>
-      )}
-    </div>
-  ))
+        {(onEdit || onDelete) && (
+          <div className="flex justify-end gap-2 border-t border-[var(--border-default)] pt-3">
+            {onEdit && (
+              <ActionButton label="Edit" onClick={() => onEdit(row)}>
+                <Pencil className="h-4 w-4" />
+              </ActionButton>
+            )}
+            {onDelete && (
+              <ActionButton label="Delete" danger onClick={() => onDelete(row)}>
+                <Trash2 className="h-4 w-4" />
+              </ActionButton>
+            )}
+          </div>
+        )}
+      </div>
+    ))
 
   return (
     <>
@@ -77,9 +112,7 @@ export function DataTable<T extends { id: string }>({
                   {col.header}
                 </TableHead>
               ))}
-              {(onEdit || onDelete) && (
-                <TableHead className="w-24 text-right">Actions</TableHead>
-              )}
+              {(onEdit || onDelete) && <TableHead className="w-28 text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -100,24 +133,16 @@ export function DataTable<T extends { id: string }>({
                   })}
                   {(onEdit || onDelete) && (
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-2">
                         {onEdit && (
-                          <button
-                            onClick={() => onEdit(row)}
-                            className="p-1.5 rounded hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                            aria-label="Edit"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                          <ActionButton label="Edit" onClick={() => onEdit(row)}>
+                            <Pencil className="h-4 w-4" />
+                          </ActionButton>
                         )}
                         {onDelete && (
-                          <button
-                            onClick={() => onDelete(row)}
-                            className="p-1.5 rounded hover:bg-[var(--error-light)] text-[var(--text-muted)] hover:text-[var(--error)]"
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <ActionButton label="Delete" danger onClick={() => onDelete(row)}>
+                            <Trash2 className="h-4 w-4" />
+                          </ActionButton>
                         )}
                       </div>
                     </TableCell>
@@ -130,11 +155,7 @@ export function DataTable<T extends { id: string }>({
       </div>
 
       <div className="md:hidden">
-        <MobileCardList
-          data={data}
-          renderCard={mobileCardRenderer}
-          emptyMessage={emptyMessage}
-        />
+        <MobileCardList data={data} renderCard={mobileCardRenderer} emptyMessage={emptyMessage} />
       </div>
     </>
   )

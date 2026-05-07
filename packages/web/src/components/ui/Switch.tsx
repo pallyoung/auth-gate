@@ -5,22 +5,24 @@ type SwitchSize = 'sm' | 'md'
 
 interface SwitchProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string
+  description?: string
   switchSize?: SwitchSize
 }
 
 const sizeStyles: Record<SwitchSize, { wrapper: string; knob: string }> = {
   sm: {
-    wrapper: 'w-10 h-6 md:w-9 md:h-5',
-    knob: 'w-5 h-5 md:w-4 md:h-4 data-[state=checked]:translate-x-5 md:data-[state=checked]:translate-x-4',
+    wrapper: 'h-6 w-10',
+    knob: 'h-4 w-4 peer-checked:translate-x-4',
   },
   md: {
-    wrapper: 'w-12 h-7 md:w-11 md:h-6',
-    knob: 'w-6 h-6 md:w-5 md:h-5 data-[state=checked]:translate-x-6 md:data-[state=checked]:translate-x-5',
+    wrapper: 'h-7 w-12',
+    knob: 'h-5 w-5 peer-checked:translate-x-5',
   },
 }
 
 export function Switch({
   label,
+  description,
   switchSize = 'md',
   checked,
   onChange,
@@ -31,40 +33,39 @@ export function Switch({
   const switchId = id || label?.toLowerCase().replace(/\s+/g, '-')
 
   return (
-    <label htmlFor={switchId} className="inline-flex items-center gap-2 cursor-pointer">
-      <div className="relative">
+    <label
+      htmlFor={switchId}
+      className="flex items-center justify-between gap-4 rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-xl"
+    >
+      <div className="min-w-0">
+        {label && <div className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>}
+        {description && <div className="mt-1 text-xs text-[var(--text-muted)]">{description}</div>}
+      </div>
+      <div className="relative shrink-0">
         <input
           type="checkbox"
           id={switchId}
           checked={checked}
           onChange={onChange}
-          className="sr-only peer"
+          className="peer sr-only"
           {...props}
         />
         <div
           className={cn(
-            'rounded-full transition-colors duration-[var(--duration-normal)]',
-            'bg-[var(--neutral-300)] peer-checked:bg-[var(--primary-500)]',
-            'peer-focus:ring-2 peer-focus:ring-[var(--primary-500)]/50',
-            'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
-            'touch-manipulation',
+            'rounded-full border border-white/40 bg-[rgba(107,98,86,0.22)] transition-all duration-[var(--duration-normal)]',
+            'peer-checked:bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))]',
+            'peer-disabled:opacity-50',
             sizeStyles[switchSize].wrapper,
             className
           )}
         />
         <div
-          data-state={checked ? 'checked' : 'unchecked'}
           className={cn(
-            'absolute top-0.5 left-0.5 rounded-full bg-white',
-            'transition-transform duration-[var(--duration-normal)]',
-            'shadow-sm',
+            'absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-white shadow-[var(--shadow-sm)] transition-transform duration-[var(--duration-normal)]',
             sizeStyles[switchSize].knob
           )}
         />
       </div>
-      {label && (
-        <span className="text-[var(--text-sm)] text-[var(--text-primary)]">{label}</span>
-      )}
     </label>
   )
 }

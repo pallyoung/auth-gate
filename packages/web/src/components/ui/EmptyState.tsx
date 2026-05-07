@@ -1,5 +1,4 @@
 import React from 'react'
-import { cn } from '../../lib/utils'
 
 interface EmptyStateProps {
   icon?: React.ReactNode
@@ -10,21 +9,23 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center" role="status">
+    <div
+      className="flex flex-col items-center justify-center px-5 py-14 text-center md:px-8 md:py-16"
+      role="status"
+    >
       {icon && (
-        <div className="mb-4 text-[var(--neutral-400)]" aria-hidden="true">
+        <div
+          className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)] shadow-[var(--shadow-sm)]"
+          aria-hidden="true"
+        >
           {icon}
         </div>
       )}
-      <h3 className="text-[var(--text-lg)] font-medium text-[var(--text-primary)] mb-1">
-        {title}
-      </h3>
+      <h3 className="text-xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{title}</h3>
       {description && (
-        <p className="text-[var(--text-sm)] text-[var(--text-muted)] max-w-sm mb-4">
-          {description}
-        </p>
+        <p className="mt-2 max-w-md text-sm leading-6 text-[var(--text-muted)]">{description}</p>
       )}
-      {action}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   )
 }

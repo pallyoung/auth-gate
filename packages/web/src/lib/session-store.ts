@@ -53,5 +53,7 @@ export function setSessionUser(nextUser: SessionUser | null) {
 
 export function subscribeSession(listener: Listener) {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }

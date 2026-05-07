@@ -1,24 +1,62 @@
+@tailwind base;
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 body {
+  position: relative;
+  min-height: 100vh;
   font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  line-height: var(--leading-sm);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
   color: var(--text-primary);
   background: var(--bg-page);
 }
 
-/* Safe area for mobile */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+body::before {
+  z-index: -2;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(15, 143, 139, 0.18), transparent 30%),
+    radial-gradient(circle at 85% 8%, rgba(189, 122, 24, 0.16), transparent 26%),
+    radial-gradient(circle at 74% 72%, rgba(47, 114, 200, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(252, 251, 248, 0.98) 0%, rgba(236, 231, 220, 0.96) 100%);
+}
+
+body::after {
+  z-index: -1;
+  opacity: 0.6;
+  background-image:
+    linear-gradient(rgba(23, 33, 45, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 33, 45, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 88%);
+}
+
 @supports (padding: max(0px)) {
   body {
     padding-left: max(0px, env(safe-area-inset-left));
@@ -26,20 +64,32 @@ body {
   }
 }
 
-/* Touch optimization */
 @media (pointer: coarse) {
-  button, a, input, select, textarea {
+  button,
+  a,
+  input,
+  select,
+  textarea {
     min-height: 44px;
   }
-  
-  input, select, textarea {
+
+  input,
+  select,
+  textarea {
     font-size: 16px;
   }
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 
 h1 { font-size: var(--text-3xl); }
@@ -50,16 +100,19 @@ h5 { font-size: var(--text-base); }
 h6 { font-size: var(--text-sm); }
 
 a {
-  color: var(--primary-500);
+  color: var(--primary-600);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease-out);
 }
 
 a:hover {
-  color: var(--primary-600);
+  color: var(--primary-700);
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
 }
@@ -74,18 +127,35 @@ button:disabled {
   cursor: not-allowed;
 }
 
-input:focus, select:focus, textarea:focus, button:focus {
+input:focus,
+select:focus,
+textarea:focus,
+button:focus {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
 ::placeholder {
-  color: var(--neutral-400);
+  color: var(--text-subtle);
 }
 
-code, pre {
+code,
+pre {
   font-family: var(--font-mono);
   font-size: 0.9em;
+}
+
+p {
+  color: var(--text-secondary);
+}
+
+strong {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(15, 143, 139, 0.18);
+  color: var(--text-primary);
 }
 
 table {
@@ -93,11 +163,11 @@ table {
   border-collapse: collapse;
 }
 
-th, td {
+th,
+td {
   text-align: left;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -108,20 +178,41 @@ th, td {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--neutral-300);
+  background: rgba(107, 98, 86, 0.32);
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neutral-400);
+  background: rgba(107, 98, 86, 0.48);
 }
 
-/* Focus visible */
 :focus-visible {
   box-shadow: var(--focus-ring);
 }
 
-/* Utility classes */
+.app-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.42rem;
+  border-radius: 999px;
+  background: rgba(23, 33, 45, 0.06);
+  border: 1px solid rgba(23, 33, 45, 0.08);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--primary-700);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
