@@ -96,6 +96,7 @@ export function AuthRulesPage() {
         if (row.type === 'apikey') return value.header_name ? `Header ${value.header_name}` : 'Header based key'
         if (row.type === 'bearer') return 'Bearer token validation'
         if (row.type === 'basic') return value.username ? `User ${value.username}` : 'Basic credentials'
+        if (row.type === 'gateway') return 'Gateway-managed user login'
         return 'No credential requirement'
       },
     },
@@ -162,7 +163,7 @@ export function AuthRulesPage() {
           <EmptyState
             icon={<Shield className="h-8 w-8" />}
             title="No auth rules configured"
-            description="Add a rule to require API keys, bearer tokens, or basic auth before requests are forwarded."
+            description="Add a rule to require API keys, bearer tokens, basic auth, or gateway-managed login before requests are forwarded."
             action={canManageAuth ? <Button onClick={() => setShowForm(true)}>Create First Rule</Button> : undefined}
           />
         ) : (

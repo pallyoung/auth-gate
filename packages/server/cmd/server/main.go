@@ -20,6 +20,8 @@ import (
 )
 
 const bootstrapAdminUsername = "admin"
+const controlPlaneBasePath = "/_authgate"
+const controlPlaneAPIBasePath = controlPlaneBasePath + "/api"
 
 func getWebRoot() string {
 	if webRoot := os.Getenv("WEB_ROOT"); webRoot != "" {
@@ -86,14 +88,16 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite) *g
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
-	statichttp.RegisterRoutes(engine, webRoot)
+	statichttp.RegisterRoutes(engine, webRoot, controlPlaneBasePath)
 
 	// Public routes
-	engine.POST("/api/auth/login", adminhttp.LoginRoute(db))
+	engine.POST(controlPlaneAPIBasePath+"/auth/login", adminhttp.LoginRoute(db))
+	engine.POST(controlPlaneAPIBasePath+"/access/login", proxyhttp.AccessLoginRoute(routerMgr, db))
+	engine.POST(controlPlaneAPIBasePath+"/access/logout", proxyhttp.AccessLogoutRoute())
 
 	// Protected API routes
-	apiGroup := engine.Group("/api")
-	apiGroup.Use(auth.AuthMiddleware())
+	apiGroup := engine.Group(controlPlaneAPIBasePath)
+	apiGroup.Use(auth.AuthMiddleware(db))
 	adminhttp.RegisterRoutes(apiGroup, routerMgr, db)
 
 	// Proxy for unmatched routes
@@ -192,6 +196,7 @@ func main() {
 
 	webRoot := getWebRoot()
 	log.Printf("Serving web from: %s", webRoot)
+	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
 	engine := buildEngine(routerMgr, webRoot, db)
 

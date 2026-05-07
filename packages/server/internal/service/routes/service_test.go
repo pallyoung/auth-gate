@@ -39,6 +39,24 @@ func TestServiceCreateRoute_RejectsInvalidBackend(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRoute_RejectsReservedControlPlanePrefix(t *testing.T) {
+	svc := NewService(newTestDB(t), nil)
+
+	_, err := svc.Create(CreateInput{
+		Name:        "reserved",
+		PathPrefix:  "/_authgate/cloud",
+		Backend:     "http://example.com",
+		StripPrefix: true,
+		Enabled:     true,
+	})
+	if err == nil {
+		t.Fatal("Create() error = nil, want validation error")
+	}
+	if Code(err) != ErrCodeReservedRoutePathPrefix {
+		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeReservedRoutePathPrefix)
+	}
+}
+
 func TestServiceUpdateRoute_ReturnsNotFound(t *testing.T) {
 	svc := NewService(newTestDB(t), nil)
 

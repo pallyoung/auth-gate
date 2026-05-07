@@ -7,6 +7,7 @@ import {
   Settings,
   Shield,
   User as UserIcon,
+  Users,
   X,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -45,6 +46,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         label: 'Auth Rules',
         description: 'Policy enforcement',
         visible: user?.permissions?.can_manage_auth !== false,
+      },
+      {
+        path: '/users',
+        icon: Users,
+        label: 'Users',
+        description: 'Directory and access',
+        visible: user?.permissions?.can_manage_users === true,
       },
       {
         path: '/settings',

@@ -56,6 +56,7 @@ type AuthConfigInput struct {
 	Secret     string
 	Username   string
 	Password   string
+	LoginMode  string
 }
 
 type CreateInput struct {
@@ -167,10 +168,14 @@ func (s *Service) build(input CreateInput, existing *store.AuthRule) (*store.Aut
 		Secret:     strings.TrimSpace(input.Config.Secret),
 		Username:   strings.TrimSpace(input.Config.Username),
 		Password:   input.Config.Password,
+		LoginMode:  strings.TrimSpace(input.Config.LoginMode),
 	}
 
 	if existing != nil {
 		config = mergeProtectedAuthConfig(existing.Config, config, ruleType)
+	}
+	if ruleType == "gateway" && config.LoginMode == "" {
+		config.LoginMode = "form"
 	}
 	if err := validate(ruleType, config); err != nil {
 		return nil, err
@@ -208,6 +213,8 @@ func validate(ruleType string, config store.AuthConfig) error {
 			return newError(ErrCodeMissingBasicCredentials, "basic username and password required", nil)
 		}
 		return nil
+	case "gateway":
+		return nil
 	default:
 		return newError(ErrCodeInvalidAuthRuleType, "invalid auth rule type", nil)
 	}
@@ -227,6 +234,10 @@ func mergeProtectedAuthConfig(existing, incoming store.AuthConfig, ruleType stri
 		}
 		if merged.Username == "" {
 			merged.Username = existing.Username
+		}
+	case "gateway":
+		if merged.LoginMode == "" {
+			merged.LoginMode = existing.LoginMode
 		}
 	}
 

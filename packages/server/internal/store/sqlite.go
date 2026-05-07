@@ -60,10 +60,20 @@ func NewSQLite(path string) (*SQLite, error) {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS user_route_access (
+		user_id TEXT NOT NULL,
+		route_id TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, route_id),
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_routes_host ON routes(host);
 	CREATE INDEX IF NOT EXISTS idx_routes_enabled ON routes(enabled);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_rules_route_id ON auth_rules(route_id);
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_user_route_access_route_id ON user_route_access(route_id);
 	`
 
 	if _, err := db.Exec(schema); err != nil {

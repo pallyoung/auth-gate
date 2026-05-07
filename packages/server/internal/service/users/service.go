@@ -12,7 +12,10 @@ const (
 	ErrCodeUserNotFound    = "user_not_found"
 	ErrCodeInvalidRole     = "invalid_role"
 	ErrCodeDuplicateUser   = "duplicate_user"
+	ErrCodeDuplicateRouteAccess = "duplicate_route_access"
+	ErrCodeRouteNotFound   = "route_not_found"
 	ErrCodePasswordHashing = "password_hash_failed"
+	ErrCodeMissingPassword = "missing_password"
 	ErrCodeUserStoreFailure = "user_store_failure"
 )
 
@@ -50,12 +53,16 @@ type CreateInput struct {
 	Username string
 	Password string
 	Role     string
+	Enabled  bool
+	RouteIDs []string
 }
 
 type UpdateInput struct {
 	Username string
+	Password string
 	Role     string
 	Enabled  bool
+	RouteIDs []string
 }
 
 type Service struct {
@@ -90,6 +97,13 @@ func (s *Service) Create(input CreateInput) (*store.User, error) {
 	if !ok {
 		return nil, newError(ErrCodeInvalidRole, "invalid role", nil)
 	}
+	if strings.TrimSpace(input.Password) == "" {
+		return nil, newError(ErrCodeMissingPassword, "password required", nil)
+	}
+	routeIDs, err := s.validateRouteAccess(role, input.RouteIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	hash, err := store.HashPassword(input.Password)
 	if err != nil {
@@ -100,7 +114,8 @@ func (s *Service) Create(input CreateInput) (*store.User, error) {
 		Username:     strings.TrimSpace(input.Username),
 		PasswordHash: hash,
 		Role:         role,
-		Enabled:      true,
+		Enabled:      input.Enabled,
+		RouteIDs:     routeIDs,
 	}
 	if err := s.db.CreateUser(user); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -121,10 +136,23 @@ func (s *Service) Update(id string, input UpdateInput) (*store.User, error) {
 	if !ok {
 		return nil, newError(ErrCodeInvalidRole, "invalid role", nil)
 	}
+	routeIDs, err := s.validateRouteAccess(role, input.RouteIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	user.Username = strings.TrimSpace(input.Username)
 	user.Role = role
 	user.Enabled = input.Enabled
+	user.RouteIDs = routeIDs
+
+	if strings.TrimSpace(input.Password) != "" {
+		hash, err := store.HashPassword(input.Password)
+		if err != nil {
+			return nil, newError(ErrCodePasswordHashing, "failed to hash password", err)
+		}
+		user.PasswordHash = hash
+	}
 
 	if err := s.db.UpdateUser(user); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -151,9 +179,39 @@ func normalizeRole(role string) (string, bool) {
 		role = store.RoleViewer
 	}
 	switch role {
-	case store.RoleAdmin, store.RoleEditor, store.RoleViewer:
+	case store.RoleAdmin, store.RoleEditor, store.RoleViewer, store.RoleMember:
 		return role, true
 	default:
 		return "", false
 	}
+}
+
+func (s *Service) validateRouteAccess(role string, routeIDs []string) ([]string, error) {
+	normalized := make([]string, 0, len(routeIDs))
+	seen := make(map[string]struct{}, len(routeIDs))
+
+	for _, routeID := range routeIDs {
+		routeID = strings.TrimSpace(routeID)
+		if routeID == "" {
+			continue
+		}
+		if _, exists := seen[routeID]; exists {
+			return nil, newError(ErrCodeDuplicateRouteAccess, "duplicate route assignment", nil)
+		}
+		seen[routeID] = struct{}{}
+
+		if _, err := s.db.GetRoute(routeID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, newError(ErrCodeRouteNotFound, "route not found", err)
+			}
+			return nil, newError(ErrCodeUserStoreFailure, "failed to validate route access", err)
+		}
+
+		normalized = append(normalized, routeID)
+	}
+
+	if role == store.RoleAdmin || role == store.RoleEditor {
+		return normalized, nil
+	}
+	return normalized, nil
 }

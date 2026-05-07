@@ -91,8 +91,8 @@ func TestRegisterRoutes_UsesStructuredErrorEnvelope(t *testing.T) {
 	db := newTestDB(t)
 	user := seedUser(t, db, "admin", "password123", store.RoleAdmin)
 	engine := gin.New()
-	group := engine.Group("/api")
-	group.Use(auth.AuthMiddleware())
+	group := engine.Group("/_authgate/api")
+	group.Use(auth.AuthMiddleware(db))
 	RegisterRoutes(group, router.NewManager(db), db)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
@@ -100,7 +100,7 @@ func TestRegisterRoutes_UsesStructuredErrorEnvelope(t *testing.T) {
 		t.Fatalf("GenerateToken() error = %v", err)
 	}
 
-	resp := performRequest(t, engine, http.MethodPost, "/api/routes", token, map[string]any{
+	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/routes", token, map[string]any{
 		"name":        "broken",
 		"path_prefix": "svc",
 		"backend":     "ftp://example.com",
@@ -121,9 +121,9 @@ func TestRegisterRoutes_MeReturnsPermissions(t *testing.T) {
 	db := newTestDB(t)
 	user := seedUser(t, db, "editor", "password123", store.RoleEditor)
 	engine := gin.New()
-	engine.POST("/api/auth/login", LoginRoute(db))
-	group := engine.Group("/api")
-	group.Use(auth.AuthMiddleware())
+	engine.POST("/_authgate/api/auth/login", LoginRoute(db))
+	group := engine.Group("/_authgate/api")
+	group.Use(auth.AuthMiddleware(db))
 	RegisterRoutes(group, router.NewManager(db), db)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
@@ -131,7 +131,7 @@ func TestRegisterRoutes_MeReturnsPermissions(t *testing.T) {
 		t.Fatalf("GenerateToken() error = %v", err)
 	}
 
-	resp := performRequest(t, engine, http.MethodGet, "/api/auth/me", token, nil)
+	resp := performRequest(t, engine, http.MethodGet, "/_authgate/api/auth/me", token, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
 	}
@@ -148,9 +148,9 @@ func TestLoginRoute_ReturnsStructuredSession(t *testing.T) {
 	db := newTestDB(t)
 	seedUser(t, db, "admin", "password123", store.RoleAdmin)
 	engine := gin.New()
-	engine.POST("/api/auth/login", LoginRoute(db))
+	engine.POST("/_authgate/api/auth/login", LoginRoute(db))
 
-	resp := performRequest(t, engine, http.MethodPost, "/api/auth/login", "", map[string]any{
+	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/auth/login", "", map[string]any{
 		"username": "admin",
 		"password": "password123",
 	})
@@ -171,6 +171,27 @@ func TestLoginRoute_ReturnsStructuredSession(t *testing.T) {
 	}
 }
 
+func TestLoginRoute_RejectsRouteOnlyUserFromControlPlane(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth.ConfigureJWTSecret("test-secret")
+
+	db := newTestDB(t)
+	seedUser(t, db, "member", "password123", store.RoleMember)
+	engine := gin.New()
+	engine.POST("/_authgate/api/auth/login", LoginRoute(db))
+
+	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/auth/login", "", map[string]any{
+		"username": "member",
+		"password": "password123",
+	})
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusForbidden, resp.Body.String())
+	}
+	if resp.Body.String() != "{\"error\":{\"code\":\"control_plane_access_denied\",\"message\":\"control plane access denied\"}}" {
+		t.Fatalf("body = %s", resp.Body.String())
+	}
+}
+
 func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	auth.ConfigureJWTSecret("test-secret")
@@ -179,8 +200,8 @@ func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 	seedRoute(t, db)
 	user := seedUser(t, db, "admin", "password123", store.RoleAdmin)
 	engine := gin.New()
-	group := engine.Group("/api")
-	group.Use(auth.AuthMiddleware())
+	group := engine.Group("/_authgate/api")
+	group.Use(auth.AuthMiddleware(db))
 	RegisterRoutes(group, router.NewManager(db), db)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
@@ -188,7 +209,7 @@ func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 		t.Fatalf("GenerateToken() error = %v", err)
 	}
 
-	resp := performRequest(t, engine, http.MethodPost, "/api/auth-rules", token, map[string]any{
+	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/auth-rules", token, map[string]any{
 		"route_id": "route-1",
 		"type":     "bearer",
 		"config": map[string]any{
@@ -200,5 +221,32 @@ func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 	}
 	if bytes.Contains(resp.Body.Bytes(), []byte("shared-secret")) {
 		t.Fatalf("response leaked secret: %s", resp.Body.String())
+	}
+}
+
+func TestRegisterRoutes_MeRejectsDisabledUserWithOldToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth.ConfigureJWTSecret("test-secret")
+
+	db := newTestDB(t)
+	user := seedUser(t, db, "viewer", "password123", store.RoleViewer)
+	engine := gin.New()
+	group := engine.Group("/_authgate/api")
+	group.Use(auth.AuthMiddleware(db))
+	RegisterRoutes(group, router.NewManager(db), db)
+
+	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		t.Fatalf("GenerateToken() error = %v", err)
+	}
+
+	user.Enabled = false
+	if err := db.UpdateUser(user); err != nil {
+		t.Fatalf("UpdateUser() error = %v", err)
+	}
+
+	resp := performRequest(t, engine, http.MethodGet, "/_authgate/api/auth/me", token, nil)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusUnauthorized, resp.Body.String())
 	}
 }

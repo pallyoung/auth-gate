@@ -11,6 +11,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
@@ -39,13 +40,19 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 		// 鉴权
 		if route.AuthRule != nil && route.AuthRule.Type != "none" {
+			if route.AuthRule.Type == "gateway" {
+				if claims, ok := routeAccessClaims(c, routerMgr.DB()); ok && routeAllowedByClaims(claims, route.ID) {
+					c.Set("jwt_subject", claims.UserID)
+					c.Set("jwt_username", claims.Username)
+					c.Set("jwt_role", claims.Role)
+				} else {
+					c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
+					c.Abort()
+					return
+				}
+			}
 			if !auth.Check(c, route.AuthRule) {
-				c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
-					Error: httpresponse.ErrorDetail{
-						Code:    "unauthorized",
-						Message: "unauthorized",
-					},
-				})
+				writeUnauthorized(c, route)
 				return
 			}
 		}
@@ -96,6 +103,47 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 		}
 
 		proxy.ServeHTTP(c.Writer, c.Request)
+		c.Abort()
+	}
+}
+
+func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
+	if claims == nil {
+		return false
+	}
+	switch claims.Role {
+	case store.RoleAdmin, store.RoleEditor:
+		return true
+	}
+	for _, allowedRouteID := range claims.RouteIDs {
+		if allowedRouteID == routeID {
+			return true
+		}
+	}
+	return false
+}
+
+func writeUnauthorized(c *gin.Context, route *router.Route) {
+	switch route.AuthRule.Type {
+	case "basic":
+		realm := route.Name
+		if strings.TrimSpace(realm) == "" {
+			realm = route.PathPrefix
+		}
+		realm = strings.ReplaceAll(realm, `"`, `'`)
+		auth.RequireAuth(fmt.Sprintf(`Basic realm="%s"`, realm))(c)
+	case "bearer":
+		auth.RequireAuth("Bearer")(c)
+	case "gateway":
+		c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
+		c.Abort()
+	default:
+		c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+			Error: httpresponse.ErrorDetail{
+				Code:    "unauthorized",
+				Message: "unauthorized",
+			},
+		})
 		c.Abort()
 	}
 }

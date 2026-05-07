@@ -47,15 +47,26 @@ func TestBuildEngine_ServesIndexWithoutSwallowingProxyPaths(t *testing.T) {
 
 	engine := buildEngine(router.NewManager(db), webRoot, db)
 
+	controlPlaneReq := httptest.NewRequest(http.MethodGet, controlPlaneBasePath, nil)
+	controlPlaneResp := httptest.NewRecorder()
+	engine.ServeHTTP(controlPlaneResp, controlPlaneReq)
+
+	if controlPlaneResp.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want %d", controlPlaneBasePath, controlPlaneResp.Code, http.StatusOK)
+	}
+	if !strings.Contains(controlPlaneResp.Body.String(), "auth gate") {
+		t.Fatalf("GET %s body = %q, want index.html content", controlPlaneBasePath, controlPlaneResp.Body.String())
+	}
+
 	rootReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	rootResp := httptest.NewRecorder()
 	engine.ServeHTTP(rootResp, rootReq)
 
-	if rootResp.Code != http.StatusOK {
-		t.Fatalf("GET / status = %d, want %d", rootResp.Code, http.StatusOK)
+	if rootResp.Code != http.StatusNotFound {
+		t.Fatalf("GET / status = %d, want %d", rootResp.Code, http.StatusNotFound)
 	}
-	if !strings.Contains(rootResp.Body.String(), "auth gate") {
-		t.Fatalf("GET / body = %q, want index.html content", rootResp.Body.String())
+	if !strings.Contains(rootResp.Body.String(), "no route found") {
+		t.Fatalf("GET / body = %q, want proxy 404", rootResp.Body.String())
 	}
 
 	proxyReq := httptest.NewRequest(http.MethodGet, "/unmatched", nil)
@@ -101,22 +112,22 @@ func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
 		t.Fatalf("GenerateToken() error = %v", err)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/config/reload", nil)
+	getReq := httptest.NewRequest(http.MethodGet, controlPlaneAPIBasePath+"/config/reload", nil)
 	getReq.Header.Set("Authorization", "Bearer "+token)
 	getResp := httptest.NewRecorder()
 	engine.ServeHTTP(getResp, getReq)
 
 	if getResp.Code != http.StatusNotFound {
-		t.Fatalf("GET /api/config/reload status = %d, want %d", getResp.Code, http.StatusNotFound)
+		t.Fatalf("GET %s/config/reload status = %d, want %d", controlPlaneAPIBasePath, getResp.Code, http.StatusNotFound)
 	}
 
-	postReq := httptest.NewRequest(http.MethodPost, "/api/config/reload", nil)
+	postReq := httptest.NewRequest(http.MethodPost, controlPlaneAPIBasePath+"/config/reload", nil)
 	postReq.Header.Set("Authorization", "Bearer "+token)
 	postResp := httptest.NewRecorder()
 	engine.ServeHTTP(postResp, postReq)
 
 	if postResp.Code != http.StatusOK {
-		t.Fatalf("POST /api/config/reload status = %d, want %d, body=%s", postResp.Code, http.StatusOK, postResp.Body.String())
+		t.Fatalf("POST %s/config/reload status = %d, want %d, body=%s", controlPlaneAPIBasePath, postResp.Code, http.StatusOK, postResp.Body.String())
 	}
 }
 

@@ -1,9 +1,11 @@
 import React from 'react'
 import { LoginPage } from './pages/LoginPage'
+import { AccessLoginPage } from './pages/AccessLoginPage'
 import { Layout } from './components/Layout'
 import { RoutesPage } from './pages/RoutesPage'
 import { AuthRulesPage } from './pages/AuthRulesPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { UsersPage } from './pages/UsersPage'
 import { useSession } from './lib/session'
 
 function useRoute() {
@@ -21,6 +23,8 @@ function useRoute() {
 export default function App() {
   const { user, token, loading, login, logout } = useSession()
   const path = useRoute()
+  const [pathname, search = ''] = path.split('?')
+  const searchParams = React.useMemo(() => new URLSearchParams(search), [search])
 
   if (loading) {
     return (
@@ -30,20 +34,25 @@ export default function App() {
     )
   }
 
+  if (pathname === '/access-login') {
+    return <AccessLoginPage searchParams={searchParams} />
+  }
+
   if (!token || !user) {
     return <LoginPage onLogin={login} />
   }
 
   const renderPage = () => {
-    switch (path) {
+    switch (pathname) {
       case '/auth': return <AuthRulesPage />
+      case '/users': return <UsersPage />
       case '/settings': return <SettingsPage />
       default: return <RoutesPage />
     }
   }
 
   return (
-    <Layout currentPath={path} user={user} onLogout={logout}>
+    <Layout currentPath={pathname} user={user} onLogout={logout}>
       {renderPage()}
     </Layout>
   )

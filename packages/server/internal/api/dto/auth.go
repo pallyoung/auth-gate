@@ -18,6 +18,7 @@ func SessionUserResponse(user store.User) User {
 		ID:       user.ID,
 		Username: user.Username,
 		Role:     user.Role,
+		RouteIDs: user.RouteIDs,
 	}
 }
 
@@ -34,6 +35,7 @@ func CurrentUserResponse(user store.User, permissions store.Permissions) User {
 		ID:          user.ID,
 		Username:    user.Username,
 		Role:        user.Role,
+		RouteIDs:    user.RouteIDs,
 		Permissions: PermissionsResponse(permissions),
 	}
 }

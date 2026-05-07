@@ -39,6 +39,7 @@ func compileAuthRule(rule store.AuthRule) AuthRule {
 			Secret:     rule.Config.Secret,
 			Username:   rule.Config.Username,
 			Password:   rule.Config.Password,
+			LoginMode:  rule.Config.LoginMode,
 		},
 	}
 }

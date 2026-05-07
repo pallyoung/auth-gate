@@ -22,6 +22,8 @@ func Check(c *gin.Context, rule *router.AuthRule) bool {
 		return checkBearer(c, rule)
 	case "basic":
 		return checkBasic(c, rule)
+	case "gateway":
+		return true
 	default:
 		return false
 	}

@@ -9,6 +9,7 @@ export interface SessionUser {
   id: string
   username: string
   role: string
+  route_ids?: string[]
   permissions?: Permissions
 }
 
@@ -17,8 +18,17 @@ export interface User {
   username: string
   role: string
   enabled?: boolean
+  route_ids?: string[]
   created_at?: string
   updated_at?: string
+}
+
+export interface UserInput {
+  username: string
+  password?: string
+  role: string
+  enabled: boolean
+  route_ids: string[]
 }
 
 export interface Route {
@@ -47,6 +57,7 @@ export interface RouteInput {
 export interface AuthRuleConfig {
   header_name?: string
   username?: string
+  login_mode?: string
 }
 
 export interface AuthRuleSecretConfig extends AuthRuleConfig {
@@ -57,7 +68,7 @@ export interface AuthRuleSecretConfig extends AuthRuleConfig {
 export interface AuthRule {
   id: string
   route_id: string
-  type: 'none' | 'apikey' | 'bearer' | 'basic'
+  type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
   config: AuthRuleConfig
   created_at: string
   updated_at: string
@@ -65,7 +76,7 @@ export interface AuthRule {
 
 export interface AuthRuleInput {
   route_id: string
-  type: 'none' | 'apikey' | 'bearer' | 'basic'
+  type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
   config: AuthRuleSecretConfig
 }
 
@@ -73,6 +84,11 @@ export interface LoginResponse {
   token: string
   user: SessionUser
   permissions: Permissions
+}
+
+export interface RouteAccessLoginResponse {
+  next: string
+  user: SessionUser
 }
 
 export interface ApiErrorEnvelope {

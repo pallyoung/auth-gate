@@ -32,6 +32,7 @@ type AuthConfig struct {
 	Secret     string `json:"secret,omitempty"`
 	Username   string `json:"username,omitempty"` // for basic auth
 	Password   string `json:"password,omitempty"` // for basic auth
+	LoginMode  string `json:"login_mode,omitempty"`
 }
 
 func (a AuthConfig) ToJSON() string {

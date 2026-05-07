@@ -51,3 +51,31 @@ func TestServiceCreateUser_RejectsInvalidRole(t *testing.T) {
 		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeInvalidRole)
 	}
 }
+
+func TestServiceCreateUser_AssignsRouteAccess(t *testing.T) {
+	db := newTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "svc",
+		PathPrefix: "/svc",
+		Backend:    "http://example.com",
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	svc := NewService(db)
+	user, err := svc.Create(CreateInput{
+		Username: "member-1",
+		Password: "password123",
+		Role:     store.RoleMember,
+		Enabled:  true,
+		RouteIDs: []string{"route-1"},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(user.RouteIDs) != 1 || user.RouteIDs[0] != "route-1" {
+		t.Fatalf("user.RouteIDs = %v, want [route-1]", user.RouteIDs)
+	}
+}

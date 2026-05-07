@@ -14,6 +14,7 @@ const ruleTypeOptions = [
   { value: 'apikey', label: 'API Key' },
   { value: 'bearer', label: 'Bearer Token' },
   { value: 'basic', label: 'Basic Auth' },
+  { value: 'gateway', label: 'Gateway Login' },
 ]
 
 export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
@@ -125,6 +126,19 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             value={config.password || ''}
             onChange={(event) => updateConfig({ password: event.target.value })}
             placeholder="service-password"
+            required
+          />
+        </Card>
+      )}
+
+      {type === 'gateway' && (
+        <Card tone="soft">
+          <Select
+            label="Login Mode"
+            value={config.login_mode || 'form'}
+            onChange={(event) => updateConfig({ login_mode: event.target.value })}
+            options={[{ value: 'form', label: 'Gateway Form Login' }]}
+            hint="Uses Auth Gate's route access login page and the shared user directory."
             required
           />
         </Card>

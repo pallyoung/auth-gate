@@ -1,16 +1,35 @@
 package proxy
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
 
 func init() {
 	gin.SetMode(gin.TestMode)
+}
+
+func newProxyTestDB(t *testing.T) *store.SQLite {
+	t.Helper()
+
+	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	if err != nil {
+		t.Fatalf("NewSQLite() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+	return db
 }
 
 // Test the path-rewriting logic in isolation, mirroring what proxy.go does in Director.
@@ -112,5 +131,88 @@ func TestBackendURLParsing(t *testing.T) {
 				t.Errorf("url.Parse(%q) err=%v, wantErr=%v", tt.backend, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestWriteUnauthorized_BasicSetsChallengeHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/cloud", nil)
+
+	writeUnauthorized(c, &router.Route{
+		Name:       "Cloud Console",
+		PathPrefix: "/cloud",
+		AuthRule: &router.AuthRule{
+			Type: "basic",
+		},
+	})
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+	if got := w.Header().Get("WWW-Authenticate"); got != `Basic realm="Cloud Console"` {
+		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Basic realm="Cloud Console"`)
+	}
+}
+
+func TestRouteAccessClaims_RejectsDisabledUser(t *testing.T) {
+	auth.ConfigureJWTSecret("test-secret")
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "cloud",
+		PathPrefix: "/cloud",
+		Backend:    "http://example.com",
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+	hash, err := store.HashPassword("password123")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+
+	user := &store.User{
+		ID:           "member-1",
+		Username:     "member",
+		PasswordHash: hash,
+		Role:         store.RoleMember,
+		Enabled:      true,
+		RouteIDs:     []string{"route-1"},
+	}
+	if err := db.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	token, err := auth.GenerateRouteAccessToken(user.ID, user.Username, user.Role, user.RouteIDs)
+	if err != nil {
+		t.Fatalf("GenerateRouteAccessToken() error = %v", err)
+	}
+
+	user.Enabled = false
+	if err := db.UpdateUser(user); err != nil {
+		t.Fatalf("UpdateUser() error = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
+	req.AddCookie(&http.Cookie{Name: routeAccessCookieName, Value: token})
+	c.Request = req
+
+	if claims, ok := routeAccessClaims(c, db); ok || claims != nil {
+		t.Fatalf("routeAccessClaims() = (%v, %v), want (nil, false)", claims, ok)
+	}
+}
+
+func TestRouteAllowedByClaims_UsesCurrentRouteAssignments(t *testing.T) {
+	claims := &auth.Claims{
+		Role:     store.RoleMember,
+		RouteIDs: []string{"route-2"},
+	}
+
+	if routeAllowedByClaims(claims, "route-1") {
+		t.Fatal("routeAllowedByClaims() = true, want false")
 	}
 }

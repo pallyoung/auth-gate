@@ -2,6 +2,7 @@ import { clearSession, getSessionToken } from '../session-store'
 import type { ApiErrorEnvelope } from './types'
 
 const ensureArray = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : []
+const controlPlaneAPIBasePath = '/_authgate/api'
 
 export class ApiError extends Error {
   status: number
@@ -15,8 +16,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = getSessionToken()
+interface RequestOptions extends RequestInit {
+  authMode?: 'control-plane' | 'none'
+}
+
+async function doRequest<T>(path: string, options?: RequestOptions): Promise<T> {
+  const authMode = options?.authMode ?? 'control-plane'
+  const token = authMode === 'control-plane' ? getSessionToken() : null
   const headers = new Headers(options?.headers)
 
   if (!headers.has('Content-Type') && options?.body) {
@@ -26,8 +32,8 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const res = await fetch(`/api${path}`, { ...options, headers })
-  if (res.status === 401) {
+  const res = await fetch(`${controlPlaneAPIBasePath}${path}`, { ...options, headers })
+  if (res.status === 401 && authMode === 'control-plane') {
     clearSession()
   }
   if (!res.ok) {
@@ -39,6 +45,14 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
     return undefined as T
   }
   return res.json()
+}
+
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  return doRequest<T>(path, { ...options, authMode: 'control-plane' })
+}
+
+export async function publicRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  return doRequest<T>(path, { ...options, authMode: 'none' })
 }
 
 export async function listResource<T>(path: string): Promise<T[]> {

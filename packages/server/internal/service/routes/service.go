@@ -14,9 +14,12 @@ const (
 	ErrCodeRouteNotFound         = "route_not_found"
 	ErrCodeMissingRouteFields    = "missing_route_fields"
 	ErrCodeInvalidRoutePathPrefix = "invalid_route_path_prefix"
+	ErrCodeReservedRoutePathPrefix = "reserved_route_path_prefix"
 	ErrCodeInvalidRouteBackend   = "invalid_route_backend"
 	ErrCodeRouteStoreFailure     = "route_store_failure"
 )
+
+const controlPlaneReservedPathPrefix = "/_authgate"
 
 type Error struct {
 	code    string
@@ -158,6 +161,9 @@ func validate(route *store.Route) error {
 	}
 	if !strings.HasPrefix(route.PathPrefix, "/") {
 		return newError(ErrCodeInvalidRoutePathPrefix, "path_prefix must start with /", nil)
+	}
+	if route.PathPrefix == controlPlaneReservedPathPrefix || strings.HasPrefix(route.PathPrefix, controlPlaneReservedPathPrefix+"/") {
+		return newError(ErrCodeReservedRoutePathPrefix, "path_prefix conflicts with reserved control-plane paths", nil)
 	}
 	backendURL, err := url.Parse(route.Backend)
 	if err != nil || backendURL.Scheme == "" || backendURL.Host == "" {

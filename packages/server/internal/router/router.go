@@ -13,6 +13,7 @@ type AuthConfig struct {
 	Secret     string
 	Username   string
 	Password   string
+	LoginMode  string
 }
 
 type AuthRule struct {
@@ -44,6 +45,10 @@ func NewManager(db *store.SQLite) *Manager {
 	m := &Manager{db: db}
 	m.loadRoutes()
 	return m
+}
+
+func (m *Manager) DB() *store.SQLite {
+	return m.db
 }
 
 func (m *Manager) loadRoutes() {
@@ -88,6 +93,23 @@ func (m *Manager) Match(host, path string) *Route {
 		// 路径边界匹配: "/api" 只匹配 "/api" 或 "/api/..."
 		if pathMatchesPrefix(path, r.PathPrefix) {
 			return r
+		}
+	}
+	return nil
+}
+
+func (m *Manager) FindByID(id string) *Route {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for i := range m.routes {
+		if m.routes[i].ID == id {
+			routeCopy := m.routes[i]
+			if routeCopy.AuthRule != nil {
+				authRuleCopy := *routeCopy.AuthRule
+				routeCopy.AuthRule = &authRuleCopy
+			}
+			return &routeCopy
 		}
 	}
 	return nil

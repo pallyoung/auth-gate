@@ -99,3 +99,24 @@ func TestServiceUpdateAuthRule_PreservesSecretWhenOmitted(t *testing.T) {
 		t.Fatalf("updated.Config.Secret = %q, want preserved secret", updated.Config.Secret)
 	}
 }
+
+func TestServiceCreateAuthRule_AllowsGatewayType(t *testing.T) {
+	db := newTestDB(t)
+	createRoute(t, db, "route-1")
+	svc := NewService(db, nil)
+
+	rule, err := svc.Create(CreateInput{
+		RouteID: "route-1",
+		Type:    "gateway",
+		Config:  AuthConfigInput{},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if rule.Type != "gateway" {
+		t.Fatalf("rule.Type = %q, want gateway", rule.Type)
+	}
+	if rule.Config.LoginMode != "form" {
+		t.Fatalf("rule.Config.LoginMode = %q, want form", rule.Config.LoginMode)
+	}
+}

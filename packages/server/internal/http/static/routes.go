@@ -2,20 +2,32 @@ package static
 
 import (
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(engine *gin.Engine, webRoot string) {
+func RegisterRoutes(engine *gin.Engine, webRoot string, basePath string) {
+	basePath = normalizeBasePath(basePath)
 	assetsDir := filepath.Join(webRoot, "assets")
 	if info, err := os.Stat(assetsDir); err == nil && info.IsDir() {
-		engine.Static("/assets", assetsDir)
+		engine.Static(path.Join(basePath, "assets"), assetsDir)
 	}
 
-	registerStaticFile(engine, "/favicon.svg", filepath.Join(webRoot, "favicon.svg"))
-	registerStaticFile(engine, "/favicon.ico", filepath.Join(webRoot, "favicon.ico"))
-	engine.GET("/", serveIndex(webRoot))
+	registerStaticFile(engine, path.Join(basePath, "favicon.svg"), filepath.Join(webRoot, "favicon.svg"))
+	registerStaticFile(engine, path.Join(basePath, "favicon.ico"), filepath.Join(webRoot, "favicon.ico"))
+	engine.GET(basePath, serveIndex(webRoot))
+	engine.GET(basePath+"/", serveIndex(webRoot))
+}
+
+func normalizeBasePath(basePath string) string {
+	trimmed := "/" + strings.Trim(basePath, "/")
+	if trimmed == "/" {
+		return ""
+	}
+	return trimmed
 }
 
 func registerStaticFile(engine *gin.Engine, route, path string) {

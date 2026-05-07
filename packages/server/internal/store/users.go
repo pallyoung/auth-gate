@@ -16,6 +16,7 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	Role         string    `json:"role"`
 	Enabled      bool      `json:"enabled"`
+	RouteIDs     []string  `json:"route_ids,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -24,6 +25,7 @@ const (
 	RoleAdmin  = "admin"
 	RoleEditor = "editor"
 	RoleViewer = "viewer"
+	RoleMember = "member"
 )
 
 type Permissions struct {
@@ -44,6 +46,31 @@ func GetPermissions(role string) Permissions {
 	}
 }
 
+func CanAccessControlPlane(role string) bool {
+	switch role {
+	case RoleAdmin, RoleEditor, RoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+func UserHasRouteAccess(user *User, routeID string) bool {
+	if user == nil || !user.Enabled {
+		return false
+	}
+	switch user.Role {
+	case RoleAdmin, RoleEditor:
+		return true
+	}
+	for _, allowedRouteID := range user.RouteIDs {
+		if allowedRouteID == routeID {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *SQLite) ListUsers() ([]User, error) {
 	rows, err := s.db.Query(`SELECT id, username, password_hash, role, enabled, created_at, updated_at FROM users ORDER BY created_at DESC`)
 	if err != nil {
@@ -59,6 +86,11 @@ func (s *SQLite) ListUsers() ([]User, error) {
 			return nil, err
 		}
 		u.Enabled = enabled == 1
+		routeIDs, err := s.listUserRouteIDs(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		u.RouteIDs = routeIDs
 		users = append(users, u)
 	}
 	return users, nil
@@ -73,6 +105,11 @@ func (s *SQLite) GetUserByUsername(username string) (*User, error) {
 		return nil, err
 	}
 	u.Enabled = enabled == 1
+	routeIDs, err := s.listUserRouteIDs(u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.RouteIDs = routeIDs
 	return &u, nil
 }
 
@@ -85,10 +122,31 @@ func (s *SQLite) GetUserByID(id string) (*User, error) {
 		return nil, err
 	}
 	u.Enabled = enabled == 1
+	routeIDs, err := s.listUserRouteIDs(u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.RouteIDs = routeIDs
 	return &u, nil
 }
 
 func (s *SQLite) CreateUser(u *User) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.createUserTx(tx, u); err != nil {
+		return err
+	}
+	if err := replaceUserRouteAccessTx(tx, u.ID, u.RouteIDs); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SQLite) createUserTx(tx *sql.Tx, u *User) error {
 	if u.ID == "" {
 		u.ID = uuid.New().String()
 	}
@@ -99,19 +157,35 @@ func (s *SQLite) CreateUser(u *User) error {
 	if u.Enabled {
 		enabled = 1
 	}
-	_, err := s.db.Exec(`INSERT INTO users (id, username, password_hash, role, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, role, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Username, u.PasswordHash, u.Role, enabled, u.CreatedAt, u.UpdatedAt)
 	return err
 }
 
 func (s *SQLite) UpdateUser(u *User) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.updateUserTx(tx, u); err != nil {
+		return err
+	}
+	if err := replaceUserRouteAccessTx(tx, u.ID, u.RouteIDs); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SQLite) updateUserTx(tx *sql.Tx, u *User) error {
 	u.UpdatedAt = time.Now()
 	enabled := 0
 	if u.Enabled {
 		enabled = 1
 	}
-	result, err := s.db.Exec(`UPDATE users SET username = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?`,
-		u.Username, u.Role, enabled, u.UpdatedAt, u.ID)
+	result, err := tx.Exec(`UPDATE users SET username = ?, password_hash = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?`,
+		u.Username, u.PasswordHash, u.Role, enabled, u.UpdatedAt, u.ID)
 	if err != nil {
 		return err
 	}
@@ -125,6 +199,53 @@ func (s *SQLite) UpdateUser(u *User) error {
 func (s *SQLite) DeleteUser(id string) error {
 	_, err := s.db.Exec("DELETE FROM users WHERE id = ?", id)
 	return err
+}
+
+func (s *SQLite) listUserRouteIDs(userID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT route_id FROM user_route_access WHERE user_id = ? ORDER BY route_id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	routeIDs := make([]string, 0)
+	for rows.Next() {
+		var routeID string
+		if err := rows.Scan(&routeID); err != nil {
+			return nil, err
+		}
+		routeIDs = append(routeIDs, routeID)
+	}
+	return routeIDs, nil
+}
+
+func replaceUserRouteAccessTx(tx *sql.Tx, userID string, routeIDs []string) error {
+	if _, err := tx.Exec(`DELETE FROM user_route_access WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	for _, routeID := range normalizeRouteIDs(routeIDs) {
+		if _, err := tx.Exec(`INSERT INTO user_route_access (user_id, route_id) VALUES (?, ?)`, userID, routeID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeRouteIDs(routeIDs []string) []string {
+	seen := make(map[string]struct{}, len(routeIDs))
+	result := make([]string, 0, len(routeIDs))
+	for _, routeID := range routeIDs {
+		routeID = strings.TrimSpace(routeID)
+		if routeID == "" {
+			continue
+		}
+		if _, exists := seen[routeID]; exists {
+			continue
+		}
+		seen[routeID] = struct{}{}
+		result = append(result, routeID)
+	}
+	return result
 }
 
 func (s *SQLite) VerifyPassword(user *User, password string) bool {

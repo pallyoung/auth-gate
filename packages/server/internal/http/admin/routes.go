@@ -220,6 +220,7 @@ func createAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 				Secret:     req.Config.Secret,
 				Username:   req.Config.Username,
 				Password:   req.Config.Password,
+				LoginMode:  req.Config.LoginMode,
 			},
 		})
 		if err != nil {
@@ -246,6 +247,7 @@ func updateAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 				Secret:     req.Config.Secret,
 				Username:   req.Config.Username,
 				Password:   req.Config.Password,
+				LoginMode:  req.Config.LoginMode,
 			},
 		})
 		if err != nil {
@@ -289,6 +291,8 @@ func createUser(userSvc *usersservice.Service) gin.HandlerFunc {
 			Username: req.Username,
 			Password: req.Password,
 			Role:     req.Role,
+			Enabled:  req.Enabled == nil || *req.Enabled,
+			RouteIDs: req.RouteIDs,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -308,8 +312,10 @@ func updateUser(userSvc *usersservice.Service) gin.HandlerFunc {
 
 		user, err := userSvc.Update(c.Param("id"), usersservice.UpdateInput{
 			Username: req.Username,
+			Password: req.Password,
 			Role:     req.Role,
 			Enabled:  req.Enabled,
+			RouteIDs: req.RouteIDs,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -356,7 +362,7 @@ func routeServiceError(c *gin.Context, err error) bool {
 	switch targetCode := routesservice.Code(err); targetCode {
 	case routesservice.ErrCodeRouteNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeInvalidRouteBackend:
+	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeReservedRoutePathPrefix, routesservice.ErrCodeInvalidRouteBackend:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
@@ -396,7 +402,7 @@ func userServiceError(c *gin.Context, err error) bool {
 	switch targetCode := usersservice.Code(err); targetCode {
 	case usersservice.ErrCodeUserNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case usersservice.ErrCodeInvalidRole, usersservice.ErrCodeDuplicateUser:
+	case usersservice.ErrCodeInvalidRole, usersservice.ErrCodeDuplicateUser, usersservice.ErrCodeMissingPassword, usersservice.ErrCodeDuplicateRouteAccess, usersservice.ErrCodeRouteNotFound:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
@@ -413,6 +419,8 @@ func sessionServiceError(c *gin.Context, err error) bool {
 	switch targetCode := sessionservice.Code(err); targetCode {
 	case sessionservice.ErrCodeInvalidCredentials, sessionservice.ErrCodeUserDisabled:
 		writeError(c, http.StatusUnauthorized, targetCode, target.Error())
+	case sessionservice.ErrCodeControlPlaneAccessDenied:
+		writeError(c, http.StatusForbidden, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
 	}

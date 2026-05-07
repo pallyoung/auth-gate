@@ -18,6 +18,7 @@ type User struct {
 	Username    string      `json:"username"`
 	Role        string      `json:"role"`
 	Enabled     bool        `json:"enabled,omitempty"`
+	RouteIDs    []string    `json:"route_ids,omitempty"`
 	CreatedAt   *time.Time  `json:"created_at,omitempty"`
 	UpdatedAt   *time.Time  `json:"updated_at,omitempty"`
 	Permissions Permissions `json:"permissions,omitempty"`
@@ -27,12 +28,16 @@ type UserCreateRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Role     string `json:"role"`
+	Enabled  *bool    `json:"enabled,omitempty"`
+	RouteIDs []string `json:"route_ids,omitempty"`
 }
 
 type UserUpdateRequest struct {
 	Username string `json:"username" binding:"required"`
+	Password string `json:"password,omitempty"`
 	Role     string `json:"role"`
 	Enabled  bool   `json:"enabled"`
+	RouteIDs []string `json:"route_ids,omitempty"`
 }
 
 func UserResponse(user store.User) User {
@@ -43,6 +48,7 @@ func UserResponse(user store.User) User {
 		Username:  user.Username,
 		Role:      user.Role,
 		Enabled:   user.Enabled,
+		RouteIDs:  user.RouteIDs,
 		CreatedAt: &createdAt,
 		UpdatedAt: &updatedAt,
 	}

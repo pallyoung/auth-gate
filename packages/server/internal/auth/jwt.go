@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"database/sql"
 	"crypto/rand"
 	"net/http"
 	"os"
@@ -12,14 +13,22 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
 type Claims struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	Scope    string   `json:"scope,omitempty"`
+	RouteIDs []string `json:"route_ids,omitempty"`
 	jwt.RegisteredClaims
 }
+
+const (
+	ScopeControlPlane = "control_plane"
+	ScopeRouteAccess  = "route_access"
+)
 
 var (
 	jwtSecretMu             sync.RWMutex
@@ -71,16 +80,41 @@ func UsingGeneratedJWTSecret() bool {
 }
 
 func GenerateToken(userID, username, role string) (string, error) {
+	return GenerateControlPlaneToken(userID, username, role)
+}
+
+func GenerateControlPlaneToken(userID, username, role string) (string, error) {
 	claims := &Claims{
 		UserID:   userID,
 		Username: username,
 		Role:     role,
+		Scope:    ScopeControlPlane,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
+	return signClaims(claims)
+}
+
+func GenerateRouteAccessToken(userID, username, role string, routeIDs []string) (string, error) {
+	claims := &Claims{
+		UserID:   userID,
+		Username: username,
+		Role:     role,
+		Scope:    ScopeRouteAccess,
+		RouteIDs: append([]string(nil), routeIDs...),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	return signClaims(claims)
+}
+
+func signClaims(claims *Claims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(currentJWTSecret())
 }
@@ -116,7 +150,7 @@ func GetTokenFromRequest(c *gin.Context) string {
 	return parts[1]
 }
 
-func AuthMiddleware() gin.HandlerFunc {
+func AuthMiddleware(db *store.SQLite) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := GetTokenFromRequest(c)
 		if tokenString == "" {
@@ -140,6 +174,52 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			c.Abort()
 			return
+		}
+		if claims.Scope != "" && claims.Scope != ScopeControlPlane {
+			c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+				Error: httpresponse.ErrorDetail{
+					Code:    "invalid_token",
+					Message: "invalid token",
+				},
+			})
+			c.Abort()
+			return
+		}
+
+		if db != nil {
+			user, err := db.GetUserByID(claims.UserID)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+						Error: httpresponse.ErrorDetail{
+							Code:    "invalid_token",
+							Message: "invalid token",
+						},
+					})
+					c.Abort()
+					return
+				}
+				c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "internal_error",
+						Message: "internal server error",
+					},
+				})
+				c.Abort()
+				return
+			}
+			if !user.Enabled || !store.CanAccessControlPlane(user.Role) {
+				c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "invalid_token",
+						Message: "invalid token",
+					},
+				})
+				c.Abort()
+				return
+			}
+			claims.Username = user.Username
+			claims.Role = user.Role
 		}
 
 		c.Set("user_id", claims.UserID)

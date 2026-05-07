@@ -26,7 +26,7 @@ describe('session integration', () => {
 
     const user = await refreshSessionUser()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/_authgate/api/auth/me', expect.objectContaining({
       headers: expect.any(Headers),
     }))
     expect(user).toEqual({
@@ -58,5 +58,36 @@ describe('session integration', () => {
     })
     expect(getSessionToken()).toBeNull()
     expect(localStorage.getItem('token')).toBeNull()
+  })
+
+  it('does not clear the control-plane session when route access login returns 401', async () => {
+    localStorage.setItem('token', 'token-123')
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 'route_access_denied', message: 'route access denied' },
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { authApi } = await import('./api/auth')
+    const { getSessionToken } = await import('./session-store')
+
+    await expect(authApi.accessLogin({
+      route_id: 'route-1',
+      username: 'member',
+      password: 'bad-password',
+      next: '/cloud',
+    })).rejects.toMatchObject({
+      message: 'route access denied',
+      status: 401,
+      code: 'route_access_denied',
+    })
+
+    expect(getSessionToken()).toBe('token-123')
+    expect(localStorage.getItem('token')).toBe('token-123')
   })
 })
