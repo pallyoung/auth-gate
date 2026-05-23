@@ -93,10 +93,10 @@ export function TableCell({ className, children, ...props }: TableCellProps) {
 
 interface EmptyRowProps {
   colSpan: number
-  message?: string
+  message: string
 }
 
-export function EmptyRow({ colSpan, message = 'No data' }: EmptyRowProps) {
+export function EmptyRow({ colSpan, message }: EmptyRowProps) {
   return (
     <tr>
       <td colSpan={colSpan} className="h-36 px-4 text-center text-sm text-[var(--text-muted)]" role="status">
@@ -109,13 +109,13 @@ export function EmptyRow({ colSpan, message = 'No data' }: EmptyRowProps) {
 interface MobileCardListProps<T> {
   data: T[]
   renderCard: (item: T) => React.ReactNode
-  emptyMessage?: string
+  emptyMessage: string
 }
 
 export function MobileCardList<T extends { id: string }>({
   data,
   renderCard,
-  emptyMessage = 'No data',
+  emptyMessage,
 }: MobileCardListProps<T>) {
   if (data.length === 0) {
     return (

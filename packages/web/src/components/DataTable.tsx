@@ -1,5 +1,6 @@
 import React from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   EmptyRow,
   MobileCardList,
@@ -63,8 +64,10 @@ export function DataTable<T extends { id: string }>({
   onDelete,
   extraActions,
   renderMobileCard,
-  emptyMessage = 'No data',
+  emptyMessage,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('common')
+  const resolvedEmptyMessage = emptyMessage ?? t('table.noData')
   const mobileCardRenderer =
     renderMobileCard ||
     ((row: T) => (
@@ -90,12 +93,12 @@ export function DataTable<T extends { id: string }>({
           <div className="flex justify-end gap-2 border-t border-[var(--border-default)] pt-3">
             {extraActions && <div className="flex items-center mr-2">{extraActions(row)}</div>}
             {onEdit && (
-              <ActionButton label="Edit" onClick={() => onEdit(row)}>
+              <ActionButton label={t('actions.edit')} onClick={() => onEdit(row)}>
                 <Pencil className="h-4 w-4" />
               </ActionButton>
             )}
             {onDelete && (
-              <ActionButton label="Delete" danger onClick={() => onDelete(row)}>
+              <ActionButton label={t('actions.delete')} danger onClick={() => onDelete(row)}>
                 <Trash2 className="h-4 w-4" />
               </ActionButton>
             )}
@@ -115,12 +118,17 @@ export function DataTable<T extends { id: string }>({
                   {col.header}
                 </TableHead>
               ))}
-              {(onEdit || onDelete || extraActions) && <TableHead className="w-40 text-right">Actions</TableHead>}
+              {(onEdit || onDelete || extraActions) && (
+                <TableHead className="w-40 text-right">{t('table.actions')}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
-              <EmptyRow colSpan={columns.length + ((onEdit || onDelete || extraActions) ? 1 : 0)} message={emptyMessage} />
+              <EmptyRow
+                colSpan={columns.length + ((onEdit || onDelete || extraActions) ? 1 : 0)}
+                message={resolvedEmptyMessage}
+              />
             ) : (
               data.map((row) => (
                 <TableRow key={row.id}>
@@ -139,12 +147,12 @@ export function DataTable<T extends { id: string }>({
                       <div className="flex justify-end gap-2">
                         {extraActions && <div className="flex items-center">{extraActions(row)}</div>}
                         {onEdit && (
-                          <ActionButton label="Edit" onClick={() => onEdit(row)}>
+                          <ActionButton label={t('actions.edit')} onClick={() => onEdit(row)}>
                             <Pencil className="h-4 w-4" />
                           </ActionButton>
                         )}
                         {onDelete && (
-                          <ActionButton label="Delete" danger onClick={() => onDelete(row)}>
+                          <ActionButton label={t('actions.delete')} danger onClick={() => onDelete(row)}>
                             <Trash2 className="h-4 w-4" />
                           </ActionButton>
                         )}
@@ -159,7 +167,7 @@ export function DataTable<T extends { id: string }>({
       </div>
 
       <div className="md:hidden">
-        <MobileCardList data={data} renderCard={mobileCardRenderer} emptyMessage={emptyMessage} />
+        <MobileCardList data={data} renderCard={mobileCardRenderer} emptyMessage={resolvedEmptyMessage} />
       </div>
     </>
   )

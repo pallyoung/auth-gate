@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 
 type ModalSize = 'sm' | 'md' | 'lg'
@@ -25,6 +26,7 @@ export function Modal({
   title,
   children,
 }: ModalProps) {
+  const { t } = useTranslation('common')
   const previousActiveElement = useRef<HTMLElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
 
@@ -84,7 +86,7 @@ export function Modal({
               <button
                 onClick={onClose}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-                aria-label="Close modal"
+                aria-label={t('actions.closeModal')}
               >
                 <X className="h-4 w-4" />
               </button>
