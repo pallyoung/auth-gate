@@ -103,3 +103,24 @@ export interface ApiErrorEnvelope {
     message?: string
   }
 }
+
+export interface Certificate {
+  id: string
+  name: string
+  domain: string
+  cert_path: string
+  key_path: string
+  status: 'pending' | 'active' | 'renewing' | 'failed'
+  not_before?: string
+  not_after?: string
+  renew_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CertificateInput {
+  name: string
+  domain: string
+  dns_provider: string
+  provider_config: Record<string, string>
+}

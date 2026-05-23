@@ -24,6 +24,7 @@ interface DataTableProps<T> {
   data: T[]
   onEdit?: (row: T) => void
   onDelete?: (row: T) => void
+  extraActions?: (row: T) => React.ReactNode
   renderMobileCard?: (row: T) => React.ReactNode
   emptyMessage?: string
 }
@@ -60,6 +61,7 @@ export function DataTable<T extends { id: string }>({
   data,
   onEdit,
   onDelete,
+  extraActions,
   renderMobileCard,
   emptyMessage = 'No data',
 }: DataTableProps<T>) {
@@ -84,8 +86,9 @@ export function DataTable<T extends { id: string }>({
               )
             })}
         </div>
-        {(onEdit || onDelete) && (
+        {(onEdit || onDelete || extraActions) && (
           <div className="flex justify-end gap-2 border-t border-[var(--border-default)] pt-3">
+            {extraActions && <div className="flex items-center mr-2">{extraActions(row)}</div>}
             {onEdit && (
               <ActionButton label="Edit" onClick={() => onEdit(row)}>
                 <Pencil className="h-4 w-4" />
@@ -112,12 +115,12 @@ export function DataTable<T extends { id: string }>({
                   {col.header}
                 </TableHead>
               ))}
-              {(onEdit || onDelete) && <TableHead className="w-28 text-right">Actions</TableHead>}
+              {(onEdit || onDelete || extraActions) && <TableHead className="w-40 text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
-              <EmptyRow colSpan={columns.length + (onEdit || onDelete ? 1 : 0)} message={emptyMessage} />
+              <EmptyRow colSpan={columns.length + ((onEdit || onDelete || extraActions) ? 1 : 0)} message={emptyMessage} />
             ) : (
               data.map((row) => (
                 <TableRow key={row.id}>
@@ -131,9 +134,10 @@ export function DataTable<T extends { id: string }>({
                       </TableCell>
                     )
                   })}
-                  {(onEdit || onDelete) && (
+                  {(onEdit || onDelete || extraActions) && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        {extraActions && <div className="flex items-center">{extraActions(row)}</div>}
                         {onEdit && (
                           <ActionButton label="Edit" onClick={() => onEdit(row)}>
                             <Pencil className="h-4 w-4" />

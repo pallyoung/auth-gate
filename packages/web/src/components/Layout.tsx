@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  FileKey,
   KeyRound,
   LogOut,
   Menu,
@@ -38,6 +39,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         icon: RouteIcon,
         label: 'Routes',
         description: 'Traffic orchestration',
+        visible: user?.permissions?.can_manage_routes !== false,
+      },
+      {
+        path: '/certificates',
+        icon: FileKey,
+        label: 'Certificates',
+        description: 'TLS automation',
         visible: user?.permissions?.can_manage_routes !== false,
       },
       {

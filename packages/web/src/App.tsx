@@ -6,6 +6,7 @@ import { RoutesPage } from './pages/RoutesPage'
 import { AuthRulesPage } from './pages/AuthRulesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
+import { CertificatesPage } from './pages/CertificatesPage'
 import { useSession } from './lib/session'
 
 function useRoute() {
@@ -46,6 +47,7 @@ export default function App() {
     switch (pathname) {
       case '/auth': return <AuthRulesPage />
       case '/users': return <UsersPage />
+      case '/certificates': return <CertificatesPage />
       case '/settings': return <SettingsPage />
       default: return <RoutesPage />
     }
