@@ -40,6 +40,9 @@ export interface Route {
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  path_match_mode?: string
+  rewrite_target?: string
+  redirect_code?: number
   created_at: string
   updated_at: string
 }
@@ -52,6 +55,9 @@ export interface RouteInput {
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  path_match_mode?: string
+  rewrite_target?: string
+  redirect_code?: number
 }
 
 export interface AuthRuleConfig {

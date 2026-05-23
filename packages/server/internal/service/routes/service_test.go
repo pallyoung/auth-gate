@@ -118,3 +118,97 @@ func TestServiceDeleteRoute_MapsStoreNotFound(t *testing.T) {
 		t.Fatalf("DeleteRoute() precondition error = %v", err)
 	}
 }
+
+func TestServiceCreateRoute_TLSConfigStored(t *testing.T) {
+	svc := NewService(newTestDB(t), nil)
+
+	route, err := svc.Create(CreateInput{
+		Name:        "tls-route",
+		PathPrefix:  "/api",
+		Backend:     "http://backend.example.com",
+		StripPrefix: false,
+		Enabled:     true,
+		Priority:    10,
+		TLSCert:     "/etc/ssl/certs/site.pem",
+		TLSKey:      "/etc/ssl/private/site.key",
+		TLSEnabled:  true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	routes, err := svc.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(routes) != 1 {
+		t.Fatalf("len(routes) = %d, want 1", len(routes))
+	}
+
+	got := routes[0]
+	if got.TLSCert != "/etc/ssl/certs/site.pem" {
+		t.Errorf("TLSCert = %q, want %q", got.TLSCert, "/etc/ssl/certs/site.pem")
+	}
+	if got.TLSKey != "/etc/ssl/private/site.key" {
+		t.Errorf("TLSKey = %q, want %q", got.TLSKey, "/etc/ssl/private/site.key")
+	}
+	if !got.TLSEnabled {
+		t.Errorf("TLSEnabled = false, want true")
+	}
+	if got.ID != route.ID {
+		t.Errorf("route.ID = %q, want %q", got.ID, route.ID)
+	}
+}
+
+func TestServiceUpdateRoute_TLSConfigUpdated(t *testing.T) {
+	svc := NewService(newTestDB(t), nil)
+
+	created, err := svc.Create(CreateInput{
+		Name:       "initial",
+		PathPrefix: "/legacy",
+		Backend:    "http://old.example.com",
+		TLSCert:    "",
+		TLSKey:     "",
+		TLSEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, err := svc.Update(created.ID, UpdateInput{
+		Name:       "updated",
+		PathPrefix: "/legacy",
+		Backend:    "http://new.example.com",
+		TLSCert:    "/etc/ssl/certs/updated.pem",
+		TLSKey:     "/etc/ssl/private/updated.key",
+		TLSEnabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	if updated.TLSCert != "/etc/ssl/certs/updated.pem" {
+		t.Errorf("TLSCert = %q, want %q", updated.TLSCert, "/etc/ssl/certs/updated.pem")
+	}
+	if updated.TLSKey != "/etc/ssl/private/updated.key" {
+		t.Errorf("TLSKey = %q, want %q", updated.TLSKey, "/etc/ssl/private/updated.key")
+	}
+	if !updated.TLSEnabled {
+		t.Errorf("TLSEnabled = false, want true")
+	}
+
+	routes, err := svc.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	got := routes[0]
+	if got.TLSCert != "/etc/ssl/certs/updated.pem" {
+		t.Errorf("persisted TLSCert = %q, want %q", got.TLSCert, "/etc/ssl/certs/updated.pem")
+	}
+	if got.TLSKey != "/etc/ssl/private/updated.key" {
+		t.Errorf("persisted TLSKey = %q, want %q", got.TLSKey, "/etc/ssl/private/updated.key")
+	}
+	if !got.TLSEnabled {
+		t.Errorf("persisted TLSEnabled = false, want true")
+	}
+}

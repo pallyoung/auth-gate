@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/api/dto"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
@@ -56,6 +57,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
 		adminOnly.DELETE("/users/:id", deleteUser(userSvc))
+		adminOnly.GET("/metrics", metricsHandler())
 	}
 
 	_ = sessionSvc
@@ -131,13 +133,20 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 		}
 
 		route, err := routeSvc.Create(routesservice.CreateInput{
-			Name:        req.Name,
-			Host:        req.Host,
-			PathPrefix:  req.PathPrefix,
-			Backend:     req.Backend,
-			StripPrefix: req.StripPrefix,
-			Enabled:     req.Enabled,
-			Priority:    req.Priority,
+			Name:          req.Name,
+			Host:          req.Host,
+			PathPrefix:    req.PathPrefix,
+			Backend:       req.Backend,
+			StripPrefix:   req.StripPrefix,
+			Enabled:       req.Enabled,
+			Priority:      req.Priority,
+			TLSCert:       req.TLSCert,
+			TLSKey:        req.TLSKey,
+			TLSEnabled:    req.TLSEnabled,
+			Backends:      req.Backends,
+			PathMatchMode: req.PathMatchMode,
+			RewriteTarget: req.RewriteTarget,
+			RedirectCode:  req.RedirectCode,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -156,13 +165,20 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 		}
 
 		route, err := routeSvc.Update(c.Param("id"), routesservice.UpdateInput{
-			Name:        req.Name,
-			Host:        req.Host,
-			PathPrefix:  req.PathPrefix,
-			Backend:     req.Backend,
-			StripPrefix: req.StripPrefix,
-			Enabled:     req.Enabled,
-			Priority:    req.Priority,
+			Name:          req.Name,
+			Host:          req.Host,
+			PathPrefix:    req.PathPrefix,
+			Backend:       req.Backend,
+			StripPrefix:   req.StripPrefix,
+			Enabled:       req.Enabled,
+			Priority:      req.Priority,
+			TLSCert:       req.TLSCert,
+			TLSKey:        req.TLSKey,
+			TLSEnabled:    req.TLSEnabled,
+			Backends:      req.Backends,
+			PathMatchMode: req.PathMatchMode,
+			RewriteTarget: req.RewriteTarget,
+			RedirectCode:  req.RedirectCode,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -340,6 +356,10 @@ func reloadConfig(reloader interface{ Reload() }) gin.HandlerFunc {
 		reloader.Reload()
 		c.JSON(http.StatusOK, httpresponse.Message{Message: "reloaded"})
 	}
+}
+
+func metricsHandler() gin.HandlerFunc {
+	return gin.WrapH(promhttp.Handler())
 }
 
 func writeServiceError(c *gin.Context, err error) {

@@ -57,13 +57,20 @@ type Service struct {
 }
 
 type CreateInput struct {
-	Name        string
-	Host        string
-	PathPrefix  string
-	Backend     string
-	StripPrefix bool
-	Enabled     bool
-	Priority    int
+	Name          string
+	Host          string
+	PathPrefix    string
+	Backend       string
+	StripPrefix   bool
+	Enabled       bool
+	Priority      int
+	TLSCert       string
+	TLSKey        string
+	TLSEnabled    bool
+	Backends      []store.Backend
+	PathMatchMode string
+	RewriteTarget string
+	RedirectCode  int
 }
 
 type UpdateInput = CreateInput
@@ -96,13 +103,20 @@ func (s *Service) Get(id string) (*store.Route, error) {
 
 func (s *Service) Create(input CreateInput) (*store.Route, error) {
 	route := &store.Route{
-		Name:        strings.TrimSpace(input.Name),
-		Host:        strings.TrimSpace(input.Host),
-		PathPrefix:  strings.TrimSpace(input.PathPrefix),
-		Backend:     strings.TrimSpace(input.Backend),
-		StripPrefix: input.StripPrefix,
-		Enabled:     input.Enabled,
-		Priority:    input.Priority,
+		Name:          strings.TrimSpace(input.Name),
+		Host:          strings.TrimSpace(input.Host),
+		PathPrefix:    strings.TrimSpace(input.PathPrefix),
+		Backend:       strings.TrimSpace(input.Backend),
+		StripPrefix:   input.StripPrefix,
+		Enabled:       input.Enabled,
+		Priority:      input.Priority,
+		TLSCert:       strings.TrimSpace(input.TLSCert),
+		TLSKey:        strings.TrimSpace(input.TLSKey),
+		TLSEnabled:    input.TLSEnabled,
+		Backends:      input.Backends,
+		PathMatchMode: input.PathMatchMode,
+		RewriteTarget: input.RewriteTarget,
+		RedirectCode:  input.RedirectCode,
 	}
 	if err := validate(route); err != nil {
 		return nil, err
@@ -116,14 +130,21 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 
 func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	route := &store.Route{
-		ID:          id,
-		Name:        strings.TrimSpace(input.Name),
-		Host:        strings.TrimSpace(input.Host),
-		PathPrefix:  strings.TrimSpace(input.PathPrefix),
-		Backend:     strings.TrimSpace(input.Backend),
-		StripPrefix: input.StripPrefix,
-		Enabled:     input.Enabled,
-		Priority:    input.Priority,
+		ID:            id,
+		Name:          strings.TrimSpace(input.Name),
+		Host:          strings.TrimSpace(input.Host),
+		PathPrefix:    strings.TrimSpace(input.PathPrefix),
+		Backend:       strings.TrimSpace(input.Backend),
+		StripPrefix:   input.StripPrefix,
+		Enabled:       input.Enabled,
+		Priority:      input.Priority,
+		TLSCert:       strings.TrimSpace(input.TLSCert),
+		TLSKey:        strings.TrimSpace(input.TLSKey),
+		TLSEnabled:    input.TLSEnabled,
+		Backends:      input.Backends,
+		PathMatchMode: input.PathMatchMode,
+		RewriteTarget: input.RewriteTarget,
+		RedirectCode:  input.RedirectCode,
 	}
 	if err := validate(route); err != nil {
 		return nil, err

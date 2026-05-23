@@ -1,12 +1,19 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
@@ -22,6 +29,25 @@ import (
 const bootstrapAdminUsername = "admin"
 const controlPlaneBasePath = "/_authgate"
 const controlPlaneAPIBasePath = controlPlaneBasePath + "/api"
+
+// TLSHost groups routes that share the same TLS certificate (same host).
+type TLSHost struct {
+	Host        string // ":443" or "example.com:443"
+	CertPath    string
+	KeyPath     string
+	RouteCount  int
+	RouteNames []string
+}
+
+// tlsHostKey returns a unique key for grouping routes by TLS config.
+// Routes sharing the same (host, cert, key) tuple go into the same TLS server.
+func tlsHostKey(host, cert, key string) string {
+	listenHost := host
+	if !strings.Contains(host, ":") {
+		listenHost = host + ":443"
+	}
+	return fmt.Sprintf("%s|%s|%s", listenHost, cert, key)
+}
 
 func getWebRoot() string {
 	if webRoot := os.Getenv("WEB_ROOT"); webRoot != "" {
@@ -104,6 +130,103 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite) *g
 	proxyhttp.RegisterRoutes(engine, routerMgr)
 
 	return engine
+}
+
+func buildTLSHostGroups(routes []router.Route) []TLSHost {
+	groupMap := make(map[string]*TLSHost)
+
+	for _, r := range routes {
+		if !r.Enabled || !r.TLSEnabled {
+			continue
+		}
+		if r.TLSCert == "" || r.TLSKey == "" {
+			continue
+		}
+
+		key := tlsHostKey(r.Host, r.TLSCert, r.TLSKey)
+		if g, ok := groupMap[key]; ok {
+			g.RouteCount++
+			g.RouteNames = append(g.RouteNames, r.Name)
+		} else {
+			listenHost := r.Host
+			if !strings.Contains(r.Host, ":") {
+				listenHost = r.Host + ":443"
+			}
+			groupMap[key] = &TLSHost{
+				Host:        listenHost,
+				CertPath:    r.TLSCert,
+				KeyPath:     r.TLSKey,
+				RouteCount:  1,
+				RouteNames: []string{r.Name},
+			}
+		}
+	}
+
+	result := make([]TLSHost, 0, len(groupMap))
+	for _, g := range groupMap {
+		result = append(result, *g)
+	}
+	return result
+}
+
+func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router.Manager, cfg config.ServerConfig) []http.Server {
+	// Collect routes and group by TLS config
+	allRoutes := routerMgr.GetRoutes()
+	tlsGroups := buildTLSHostGroups(allRoutes)
+
+	var servers []http.Server
+
+	// Start HTTP server (existing behavior)
+	httpAddr := cfg.Addr
+	if httpAddr == "" {
+		httpAddr = ":8080"
+	}
+	srv := &http.Server{
+		Addr:    httpAddr,
+		Handler: engine,
+	}
+	go func() {
+		log.Printf("HTTP server listening on %s", httpAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+	servers = append(servers, *srv)
+
+	// Start per-route HTTPS servers
+	for _, g := range tlsGroups {
+		tlsCfg := &tls.Config{
+			Certificates: make([]tls.Certificate, 0, 1),
+		}
+		cert, err := tls.LoadX509KeyPair(g.CertPath, g.KeyPath)
+		if err != nil {
+			log.Printf("Failed to load TLS certificate for %s (cert=%s): %v", g.Host, g.CertPath, err)
+			continue
+		}
+		tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
+
+		httpsSrv := &http.Server{
+			Addr:    g.Host,
+			Handler: engine,
+		}
+		ln, err := tls.Listen("tcp", g.Host, tlsCfg)
+		if err != nil {
+			log.Printf("Failed to listen on %s: %v", g.Host, err)
+			continue
+		}
+
+		go func(srv *http.Server, ln net.Listener, grp TLSHost) {
+			routeNames := strings.Join(grp.RouteNames, ", ")
+			log.Printf("HTTPS server listening on %s (cert=%s, key=%s, routes=%d: %s)",
+				grp.Host, grp.CertPath, grp.KeyPath, grp.RouteCount, routeNames)
+			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTPS server error on %s: %v", grp.Host, err)
+			}
+		}(httpsSrv, ln, g)
+		servers = append(servers, *httpsSrv)
+	}
+
+	return servers
 }
 
 func configureJWTSecret(cfg config.AuthConfig) {
@@ -200,16 +323,30 @@ func main() {
 
 	engine := buildEngine(routerMgr, webRoot, db)
 
-	addr := cfg.Server.Addr
-	if addr == "" {
-		addr = ":8080"
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	log.Printf("Auth Gate starting...")
+	servers := startHTTPServers(ctx, engine, routerMgr, cfg.Server)
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	log.Printf("Shutdown signal received, stopping servers...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+	defer cancel()
+
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Error shutting down server %s: %v", srv.Addr, err)
+		}
 	}
-	log.Printf("Auth Gate starting on %s", addr)
-	if err := engine.Run(addr); err != nil {
-		log.Fatalf("Server failed: %v", err)
-	}
+
+	log.Printf("Auth Gate stopped gracefully")
 }
 
 func ensureDataDir() {
 	os.MkdirAll("data", 0755)
 }
+
+const gracefulShutdownTimeout = 10 // seconds

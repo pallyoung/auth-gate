@@ -34,6 +34,9 @@ func NewSQLite(path string) (*SQLite, error) {
 		strip_prefix INTEGER DEFAULT 0,
 		enabled INTEGER DEFAULT 1,
 		priority INTEGER DEFAULT 0,
+		cert_path TEXT DEFAULT '',
+		key_path TEXT DEFAULT '',
+		tls_enabled INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -78,6 +81,21 @@ func NewSQLite(path string) (*SQLite, error) {
 
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
+	}
+
+	// Migration: add TLS columns, backends JSON, and rewrite/redirect fields
+	migrations := []string{
+		`ALTER TABLE routes ADD COLUMN cert_path TEXT DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN key_path TEXT DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN tls_enabled INTEGER DEFAULT 0`,
+		`ALTER TABLE routes ADD COLUMN backends TEXT DEFAULT '[]'`,
+		`ALTER TABLE routes ADD COLUMN path_match_mode TEXT DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN rewrite_target TEXT DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN redirect_code INTEGER DEFAULT 0`,
+		`ALTER TABLE auth_rules ADD COLUMN burst INTEGER DEFAULT 0`,
+	}
+	for _, m := range migrations {
+		db.Exec(m) // ignore errors - column may already exist in older DBs
 	}
 
 	return &SQLite{db: db}, nil
