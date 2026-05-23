@@ -1,6 +1,12 @@
+import { vi } from 'vitest'
+
+vi.hoisted(() => {
+  process.env.NODE_ENV = 'test'
+})
+
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Layout } from './Layout'
 import { renderWithI18n } from '../test/render'
 
