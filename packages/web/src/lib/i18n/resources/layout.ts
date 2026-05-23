@@ -9,6 +9,7 @@ export const layoutEn = {
     mobile: 'Mobile navigation',
     openMenu: 'Open menu',
     closeMenu: 'Close menu',
+    switcher: 'Language switcher',
   },
   user: {
     logout: 'Logout',
@@ -48,6 +49,7 @@ export const layoutZhCN = {
     mobile: '移动端导航',
     openMenu: '打开菜单',
     closeMenu: '关闭菜单',
+    switcher: '语言切换',
   },
   user: {
     logout: '退出登录',

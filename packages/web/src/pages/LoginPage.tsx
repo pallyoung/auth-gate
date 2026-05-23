@@ -1,5 +1,7 @@
 import React from 'react'
 import { Lock, Shield, Sparkles, User } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import type { LoginResponse } from '../lib/api/types'
 import { ApiError } from '../lib/api/client'
 import { Button, Card, Input } from '../components/ui'
@@ -9,6 +11,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const { t } = useTranslation('login')
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
@@ -25,7 +28,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Network error')
+        setError(t('errors.network'))
       }
     } finally {
       setLoading(false)
@@ -34,6 +37,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+        <LanguageSwitcher />
+      </div>
       <div className="absolute left-[8%] top-[12%] hidden h-40 w-40 rounded-full bg-[rgba(15,143,139,0.16)] blur-3xl md:block" />
       <div className="absolute bottom-[10%] right-[10%] hidden h-48 w-48 rounded-full bg-[rgba(189,122,24,0.16)] blur-3xl md:block" />
 
@@ -49,27 +55,27 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <div className="relative">
             <div className="eyebrow text-white/72">
               <Sparkles className="h-3.5 w-3.5" />
-              Secure Routing Workspace
+              {t('hero.eyebrow')}
             </div>
             <h1 className="mt-5 max-w-lg text-5xl font-semibold tracking-[-0.05em] text-white">
-              Manage gateway traffic with a calmer, sharper control surface.
+              {t('hero.title')}
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-white/78">
-              Configure routes, apply authentication policies, and perform runtime operations from one focused console.
+              {t('hero.description')}
             </p>
 
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">Routing</div>
-                <div className="mt-2 text-lg font-semibold text-white">Precise matching</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.routingLabel')}</div>
+                <div className="mt-2 text-lg font-semibold text-white">{t('hero.routingValue')}</div>
               </div>
               <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">Auth</div>
-                <div className="mt-2 text-lg font-semibold text-white">Policy per route</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.authLabel')}</div>
+                <div className="mt-2 text-lg font-semibold text-white">{t('hero.authValue')}</div>
               </div>
               <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">Runtime</div>
-                <div className="mt-2 text-lg font-semibold text-white">Safe reload operations</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.runtimeLabel')}</div>
+                <div className="mt-2 text-lg font-semibold text-white">{t('hero.runtimeValue')}</div>
               </div>
             </div>
           </div>
@@ -80,12 +86,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="animate-pulse-glow flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-lg)]">
               <Shield className="h-8 w-8" />
             </div>
-            <div className="eyebrow mt-5">Auth Gate</div>
+            <div className="eyebrow mt-5">{t('card.eyebrow')}</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-              Sign in to the control plane
+              {t('card.title')}
             </h1>
             <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-              Use an administrator account to manage routes, authentication rules, and runtime operations.
+              {t('card.description')}
             </p>
           </div>
 
@@ -100,32 +106,32 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             )}
 
             <Input
-              label="Username"
+              label={t('fields.username')}
               type="text"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="Enter username"
+              placeholder={t('fields.usernamePlaceholder')}
               leftIcon={<User className="h-4 w-4" />}
               required
             />
 
             <Input
-              label="Password"
+              label={t('fields.password')}
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter password"
+              placeholder={t('fields.passwordPlaceholder')}
               leftIcon={<Lock className="h-4 w-4" />}
               required
             />
 
             <Button type="submit" className="w-full" size="lg" loading={loading}>
-              Sign In
+              {t('card.submit')}
             </Button>
           </form>
 
           <div className="mt-6 rounded-[22px] border border-[var(--border-default)] bg-[rgba(255,255,255,0.52)] px-4 py-3 text-center text-xs text-[var(--text-muted)]">
-            Session access is scoped by your server-side permissions.
+            {t('card.sessionHint')}
           </div>
         </Card>
       </div>

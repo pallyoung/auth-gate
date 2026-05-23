@@ -3,6 +3,7 @@ export const accessLoginEn = {
   title: 'Sign in to continue',
   description:
     'This route is protected by Auth Gate. Sign in with a user account that has access to {{routeName}}.',
+  protectedRouteFallback: 'Protected Route',
   submit: 'Continue to Route',
   fields: {
     username: 'Username',
@@ -19,6 +20,7 @@ export const accessLoginZhCN = {
   eyebrow: '路由访问',
   title: '登录后继续',
   description: '该路由受 Auth Gate 保护。请使用有权访问 {{routeName}} 的账号登录。',
+  protectedRouteFallback: '受保护路由',
   submit: '继续访问路由',
   fields: {
     username: '用户名',

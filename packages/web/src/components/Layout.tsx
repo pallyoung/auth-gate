@@ -11,6 +11,8 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { cn } from '../lib/utils'
 
 interface LayoutProps {
@@ -30,6 +32,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
+  const { t } = useTranslation('layout')
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
   const navItems = React.useMemo(() => {
@@ -37,42 +40,42 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
       {
         path: '/',
         icon: RouteIcon,
-        label: 'Routes',
-        description: 'Traffic orchestration',
+        label: t('sections.routes.label'),
+        description: t('sections.routes.description'),
         visible: user?.permissions?.can_manage_routes !== false,
       },
       {
         path: '/certificates',
         icon: FileKey,
-        label: 'Certificates',
-        description: 'TLS automation',
+        label: t('sections.certificates.label'),
+        description: t('sections.certificates.description'),
         visible: user?.permissions?.can_manage_routes !== false,
       },
       {
         path: '/auth',
         icon: KeyRound,
-        label: 'Auth Rules',
-        description: 'Policy enforcement',
+        label: t('sections.auth.label'),
+        description: t('sections.auth.description'),
         visible: user?.permissions?.can_manage_auth !== false,
       },
       {
         path: '/users',
         icon: Users,
-        label: 'Users',
-        description: 'Directory and access',
+        label: t('sections.users.label'),
+        description: t('sections.users.description'),
         visible: user?.permissions?.can_manage_users === true,
       },
       {
         path: '/settings',
         icon: Settings,
-        label: 'Settings',
-        description: 'Runtime operations',
+        label: t('sections.settings.label'),
+        description: t('sections.settings.description'),
         visible: true,
       },
     ]
 
     return items.filter((item) => item.visible)
-  }, [user])
+  }, [t, user])
 
   const activeItem = navItems.find((item) => item.path === currentPath) ?? navItems[0]
   const closeSidebar = () => setSidebarOpen(false)
@@ -86,10 +89,10 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-              Auth Gate
+              {t('brand.name')}
             </div>
             <div className="mt-1 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Control Plane
+              {t('brand.controlPlane')}
             </div>
           </div>
         </div>
@@ -98,7 +101,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
       <div className="px-4 pt-5">
         <div className="rounded-[24px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(15,143,139,0.12),rgba(255,255,255,0.08))] px-4 py-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-            Current Focus
+            {t('brand.currentFocus')}
           </div>
           <div className="mt-2 text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
             {activeItem?.label}
@@ -107,7 +110,11 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-2 px-4 py-5" role="navigation" aria-label="Main navigation">
+      <div className="px-4 pb-2">
+        <LanguageSwitcher />
+      </div>
+
+      <nav className="flex-1 space-y-2 px-4 py-5" role="navigation" aria-label={t('navigation.main')}>
         {navItems.map((item) => {
           const isActive = currentPath === item.path
           return (
@@ -156,7 +163,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
               <button
                 onClick={onLogout}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-                aria-label="Logout"
+                aria-label={t('user.logout')}
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -189,13 +196,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         )}
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation menu"
+        aria-label={t('navigation.main')}
       >
         <div className="absolute right-4 top-4 z-10">
           <button
             onClick={closeSidebar}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
-            aria-label="Close menu"
+            aria-label={t('navigation.closeMenu')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -209,13 +216,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
             <button
               onClick={() => setSidebarOpen(true)}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(255,255,255,0.72)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
-              aria-label="Open menu"
+              aria-label={t('navigation.openMenu')}
             >
               <Menu className="h-5 w-5" />
             </button>
             <div className="text-center">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                Auth Gate
+                {t('brand.name')}
               </div>
               <div className="text-sm font-semibold text-[var(--text-primary)]">{activeItem?.label}</div>
             </div>
@@ -232,7 +239,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         <nav
           className="glass-panel fixed bottom-3 left-3 right-3 z-30 flex rounded-[28px] border border-[var(--border-soft)] px-2 py-2 md:hidden"
           role="navigation"
-          aria-label="Mobile navigation"
+          aria-label={t('navigation.mobile')}
         >
           {navItems.map((item) => {
             const isActive = currentPath === item.path
