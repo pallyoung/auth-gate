@@ -108,10 +108,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
           </div>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{activeItem?.description}</p>
         </div>
-      </div>
-
-      <div className="px-4 pb-2">
-        <LanguageSwitcher />
+        <LanguageSwitcher className="mt-4" />
       </div>
 
       <nav className="flex-1 space-y-2 px-4 py-5" role="navigation" aria-label={t('navigation.main')}>
