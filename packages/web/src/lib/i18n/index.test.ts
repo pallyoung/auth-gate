@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('app i18n runtime', () => {
   beforeEach(() => {
-    localStorage.clear()
+    globalThis.localStorage?.clear?.()
     vi.resetModules()
   })
 
@@ -85,5 +85,24 @@ describe('app i18n runtime', () => {
     const i18n = await createAppI18n()
 
     expect(i18n.resolvedLanguage).toBe('en')
+  })
+
+  it('falls back safely when the localStorage getter throws', async () => {
+    vi.stubGlobal('navigator', {
+      language: 'en-US',
+      languages: ['en-US'],
+    })
+    Object.defineProperty(globalThis, 'localStorage', {
+      get() {
+        throw new Error('blocked')
+      },
+      configurable: true,
+    })
+
+    const { createAppI18n } = await import('./index')
+
+    const i18n = await createAppI18n()
+    await expect(i18n.changeLanguage('zh-CN')).resolves.toBeTypeOf('function')
+    expect(i18n.resolvedLanguage).toBe('zh-CN')
   })
 })

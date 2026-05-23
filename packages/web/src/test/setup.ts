@@ -21,5 +21,9 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 afterEach(() => {
   vi.restoreAllMocks()
-  globalThis.localStorage?.clear?.()
+  try {
+    globalThis.localStorage?.clear?.()
+  } catch {
+    return
+  }
 })

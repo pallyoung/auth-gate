@@ -25,7 +25,13 @@ export function normalizeLocale(raw: string | null | undefined): AppLocale | nul
 }
 
 function getSafeStorage(): StorageLike | null {
-  const storage = globalThis.localStorage
+  let storage: StorageLike | null = null
+
+  try {
+    storage = globalThis.localStorage
+  } catch {
+    return null
+  }
 
   if (
     storage &&
@@ -49,12 +55,21 @@ function getSafeNavigator(): NavigatorLike | null {
 }
 
 export function getPersistedLocale() {
-  return normalizeLocale(getSafeStorage()?.getItem(LOCALE_STORAGE_KEY))
+  try {
+    return normalizeLocale(getSafeStorage()?.getItem(LOCALE_STORAGE_KEY))
+  } catch {
+    return null
+  }
 }
 
 export function persistLocale(locale: string) {
   const normalized = normalizeLocale(locale) ?? DEFAULT_LOCALE
-  getSafeStorage()?.setItem(LOCALE_STORAGE_KEY, normalized)
+
+  try {
+    getSafeStorage()?.setItem(LOCALE_STORAGE_KEY, normalized)
+  } catch {
+    return
+  }
 }
 
 export function detectInitialLocale() {

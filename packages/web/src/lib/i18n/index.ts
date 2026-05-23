@@ -4,6 +4,7 @@ import {
   DEFAULT_LOCALE,
   detectInitialLocale,
   persistLocale,
+  SUPPORTED_LOCALES,
   type AppLocale,
 } from './config'
 import { resources } from './resources'
@@ -15,7 +16,7 @@ export async function createAppI18n(initialLocale?: AppLocale): Promise<I18nInst
     resources,
     lng: initialLocale ?? detectInitialLocale(),
     fallbackLng: DEFAULT_LOCALE,
-    supportedLngs: ['en', 'zh-CN'],
+    supportedLngs: [...SUPPORTED_LOCALES],
     defaultNS: 'common',
     interpolation: {
       escapeValue: false,
