@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
 	sessionservice "github.com/pallyoung/auth-gate/packages/server/internal/service/session"
@@ -20,7 +22,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite) {
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite, certSvc *certservice.Service) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
@@ -35,6 +37,20 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 	group.GET("/routes/:id", getRoute(routeSvc))
 	group.GET("/auth-rules", listAuthRules(authRuleSvc))
 	group.GET("/auth-rules/:id", getAuthRule(authRuleSvc))
+
+	// Certificate endpoints
+	if certSvc != nil {
+		group.GET("/certificates", listCertificates(certSvc))
+		group.GET("/certificates/:id", getCertificate(certSvc))
+
+		editor := group.Group("")
+		editor.Use(auth.RequireRole(store.RoleAdmin, store.RoleEditor))
+		{
+			editor.POST("/certificates", createCertificate(certSvc))
+			editor.DELETE("/certificates/:id", deleteCertificate(certSvc))
+			editor.POST("/certificates/:id/renew", renewCertificate(certSvc))
+		}
+	}
 
 	editor := group.Group("")
 	editor.Use(auth.RequireRole(store.RoleAdmin, store.RoleEditor))
@@ -362,12 +378,109 @@ func metricsHandler() gin.HandlerFunc {
 	return gin.WrapH(promhttp.Handler())
 }
 
+// Certificate handlers
+
+func listCertificates(certSvc *certservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		certs, err := certSvc.List()
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.CertificateListResponseFromStore(certs))
+	}
+}
+
+func getCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cert, err := certSvc.Get(c.Param("id"))
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		if cert == nil {
+			writeError(c, http.StatusNotFound, "cert_not_found", "certificate not found")
+			return
+		}
+		c.JSON(http.StatusOK, dto.CertificateResponseFromStore(*cert))
+	}
+}
+
+func createCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req dto.CertificateWriteRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+
+		// Parse DNS provider config
+		dnsConfig, err := certservice.ParseDNSProviderConfig(req.DNSProvider, req.ProviderConfig)
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_provider", err.Error())
+			return
+		}
+
+		cert, err := certSvc.Provision(context.Background(), certservice.ProvisionInput{
+			Name:       req.Name,
+			Domain:     req.Domain,
+			DNSProvider: dnsConfig,
+		})
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusCreated, dto.CertificateResponseFromStore(*cert))
+	}
+}
+
+func deleteCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := certSvc.Delete(c.Param("id")); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "deleted"})
+	}
+}
+
+func renewCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := certSvc.Renew(c.Param("id")); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "renewal started"})
+	}
+}
+
+func certServiceError(c *gin.Context, err error) bool {
+	var target *certservice.Error
+	if !errors.As(err, &target) {
+		return false
+	}
+
+	switch targetCode := certservice.Code(err); targetCode {
+	case certservice.ErrCodeCertNotFound:
+		writeError(c, http.StatusNotFound, targetCode, target.Error())
+	case certservice.ErrCodeInvalidDomain, certservice.ErrCodeDomainExists,
+		certservice.ErrCodeInvalidProvider, certservice.ErrCodeCertNotActive:
+		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+	case certservice.ErrCodeDNSProvider:
+		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+	default:
+		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+	}
+	return true
+}
+
 func writeServiceError(c *gin.Context, err error) {
 	switch {
 	case routeServiceError(c, err):
 	case authRuleServiceError(c, err):
 	case userServiceError(c, err):
 	case sessionServiceError(c, err):
+	case certServiceError(c, err):
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "internal server error")
 	}

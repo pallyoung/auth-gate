@@ -29,7 +29,7 @@ type Route struct {
 type RouteWriteRequest struct {
 	Name          string          `json:"name"`
 	Host          string          `json:"host"`
-	PathPrefix    string          `json:"path_prefix" binding:"required"`
+	PathPrefix    string          `json:"path_prefix"`
 	Backend       string          `json:"backend" binding:"required"`
 	StripPrefix   bool            `json:"strip_prefix"`
 	Enabled       bool            `json:"enabled"`

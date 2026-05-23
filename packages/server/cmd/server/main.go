@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
@@ -21,6 +22,7 @@ import (
 	proxyhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/proxy"
 	statichttp "github.com/pallyoung/auth-gate/packages/server/internal/http/static"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
+	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -110,7 +112,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc *certservice.Service) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -124,7 +126,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite) *g
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc)
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr)
@@ -274,11 +276,19 @@ func ensureBootstrapAdmin(db *store.SQLite, cfg config.AuthConfig) error {
 	}
 
 	if configuredPassword {
-		log.Printf("Bootstrap admin created: username=%s using configured password", bootstrapAdminUsername)
+		log.Printf("Bootstrap admin created: username=%s (using configured password)", bootstrapAdminUsername)
 		return nil
 	}
 
-	log.Printf("Bootstrap admin created: username=%s password=%s", bootstrapAdminUsername, password)
+	log.Printf("")
+	log.Printf("========================================")
+	log.Printf("  Auth Gate Admin Console")
+	log.Printf("========================================")
+	log.Printf("  URL:   http://localhost:8080/_authgate")
+	log.Printf("  Username: %s", bootstrapAdminUsername)
+	log.Printf("  Password: %s", password)
+	log.Printf("========================================")
+	log.Printf("")
 	return nil
 }
 
@@ -312,6 +322,29 @@ func main() {
 
 	routerMgr := router.NewManager(db)
 
+	// Initialize certificate service
+	var certSvc *certservice.Service
+	certDataDir := os.Getenv("CERT_DATA_DIR")
+	if certDataDir == "" {
+		certDataDir = "data"
+	}
+	acmeEmail := os.Getenv("ACME_EMAIL")
+	useStaging := os.Getenv("ACME_STAGING") == "true"
+
+	if acmeEmail != "" {
+		certSvc, err = certservice.NewService(db, certservice.Config{
+			DataDir:    certDataDir,
+			ACMEEmail:  acmeEmail,
+			UseStaging: useStaging,
+		}, routerMgr)
+		if err != nil {
+			log.Printf("Warning: failed to initialize certificate service: %v", err)
+		} else {
+			certSvc.StartRenewer(time.Hour) // Check for renewals every hour
+			log.Printf("Certificate service initialized (email=%s, staging=%v)", acmeEmail, useStaging)
+		}
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 	if os.Getenv("DEBUG") == "true" {
 		gin.SetMode(gin.DebugMode)
@@ -321,7 +354,7 @@ func main() {
 	log.Printf("Serving web from: %s", webRoot)
 	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-	engine := buildEngine(routerMgr, webRoot, db)
+	engine := buildEngine(routerMgr, webRoot, db, certSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -332,6 +365,11 @@ func main() {
 	// Wait for shutdown signal
 	<-ctx.Done()
 	log.Printf("Shutdown signal received, stopping servers...")
+
+	// Stop certificate service renewer
+	if certSvc != nil {
+		certSvc.StopRenewer()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 	defer cancel()

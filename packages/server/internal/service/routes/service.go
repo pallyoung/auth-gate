@@ -177,10 +177,10 @@ func (s *Service) reload() {
 }
 
 func validate(route *store.Route) error {
-	if route.PathPrefix == "" || route.Backend == "" {
-		return newError(ErrCodeMissingRouteFields, "path_prefix and backend required", nil)
+	if route.Backend == "" {
+		return newError(ErrCodeMissingRouteFields, "backend required", nil)
 	}
-	if !strings.HasPrefix(route.PathPrefix, "/") {
+	if route.PathPrefix != "" && !strings.HasPrefix(route.PathPrefix, "/") {
 		return newError(ErrCodeInvalidRoutePathPrefix, "path_prefix must start with /", nil)
 	}
 	if route.PathPrefix == controlPlaneReservedPathPrefix || strings.HasPrefix(route.PathPrefix, controlPlaneReservedPathPrefix+"/") {

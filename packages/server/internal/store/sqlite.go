@@ -77,6 +77,25 @@ func NewSQLite(path string) (*SQLite, error) {
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_rules_route_id ON auth_rules(route_id);
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	CREATE INDEX IF NOT EXISTS idx_user_route_access_route_id ON user_route_access(route_id);
+
+	CREATE TABLE IF NOT EXISTS certificates (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		domain TEXT NOT NULL,
+		cert_path TEXT NOT NULL DEFAULT '',
+		key_path TEXT NOT NULL DEFAULT '',
+		dns_provider TEXT NOT NULL DEFAULT '',
+		dns_provider_config TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'pending',
+		not_before DATETIME DEFAULT '',
+		not_after DATETIME DEFAULT '',
+		renew_at DATETIME DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_certificates_domain ON certificates(domain);
+	CREATE INDEX IF NOT EXISTS idx_certificates_status ON certificates(status);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
@@ -93,6 +112,8 @@ func NewSQLite(path string) (*SQLite, error) {
 		`ALTER TABLE routes ADD COLUMN rewrite_target TEXT DEFAULT ''`,
 		`ALTER TABLE routes ADD COLUMN redirect_code INTEGER DEFAULT 0`,
 		`ALTER TABLE auth_rules ADD COLUMN burst INTEGER DEFAULT 0`,
+		// Certificate table migrations (add columns if upgrading from older version)
+		`ALTER TABLE certificates ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors - column may already exist in older DBs

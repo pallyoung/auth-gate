@@ -69,8 +69,8 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
             label="Path Prefix"
             value={form.path_prefix}
             onChange={(event) => setForm({ ...form, path_prefix: event.target.value })}
-            placeholder="/billing"
-            required
+            placeholder="/billing or empty to match all"
+            hint="Leave empty to match all paths."
           />
           <Input
             label="Backend"

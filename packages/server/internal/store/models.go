@@ -84,3 +84,27 @@ func ParseAuthConfig(s string) AuthConfig {
 	json.Unmarshal([]byte(s), &cfg)
 	return cfg
 }
+
+// Certificate represents an SSL certificate provisioned via ACME
+type Certificate struct {
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Domain            string    `json:"domain"` // e.g., "*.example.com" or "example.com"
+	CertPath          string    `json:"cert_path"`
+	KeyPath           string    `json:"key_path"`
+	DNSProvider       string    `json:"dns_provider"`        // "cloudflare", "route53", "pdns"
+	DNSProviderConfig string    `json:"dns_provider_config"` // encrypted JSON
+	Status            string    `json:"status"`            // "pending", "active", "renewing", "failed"
+	NotBefore         time.Time `json:"not_before"`
+	NotAfter          time.Time `json:"not_after"`
+	RenewAt           time.Time `json:"renew_at"` // NotAfter - 30 days
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+const (
+	CertStatusPending  = "pending"
+	CertStatusActive   = "active"
+	CertStatusRenewing = "renewing"
+	CertStatusFailed   = "failed"
+)
