@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest'
 import { afterEach, vi } from 'vitest'
 
 const storage = new Map<string, string>()
