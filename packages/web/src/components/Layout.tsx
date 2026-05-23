@@ -189,26 +189,25 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         {sidebarContent}
       </aside>
 
-      <aside
-        className={cn(
-          'glass-panel-strong fixed left-3 top-3 z-50 flex h-[calc(100vh-1.5rem)] w-[var(--sidebar-width)] flex-col overflow-hidden transition-transform duration-[var(--duration-slow)] md:hidden',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-[120%]'
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('navigation.main')}
-      >
-        <div className="absolute right-4 top-4 z-10">
-          <button
-            onClick={closeSidebar}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
-            aria-label={t('navigation.closeMenu')}
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        {sidebarContent}
-      </aside>
+      {sidebarOpen && (
+        <aside
+          className="glass-panel-strong fixed left-3 top-3 z-50 flex h-[calc(100vh-1.5rem)] w-[var(--sidebar-width)] flex-col overflow-hidden transition-transform duration-[var(--duration-slow)] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('navigation.main')}
+        >
+          <div className="absolute right-4 top-4 z-10">
+            <button
+              onClick={closeSidebar}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+              aria-label={t('navigation.closeMenu')}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {sidebarContent}
+        </aside>
+      )}
 
       <main className="min-h-screen md:ml-[calc(var(--sidebar-width)+2.25rem)]">
         <header className="sticky top-0 z-30 border-b border-[rgba(255,255,255,0.35)] bg-[rgba(246,243,236,0.72)] backdrop-blur-xl md:hidden">
