@@ -2,9 +2,8 @@ import i18next, { type i18n as I18nInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import {
   DEFAULT_LOCALE,
-  LOCALE_STORAGE_KEY,
   detectInitialLocale,
-  normalizeLocale,
+  persistLocale,
   type AppLocale,
 } from './config'
 import { resources } from './resources'
@@ -24,11 +23,28 @@ export async function createAppI18n(initialLocale?: AppLocale): Promise<I18nInst
   })
 
   i18n.on('languageChanged', (nextLanguage) => {
-    const normalized = normalizeLocale(nextLanguage) ?? DEFAULT_LOCALE
-    localStorage.setItem(LOCALE_STORAGE_KEY, normalized)
+    persistLocale(nextLanguage)
   })
 
   return i18n
 }
 
-export const i18nPromise = createAppI18n()
+let i18nPromiseCache: Promise<I18nInstance> | null = null
+
+function getI18nPromise() {
+  i18nPromiseCache ??= createAppI18n()
+  return i18nPromiseCache
+}
+
+export const i18nPromise = {
+  then(onfulfilled, onrejected) {
+    return getI18nPromise().then(onfulfilled, onrejected)
+  },
+  catch(onrejected) {
+    return getI18nPromise().catch(onrejected)
+  },
+  finally(onfinally) {
+    return getI18nPromise().finally(onfinally)
+  },
+  [Symbol.toStringTag]: 'Promise',
+} as Promise<I18nInstance>

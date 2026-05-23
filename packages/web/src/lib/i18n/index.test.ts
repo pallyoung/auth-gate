@@ -60,4 +60,30 @@ describe('app i18n runtime', () => {
 
     expect(localStorage.getItem('auth-gate.locale')).toBe('zh-CN')
   })
+
+  it('does not initialize an i18n instance at import time', async () => {
+    vi.stubGlobal('navigator', {
+      language: 'zh-CN',
+      languages: ['zh-CN'],
+    })
+
+    const { i18nPromise } = await import('./index')
+
+    expect(localStorage.getItem('auth-gate.locale')).toBeNull()
+
+    const i18n = await i18nPromise
+
+    expect(i18n.resolvedLanguage).toBe('zh-CN')
+  })
+
+  it('falls back to en when browser globals are unavailable', async () => {
+    vi.stubGlobal('navigator', undefined)
+    vi.stubGlobal('localStorage', undefined)
+
+    const { createAppI18n } = await import('./index')
+
+    const i18n = await createAppI18n()
+
+    expect(i18n.resolvedLanguage).toBe('en')
+  })
 })

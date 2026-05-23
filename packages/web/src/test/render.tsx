@@ -8,7 +8,8 @@ export async function renderWithI18n(
   ui: ReactElement,
   options?: RenderOptions & { locale?: AppLocale }
 ) {
-  const i18n = await createAppI18n(options?.locale)
-  const renderResult = render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>, options)
+  const { locale, ...renderOptions } = options ?? {}
+  const i18n = await createAppI18n(locale)
+  const renderResult = render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>, renderOptions)
   return Object.assign(renderResult, { i18n })
 }
