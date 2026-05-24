@@ -1,11 +1,5 @@
-import { vi } from 'vitest'
-
-vi.hoisted(() => {
-  process.env.NODE_ENV = 'test'
-})
-
 import { screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DataTable } from './DataTable'
 import { renderWithI18n } from '../test/render'
 

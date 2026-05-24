@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, vi } from 'vitest'
 
+process.env.NODE_ENV = 'test'
+
 const storage = new Map<string, string>()
 
 Object.defineProperty(globalThis, 'localStorage', {

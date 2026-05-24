@@ -44,3 +44,4 @@ logs/
 # Release output
 dist/
 .coder-studio
+output
