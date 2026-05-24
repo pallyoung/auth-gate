@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Alert, Button, Card, Input, Select } from './ui'
 
 interface CertificateFormProps {
@@ -6,13 +7,8 @@ interface CertificateFormProps {
   onCancel: () => void
 }
 
-const dnsProviderOptions = [
-  { value: 'cloudflare', label: 'CloudFlare' },
-  { value: 'route53', label: 'AWS Route53' },
-  { value: 'manual', label: 'Manual (DIY)' },
-]
-
 export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
+  const { t } = useTranslation('certificates')
   const [form, setForm] = React.useState({
     name: '',
     domain: '',
@@ -39,6 +35,12 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     setProviderConfig((current) => ({ ...current, [key]: value }))
   }
 
+  const dnsProviderOptions = [
+    { value: 'cloudflare', label: t('providers.cloudflare') },
+    { value: 'route53', label: t('providers.route53') },
+    { value: 'manual', label: t('providers.manual') },
+  ]
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError('')
@@ -47,19 +49,19 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     // Validate domain
     const domainRegex = /^(\*\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/
     if (!domainRegex.test(form.domain)) {
-      setError('Invalid domain format. Use something like "example.com" or "*.example.com"')
+      setError(t('form.invalidDomain'))
       setSubmitting(false)
       return
     }
 
     // Validate provider config
     if (form.dns_provider === 'cloudflare' && !providerConfig.api_token) {
-      setError('CloudFlare API token is required')
+      setError(t('form.cloudflareRequired'))
       setSubmitting(false)
       return
     }
     if (form.dns_provider === 'route53' && (!providerConfig.access_key_id || !providerConfig.secret_access_key)) {
-      setError('AWS Access Key ID and Secret Access Key are required for Route53')
+      setError(t('form.route53Required'))
       setSubmitting(false)
       return
     }
@@ -84,29 +86,29 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Certificate Details
+            {t('form.detailsEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Provide a name and domain for the certificate. Wildcard certificates use "*.example.com" format.
+            {t('form.detailsDescription')}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Certificate Name"
+            label={t('form.name')}
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
-            placeholder="My Wildcard Cert"
+            placeholder={t('form.namePlaceholder')}
             required
-            hint="A friendly name to identify this certificate"
+            hint={t('form.nameHint')}
           />
           <Input
-            label="Domain"
+            label={t('form.domain')}
             value={form.domain}
             onChange={(event) => setForm({ ...form, domain: event.target.value })}
-            placeholder="*.example.com"
+            placeholder={t('form.domainPlaceholder')}
             required
-            hint="Use *.example.com for wildcard certificates"
+            hint={t('form.domainHint')}
           />
         </div>
       </Card>
@@ -114,15 +116,15 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            DNS Provider
+            {t('form.providerEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Select how DNS validation will be performed. CloudFlare and Route53 support automatic DNS-01 challenge.
+            {t('form.providerDescription')}
           </p>
         </div>
 
         <Select
-          label="DNS Provider"
+          label={t('form.provider')}
           value={form.dns_provider}
           onChange={(event) => handleDnsProviderChange(event.target.value)}
           options={dnsProviderOptions}
@@ -131,27 +133,27 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
 
         {form.dns_provider === 'cloudflare' && (
           <Input
-            label="CloudFlare API Token"
+            label={t('form.cloudflareToken')}
             type="password"
             value={providerConfig.api_token || ''}
             onChange={(event) => updateProviderConfig('api_token', event.target.value)}
             placeholder="cf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             required
-            hint="Create an API token in CloudFlare dashboard with Zone:DNS:Edit permission"
+            hint={t('form.cloudflareTokenHint')}
           />
         )}
 
         {form.dns_provider === 'route53' && (
           <div className="space-y-4">
             <Input
-              label="AWS Access Key ID"
+              label={t('form.route53AccessKey')}
               value={providerConfig.access_key_id || ''}
               onChange={(event) => updateProviderConfig('access_key_id', event.target.value)}
               placeholder="AKIAXXXXXXXXXXXXXXXX"
               required
             />
             <Input
-              label="AWS Secret Access Key"
+              label={t('form.route53Secret')}
               type="password"
               value={providerConfig.secret_access_key || ''}
               onChange={(event) => updateProviderConfig('secret_access_key', event.target.value)}
@@ -159,11 +161,11 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
               required
             />
             <Input
-              label="AWS Region (optional)"
+              label={t('form.route53Region')}
               value={providerConfig.region || ''}
               onChange={(event) => updateProviderConfig('region', event.target.value)}
               placeholder="us-east-1"
-              hint="Leave blank to use default region"
+              hint={t('form.route53RegionHint')}
             />
           </div>
         )}
@@ -171,7 +173,7 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
         {form.dns_provider === 'manual' && (
           <div className="rounded-[18px] border border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 px-4 py-4">
             <p className="text-sm text-[var(--text-primary)]">
-              <strong>Manual Mode:</strong> You will need to manually create DNS TXT records when prompted. This is useful for testing or when you don't have API access to your DNS provider.
+              <strong>{t('form.manualTitle')}</strong> {t('form.manualDescription')}
             </p>
           </div>
         )}
@@ -179,10 +181,10 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
 
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
-          Cancel
+          {t('common:actions.cancel')}
         </Button>
         <Button type="submit" className="w-full md:w-auto" disabled={submitting}>
-          {submitting ? 'Provisioning...' : 'Provision Certificate'}
+          {submitting ? t('form.provisioningButton') : t('form.provisionButton')}
         </Button>
       </div>
     </form>

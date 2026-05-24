@@ -1,5 +1,6 @@
 import React from 'react'
 import { Activity, Plus, Route as RouteIcon, Server, ToggleLeft } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { RouteForm } from '../components/RouteForm'
@@ -9,6 +10,7 @@ import { getSessionUser } from '../lib/session-store'
 import type { Route, RouteInput } from '../lib/api/types'
 
 export function RoutesPage() {
+  const { t } = useTranslation('routes')
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showForm, setShowForm] = React.useState(false)
@@ -55,7 +57,7 @@ export function RoutesPage() {
   }
 
   const handleDelete = async (route: Route) => {
-    if (!confirm(`Delete route "${route.name || route.path_prefix}"?`)) return
+    if (!confirm(t('page.deleteConfirm', { name: route.name || route.path_prefix }))) return
     try {
       await routesApi.delete(route.id)
       await fetchRoutes()
@@ -71,37 +73,37 @@ export function RoutesPage() {
   const columns = [
     {
       key: 'name',
-      header: 'Route',
+      header: t('table.route'),
       render: (value: string, row: Route) => (
         <div className="min-w-0">
-          <div className="font-semibold text-[var(--text-primary)]">{value || 'Untitled Route'}</div>
+          <div className="font-semibold text-[var(--text-primary)]">{value || t('page.untitled')}</div>
           <div className="mt-1 text-xs text-[var(--text-muted)]">{row.path_prefix}</div>
         </div>
       ),
     },
     {
       key: 'host',
-      header: 'Host Match',
-      render: (value: string) => <span className="app-code">{value || 'all hosts'}</span>,
+      header: t('table.hostMatch'),
+      render: (value: string) => <span className="app-code">{value || t('page.allHosts')}</span>,
     },
     {
       key: 'backend',
-      header: 'Backend Target',
+      header: t('table.backendTarget'),
       render: (value: string) => <span className="app-code">{value}</span>,
     },
     {
       key: 'priority',
-      header: 'Priority',
+      header: t('table.priority'),
       className: 'w-28',
       render: (value: number) => <span className="font-semibold text-[var(--text-secondary)]">{value}</span>,
     },
     {
       key: 'enabled',
-      header: 'Status',
+      header: t('table.status'),
       className: 'w-36',
       render: (value: boolean) => (
         <Badge variant={value ? 'success' : 'default'} badgeSize="sm">
-          {value ? 'Active' : 'Disabled'}
+          {value ? t('page.active') : t('page.disabled')}
         </Badge>
       ),
     },
@@ -112,7 +114,7 @@ export function RoutesPage() {
       <div className="flex h-64 items-center justify-center">
         <div className="flex items-center gap-3 text-[var(--text-muted)]">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" />
-          Loading routes...
+          {t('page.loading')}
         </div>
       </div>
     )
@@ -121,61 +123,88 @@ export function RoutesPage() {
   return (
     <div className="animate-rise-in">
       <PageHeader
-        eyebrow="Traffic Orchestration"
-        title="Routes"
-        description="Define how inbound requests are matched and forwarded across your services."
+        eyebrow={t('page.eyebrow')}
+        title={t('page.title')}
+        description={t('page.description')}
         meta={
           <>
-            <Badge variant="primary">Routing Matrix</Badge>
-            <span className="text-sm text-[var(--text-muted)]">{routes.length} configured route entries</span>
+            <Badge variant="primary">{t('page.badge')}</Badge>
+            <span className="text-sm text-[var(--text-muted)]">
+              {t('page.configuredEntries', { count: routes.length })}
+            </span>
           </>
         }
         action={
           canManageRoutes ? (
-            <Button icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingRoute(null); setShowForm(true) }}>
-              Add Route
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => {
+                setEditingRoute(null)
+                setShowForm(true)
+              }}
+            >
+              {t('page.addRoute')}
             </Button>
           ) : null
         }
       />
 
       {error && (
-        <Alert variant="error" title="Route operation failed" className="mb-5">
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
           {error}
         </Alert>
       )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Total Routes" value={routes.length} hint="All configured forwarding rules." icon={<RouteIcon className="h-5 w-5" />} tone="primary" />
-        <MetricCard label="Active Routes" value={activeCount} hint="Enabled rules currently available to runtime." icon={<ToggleLeft className="h-5 w-5" />} tone="accent" />
-        <MetricCard label="Host Coverage" value={uniqueHosts || 'Wildcard'} hint={`Highest priority ${highestPriority}`} icon={<Server className="h-5 w-5" />} />
+        <MetricCard
+          label={t('page.totalRoutes')}
+          value={routes.length}
+          hint={t('page.totalRoutesHint')}
+          icon={<RouteIcon className="h-5 w-5" />}
+          tone="primary"
+        />
+        <MetricCard
+          label={t('page.activeRoutes')}
+          value={activeCount}
+          hint={t('page.activeRoutesHint')}
+          icon={<ToggleLeft className="h-5 w-5" />}
+          tone="accent"
+        />
+        <MetricCard
+          label={t('page.hostCoverage')}
+          value={uniqueHosts || t('page.wildcard')}
+          hint={t('page.highestPriority', { count: highestPriority })}
+          icon={<Server className="h-5 w-5" />}
+        />
       </div>
 
       <Card padding="lg" className="space-y-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              Route Directory
+              {t('page.directoryEyebrow')}
             </div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Forwarding topology
+              {t('page.directoryTitle')}
             </h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Inspect route health, backend targets, and match precedence at a glance.
+              {t('page.directoryDescription')}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-[rgba(255,255,255,0.54)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             <Activity className="h-3.5 w-3.5 text-[var(--primary-600)]" />
-            Live config snapshot
+            {t('page.liveSnapshot')}
           </div>
         </div>
 
         {routes.length === 0 ? (
           <EmptyState
             icon={<RouteIcon className="h-8 w-8" />}
-            title="No routes configured"
-            description="Create your first route to start forwarding traffic into protected backend services."
-            action={canManageRoutes ? <Button onClick={() => setShowForm(true)}>Create First Route</Button> : undefined}
+            title={t('page.emptyTitle')}
+            description={t('page.emptyDescription')}
+            action={
+              canManageRoutes ? <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button> : undefined
+            }
           />
         ) : (
           <DataTable
@@ -189,13 +218,19 @@ export function RoutesPage() {
 
       <Modal
         open={canManageRoutes && showForm}
-        onClose={() => { setShowForm(false); setEditingRoute(null) }}
-        title={editingRoute ? 'Edit Route' : 'Add Route'}
+        onClose={() => {
+          setShowForm(false)
+          setEditingRoute(null)
+        }}
+        title={editingRoute ? t('page.editModalTitle') : t('page.addModalTitle')}
       >
         <RouteForm
           route={editingRoute}
           onSubmit={editingRoute ? handleUpdate : handleCreate}
-          onCancel={() => { setShowForm(false); setEditingRoute(null) }}
+          onCancel={() => {
+            setShowForm(false)
+            setEditingRoute(null)
+          }}
         />
       </Modal>
     </div>

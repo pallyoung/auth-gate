@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Route, User, UserInput } from '../lib/api/types'
 import { Button, Card, Input, Select, Switch } from './ui'
 
@@ -9,14 +10,8 @@ interface UserFormProps {
   onCancel: () => void
 }
 
-const roleOptions = [
-  { value: 'member', label: 'Member' },
-  { value: 'viewer', label: 'Viewer' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'admin', label: 'Admin' },
-]
-
 export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
+  const { t } = useTranslation('users')
   const [form, setForm] = React.useState<UserInput>({
     username: user?.username || '',
     password: '',
@@ -40,50 +35,56 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
   }
 
   const needsRouteAssignments = form.role === 'member'
+  const roleOptions = [
+    { value: 'member', label: t('roles.member') },
+    { value: 'viewer', label: t('roles.viewer') },
+    { value: 'editor', label: t('roles.editor') },
+    { value: 'admin', label: t('roles.admin') },
+  ]
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Identity
+            {t('form.identityEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Create a control-plane or route-access account from the shared user directory.
+            {t('form.identityDescription')}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Username"
+            label={t('form.username')}
             value={form.username}
             onChange={(event) => setForm({ ...form, username: event.target.value })}
             placeholder="alice"
             required
           />
           <Select
-            label="Role"
+            label={t('form.role')}
             value={form.role}
             onChange={(event) => setForm({ ...form, role: event.target.value })}
             options={roleOptions}
-            hint={needsRouteAssignments ? 'Members do not get control-plane access.' : 'Viewer/editor/admin can log into the control plane.'}
+            hint={needsRouteAssignments ? t('form.memberHint') : t('form.operatorHint')}
             required
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label={user ? 'New Password' : 'Password'}
+            label={user ? t('form.newPassword') : t('form.password')}
             type="password"
             value={form.password || ''}
             onChange={(event) => setForm({ ...form, password: event.target.value })}
-            placeholder={user ? 'Leave blank to keep existing password' : 'Enter password'}
+            placeholder={user ? t('form.newPasswordPlaceholder') : t('form.passwordPlaceholder')}
             required={!user}
-            hint={user ? 'Only fill this when you want to rotate the password.' : undefined}
+            hint={user ? t('form.newPasswordHint') : undefined}
           />
           <Switch
-            label="Enabled"
-            description="Disabled users cannot access the control plane or protected routes."
+            label={t('form.enabled')}
+            description={t('form.enabledDescription')}
             checked={form.enabled}
             onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
           />
@@ -93,16 +94,16 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
       <Card tone="soft" className="space-y-4">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Route Access
+            {t('form.accessEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Assign which routes this account may access when a route uses gateway-managed login.
+            {t('form.accessDescription')}
           </p>
         </div>
 
         {routes.length === 0 ? (
           <div className="rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-5 text-sm text-[var(--text-muted)]">
-            No routes available yet. Create routes before assigning access.
+            {t('form.noRoutes')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -116,7 +117,7 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-[var(--text-primary)]">{route.name || route.path_prefix}</div>
                     <div className="mt-1 text-xs text-[var(--text-muted)]">
-                      {route.host || 'all hosts'} · {route.path_prefix}
+                      {route.host || t('form.allHosts')} · {route.path_prefix}
                     </div>
                   </div>
                   <input
@@ -134,10 +135,10 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
 
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
-          Cancel
+          {t('common:actions.cancel')}
         </Button>
         <Button type="submit" className="w-full md:w-auto">
-          {user ? 'Update User' : 'Create User'}
+          {user ? t('form.update') : t('form.create')}
         </Button>
       </div>
     </form>

@@ -32,7 +32,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
-  const { t } = useTranslation('layout')
+  const { t } = useTranslation(['layout', 'users'])
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
   const navItems = React.useMemo(() => {
@@ -79,6 +79,20 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
 
   const activeItem = navItems.find((item) => item.path === currentPath) ?? navItems[0]
   const closeSidebar = () => setSidebarOpen(false)
+  const roleLabel = (role: string) => {
+    switch (role) {
+      case 'member':
+        return t('users:roles.member')
+      case 'viewer':
+        return t('users:roles.viewer')
+      case 'editor':
+        return t('users:roles.editor')
+      case 'admin':
+        return t('users:roles.admin')
+      default:
+        return role
+    }
+  }
 
   const sidebarContent = (
     <>
@@ -155,7 +169,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{user.username}</p>
-                <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">{user.role}</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">{roleLabel(user.role)}</p>
               </div>
               <button
                 onClick={onLogout}

@@ -1,5 +1,6 @@
 import React from 'react'
-import { FileKey, Key, Plus, RefreshCw, ShieldCheck } from 'lucide-react'
+import { FileKey, Key, Plus, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { CertificateForm } from '../components/CertificateForm'
@@ -9,6 +10,7 @@ import { getSessionUser } from '../lib/session-store'
 import type { Certificate as CertificateType } from '../lib/api/types'
 
 export function CertificatesPage() {
+  const { t, i18n } = useTranslation('certificates')
   const [certificates, setCertificates] = React.useState<CertificateType[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
@@ -43,7 +45,7 @@ export function CertificatesPage() {
   }
 
   const handleDelete = async (cert: CertificateType) => {
-    if (!confirm(`Delete certificate for "${cert.domain}"? This will also remove the certificate files.`)) return
+    if (!confirm(t('page.deleteConfirm', { domain: cert.domain }))) return
     try {
       await certificatesApi.delete(cert.id)
       await fetchData()
@@ -53,7 +55,7 @@ export function CertificatesPage() {
   }
 
   const handleRenew = async (cert: CertificateType) => {
-    if (!confirm(`Renew certificate for "${cert.domain}"? This will take a few minutes.`)) return
+    if (!confirm(t('page.renewConfirm', { domain: cert.domain }))) return
     try {
       setRenewingId(cert.id)
       await certificatesApi.renew(cert.id)
@@ -65,49 +67,61 @@ export function CertificatesPage() {
     }
   }
 
-  const activeCount = certificates.filter(c => c.status === 'active').length
-  const pendingCount = certificates.filter(c => c.status === 'pending' || c.status === 'renewing').length
-  const failedCount = certificates.filter(c => c.status === 'failed').length
+  const activeCount = certificates.filter((c) => c.status === 'active').length
+  const pendingCount = certificates.filter((c) => c.status === 'pending' || c.status === 'renewing').length
+  const failedCount = certificates.filter((c) => c.status === 'failed').length
 
   const statusVariant = (status: string) => {
     switch (status) {
-      case 'active': return 'success'
+      case 'active':
+        return 'success'
       case 'pending':
       case 'renewing': return 'warning'
-      case 'failed': return 'error'
-      default: return 'default'
+      case 'failed':
+        return 'error'
+      default:
+        return 'default'
     }
   }
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    if (!dateStr) return t('page.noDate')
+    return new Intl.DateTimeFormat(i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: i18n.resolvedLanguage === 'zh-CN' ? 'long' : 'short',
+      day: 'numeric',
+    }).format(new Date(dateStr))
+  }
+
+  const statusLabel = (status: string) => t(`status.${status}` as const)
+  const providerLabel = (provider?: string) => {
+    if (!provider) return t('page.noDate')
+    return t(`providers.${provider}` as any, { defaultValue: provider })
   }
 
   const columns = [
     {
       key: 'name',
-      header: 'Certificate',
+      header: t('page.certificate'),
       render: (value: string, row: CertificateType) => (
         <div>
           <div className="font-semibold text-[var(--text-primary)]">{value}</div>
-          <div className="mt-1 text-xs text-[var(--text-muted)] font-mono">{row.domain}</div>
+          <div className="mt-1 font-mono text-xs text-[var(--text-muted)]">{row.domain}</div>
         </div>
       ),
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('page.status'),
       className: 'w-28',
-      render: (value: string) => <Badge variant={statusVariant(value) as any} badgeSize="sm">{value}</Badge>,
+      render: (value: string) => <Badge variant={statusVariant(value) as any} badgeSize="sm">{statusLabel(value)}</Badge>,
     },
     {
       key: 'not_after',
-      header: 'Expires',
+      header: t('page.expires'),
       className: 'w-36',
       render: (value: string) => {
-        if (!value) return '-'
+        if (!value) return t('page.noDate')
         const date = new Date(value)
         const now = new Date()
         const daysLeft = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -115,7 +129,7 @@ export function CertificatesPage() {
           <div>
             <div className="text-sm">{formatDate(value)}</div>
             {daysLeft > 0 && daysLeft <= 30 && (
-              <div className="text-xs text-[var(--accent-500)]">{daysLeft} days left</div>
+              <div className="text-xs text-[var(--accent-500)]">{t('page.daysLeft', { count: daysLeft })}</div>
             )}
           </div>
         )
@@ -123,13 +137,13 @@ export function CertificatesPage() {
     },
     {
       key: 'dns_provider',
-      header: 'DNS Provider',
+      header: t('page.dnsProvider'),
       className: 'w-28',
-      render: (value: string) => <Badge variant="default" badgeSize="sm">{value}</Badge>,
+      render: (value: string) => <Badge variant="default" badgeSize="sm">{providerLabel(value)}</Badge>,
     },
     {
       key: 'created_at',
-      header: 'Created',
+      header: t('page.created'),
       className: 'w-32',
       render: (value: string) => <span className="text-sm text-[var(--text-muted)]">{formatDate(value)}</span>,
     },
@@ -140,7 +154,7 @@ export function CertificatesPage() {
       <div className="flex h-64 items-center justify-center">
         <div className="flex items-center gap-3 text-[var(--text-muted)]">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" />
-          Loading certificates...
+          {t('page.loading')}
         </div>
       </div>
     )
@@ -149,55 +163,73 @@ export function CertificatesPage() {
   return (
     <div className="animate-rise-in">
       <PageHeader
-        eyebrow="TLS Automation"
-        title="Certificates"
-        description="Provision and manage SSL certificates via Let's Encrypt ACME with automatic DNS-01 validation."
+        eyebrow={t('page.eyebrow')}
+        title={t('page.title')}
+        description={t('page.description')}
         meta={
           <>
-            <Badge variant="primary">ACME</Badge>
-            <span className="text-sm text-[var(--text-muted)]">{certificates.length} certificates</span>
+            <Badge variant="primary">{t('page.badge')}</Badge>
+            <span className="text-sm text-[var(--text-muted)]">{t('page.count', { count: certificates.length })}</span>
           </>
         }
         action={
           canManageCertificates ? (
             <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowForm(true)}>
-              Provision Certificate
+              {t('page.provision')}
             </Button>
           ) : null
         }
       />
 
       {error && (
-        <Alert variant="error" title="Certificate operation failed" className="mb-5">
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
           {error}
         </Alert>
       )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Active Certificates" value={activeCount} hint="Valid certificates ready for use." icon={<FileKey className="h-5 w-5" />} tone="primary" />
-        <MetricCard label="In Progress" value={pendingCount} hint="Certificate provisioning or renewal in progress." icon={<RefreshCw className="h-5 w-5" />} tone="warning" />
-        <MetricCard label="Failed" value={failedCount} hint="Certificates that encountered errors." icon={<Key className="h-5 w-5" />} tone="error" />
+        <MetricCard
+          label={t('page.activeCertificates')}
+          value={activeCount}
+          hint={t('page.activeCertificatesHint')}
+          icon={<FileKey className="h-5 w-5" />}
+          tone="primary"
+        />
+        <MetricCard
+          label={t('page.inProgress')}
+          value={pendingCount}
+          hint={t('page.inProgressHint')}
+          icon={<RefreshCw className="h-5 w-5" />}
+          tone="warning"
+        />
+        <MetricCard
+          label={t('page.failed')}
+          value={failedCount}
+          hint={t('page.failedHint')}
+          icon={<Key className="h-5 w-5" />}
+          tone="error"
+        />
       </div>
 
       <Card padding="lg" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Certificate Registry
+            {t('page.registryEyebrow')}
           </div>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-            ACME provisioned certificates
+            {t('page.registryTitle')}
           </h2>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Certificates are automatically renewed 30 days before expiration using DNS-01 challenge for wildcard support.
+            {t('page.registryDescription')}
           </p>
         </div>
 
         {certificates.length === 0 ? (
           <EmptyState
             icon={<FileKey className="h-8 w-8" />}
-            title="No certificates provisioned"
-            description="Provision your first certificate to enable HTTPS for your routes. Wildcard certificates are supported via DNS-01 challenge."
-            action={canManageCertificates ? <Button onClick={() => setShowForm(true)}>Provision First Certificate</Button> : undefined}
+            title={t('page.emptyTitle')}
+            description={t('page.emptyDescription')}
+            action={canManageCertificates ? <Button onClick={() => setShowForm(true)}>{t('page.provisionFirst')}</Button> : undefined}
           />
         ) : (
           <DataTable
@@ -209,10 +241,10 @@ export function CertificatesPage() {
                 <button
                   onClick={() => handleRenew(row)}
                   disabled={renewingId === row.id}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--primary-600)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[var(--primary-600)] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-50"
                 >
                   <RefreshCw className={`h-4 w-4 ${renewingId === row.id ? 'animate-spin' : ''}`} />
-                  {renewingId === row.id ? 'Renewing...' : 'Renew'}
+                  {renewingId === row.id ? t('page.renewing') : t('page.renew')}
                 </button>
               ) : null
             )}
@@ -223,7 +255,7 @@ export function CertificatesPage() {
       <Modal
         open={canManageCertificates && showForm}
         onClose={() => setShowForm(false)}
-        title="Provision Certificate"
+        title={t('page.modalTitle')}
       >
         <CertificateForm
           onSubmit={handleCreate}

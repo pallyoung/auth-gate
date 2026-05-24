@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 import { Button, Card, Input, Select } from './ui'
 
@@ -9,15 +10,8 @@ interface AuthRuleFormProps {
   onCancel: () => void
 }
 
-const ruleTypeOptions = [
-  { value: 'none', label: 'None' },
-  { value: 'apikey', label: 'API Key' },
-  { value: 'bearer', label: 'Bearer Token' },
-  { value: 'basic', label: 'Basic Auth' },
-  { value: 'gateway', label: 'Gateway Login' },
-]
-
 export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
+  const { t } = useTranslation('authRules')
   const [form, setForm] = React.useState<AuthRuleInput>({
     route_id: rule?.route_id || routes[0]?.id || '',
     type: rule?.type || 'none',
@@ -47,20 +41,28 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
     await onSubmit(form)
   }
 
+  const ruleTypeOptions = [
+    { value: 'none', label: t('types.none') },
+    { value: 'apikey', label: t('types.apikey') },
+    { value: 'bearer', label: t('types.bearer') },
+    { value: 'basic', label: t('types.basic') },
+    { value: 'gateway', label: t('types.gateway') },
+  ]
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Policy Scope
+            {t('form.scopeEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Attach an auth policy to a route and provide the credentials it should validate.
+            {t('form.scopeDescription')}
           </p>
         </div>
 
         <Select
-          label="Route"
+          label={t('form.route')}
           value={form.route_id}
           onChange={(event) => setForm({ ...form, route_id: event.target.value })}
           options={routes.map((route) => ({
@@ -71,7 +73,7 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
         />
 
         <Select
-          label="Type"
+          label={t('form.type')}
           value={type}
           onChange={(event) => setForm({ ...form, type: event.target.value as AuthRule['type'] })}
           options={ruleTypeOptions}
@@ -82,14 +84,14 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       {type === 'apikey' && (
         <Card tone="soft" className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Header Name"
+            label={t('form.headerName')}
             value={config.header_name || ''}
             onChange={(event) => updateConfig({ header_name: event.target.value })}
             placeholder="X-API-Key"
             required
           />
           <Input
-            label="Secret"
+            label={t('form.secret')}
             value={config.secret || ''}
             onChange={(event) => updateConfig({ secret: event.target.value })}
             placeholder="secret-value"
@@ -101,11 +103,11 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       {type === 'bearer' && (
         <Card tone="soft">
           <Input
-            label="JWT Secret"
+            label={t('form.jwtSecret')}
             value={config.secret || ''}
             onChange={(event) => updateConfig({ secret: event.target.value })}
             placeholder="jwt-signing-secret"
-            hint="Current implementation validates HMAC-signed JWTs with this shared secret."
+            hint={t('form.jwtSecretHint')}
             required
           />
         </Card>
@@ -114,18 +116,18 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       {type === 'basic' && (
         <Card tone="soft" className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Username"
+            label={t('form.username')}
             value={config.username || ''}
             onChange={(event) => updateConfig({ username: event.target.value })}
-            placeholder="service-user"
+            placeholder={t('form.usernamePlaceholder')}
             required
           />
           <Input
-            label="Password"
+            label={t('form.password')}
             type="password"
             value={config.password || ''}
             onChange={(event) => updateConfig({ password: event.target.value })}
-            placeholder="service-password"
+            placeholder={t('form.passwordPlaceholder')}
             required
           />
         </Card>
@@ -134,11 +136,11 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       {type === 'gateway' && (
         <Card tone="soft">
           <Select
-            label="Login Mode"
+            label={t('form.loginMode')}
             value={config.login_mode || 'form'}
             onChange={(event) => updateConfig({ login_mode: event.target.value })}
-            options={[{ value: 'form', label: 'Gateway Form Login' }]}
-            hint="Uses Auth Gate's route access login page and the shared user directory."
+            options={[{ value: 'form', label: t('types.gatewayForm') }]}
+            hint={t('form.loginModeHint')}
             required
           />
         </Card>
@@ -146,10 +148,10 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
 
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
-          Cancel
+          {t('common:actions.cancel')}
         </Button>
         <Button type="submit" className="w-full md:w-auto">
-          {rule ? 'Update Rule' : 'Create Rule'}
+          {rule ? t('form.update') : t('form.create')}
         </Button>
       </div>
     </form>

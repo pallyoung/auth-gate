@@ -1,4 +1,7 @@
 export const commonEn = {
+  accessibility: {
+    languageSwitcher: 'Language switcher',
+  },
   actions: {
     cancel: 'Cancel',
     closeModal: 'Close modal',
@@ -12,6 +15,9 @@ export const commonEn = {
 } as const
 
 export const commonZhCN = {
+  accessibility: {
+    languageSwitcher: '语言切换',
+  },
   actions: {
     cancel: '取消',
     closeModal: '关闭弹窗',

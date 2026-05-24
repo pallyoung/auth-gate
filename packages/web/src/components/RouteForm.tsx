@@ -1,15 +1,7 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Route, RouteInput } from '../lib/api/types'
 import { Button, Card, Input, Switch } from './ui'
-
-// Path match modes with nginx syntax hints.
-export const PATH_MATCH_MODES = [
-  { value: '',          label: 'Plain Prefix',       hint: '/prefix — longest-prefix match' },
-  { value: 'exact',     label: 'Exact (=)',          hint: '= /path — exact path only' },
-  { value: 'stop',      label: 'Prefix Stop (^~)',    hint: '^~ /prefix — stop regex scan' },
-  { value: 'regex',     label: 'Regex (~)',           hint: '~ ^/api/v\\d+ — case-sensitive' },
-  { value: 'regex_i',   label: 'Regex Insensitive (~*)', hint: '~* \\.(png|jpg)$ — case-insensitive' },
-]
 
 interface RouteFormProps {
   route: Route | null
@@ -18,6 +10,7 @@ interface RouteFormProps {
 }
 
 export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
+  const { t } = useTranslation('routes')
   const [form, setForm] = React.useState<RouteInput>({
     name: route?.name || '',
     host: route?.host || '',
@@ -36,105 +29,132 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
     onSubmit(form)
   }
 
+  const pathMatchModes = [
+    {
+      value: '',
+      label: t('pathMatchModes.plainPrefix.label'),
+      hint: t('pathMatchModes.plainPrefix.hint'),
+    },
+    {
+      value: 'exact',
+      label: t('pathMatchModes.exact.label'),
+      hint: t('pathMatchModes.exact.hint'),
+    },
+    {
+      value: 'stop',
+      label: t('pathMatchModes.stop.label'),
+      hint: t('pathMatchModes.stop.hint'),
+    },
+    {
+      value: 'regex',
+      label: t('pathMatchModes.regex.label'),
+      hint: t('pathMatchModes.regex.hint'),
+    },
+    {
+      value: 'regex_i',
+      label: t('pathMatchModes.regexInsensitive.label'),
+      hint: t('pathMatchModes.regexInsensitive.hint'),
+    },
+  ]
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Route Identity
+            {t('form.identityEyebrow')}
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Define the matching scope and backend target for this route.
+            {t('form.identityDescription')}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Name"
+            label={t('form.name')}
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
-            placeholder="Billing API"
+            placeholder={t('form.namePlaceholder')}
           />
           <Input
-            label="Host"
+            label={t('form.host')}
             value={form.host}
             onChange={(event) => setForm({ ...form, host: event.target.value })}
-            placeholder="api.example.com"
-            hint="Leave empty to match every host."
+            placeholder={t('form.hostPlaceholder')}
+            hint={t('form.hostHint')}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
-            label="Path Prefix"
+            label={t('form.pathPrefix')}
             value={form.path_prefix}
             onChange={(event) => setForm({ ...form, path_prefix: event.target.value })}
-            placeholder="/billing or empty to match all"
-            hint="Leave empty to match all paths."
+            placeholder={t('form.pathPrefixPlaceholder')}
+            hint={t('form.pathPrefixHint')}
           />
           <Input
-            label="Backend"
+            label={t('form.backend')}
             value={form.backend}
             onChange={(event) => setForm({ ...form, backend: event.target.value })}
-            placeholder="http://127.0.0.1:3000"
+            placeholder={t('form.backendPlaceholder')}
             required
           />
         </div>
 
         <Input
-          label="Priority"
+          label={t('form.priority')}
           type="number"
           value={form.priority}
           onChange={(event) => setForm({ ...form, priority: parseInt(event.target.value, 10) || 0 })}
-          hint="Higher values win when multiple routes can match the same request."
+          hint={t('form.priorityHint')}
         />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
-              Path Match Mode
+              {t('form.pathMatchMode')}
             </label>
             <select
               className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
               value={form.path_match_mode || ''}
               onChange={(e) => setForm({ ...form, path_match_mode: e.target.value })}
             >
-              {PATH_MATCH_MODES.map((m) => (
+              {pathMatchModes.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
                 </option>
               ))}
             </select>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              {PATH_MATCH_MODES.find((m) => m.value === (form.path_match_mode || ''))?.hint
-                || PATH_MATCH_MODES[0].hint}
+              {pathMatchModes.find((m) => m.value === (form.path_match_mode || ''))?.hint || pathMatchModes[0].hint}
             </p>
           </div>
           <Input
-            label="Rewrite Target"
+            label={t('form.rewriteTarget')}
             value={form.rewrite_target || ''}
             onChange={(event) => setForm({ ...form, rewrite_target: event.target.value })}
-            placeholder="/new/$1"
-            hint="Use $1, $2 for regex capture groups. $& for full match."
+            placeholder={t('form.rewriteTargetPlaceholder')}
+            hint={t('form.rewriteTargetHint')}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
-              Redirect Code
+              {t('form.redirectCode')}
             </label>
             <select
               className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
               value={form.redirect_code || 0}
               onChange={(e) => setForm({ ...form, redirect_code: parseInt(e.target.value, 10) || 0 })}
             >
-              <option value={0}>No redirect</option>
-              <option value={301}>301 Moved Permanently</option>
-              <option value={302}>302 Found (Temporary)</option>
+              <option value={0}>{t('form.noRedirect')}</option>
+              <option value={301}>{t('form.movedPermanently')}</option>
+              <option value={302}>{t('form.foundTemporary')}</option>
             </select>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Use with Rewrite Target for external redirects (e.g. HTTP → HTTPS).
+              {t('form.redirectHint')}
             </p>
           </div>
         </div>
@@ -142,14 +162,14 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Switch
-          label="Strip Prefix"
-          description="Remove the incoming prefix before forwarding traffic to the backend."
+          label={t('form.stripPrefix')}
+          description={t('form.stripPrefixDescription')}
           checked={form.strip_prefix}
           onChange={(event) => setForm({ ...form, strip_prefix: event.target.checked })}
         />
         <Switch
-          label="Enabled"
-          description="Keep the route active and available to the runtime router."
+          label={t('form.enabled')}
+          description={t('form.enabledDescription')}
           checked={form.enabled}
           onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
         />
@@ -157,10 +177,10 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
 
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
-          Cancel
+          {t('common:actions.cancel')}
         </Button>
         <Button type="submit" className="w-full md:w-auto">
-          {route ? 'Update Route' : 'Create Route'}
+          {route ? t('form.update') : t('form.create')}
         </Button>
       </div>
     </form>

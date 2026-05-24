@@ -1,7 +1,12 @@
 import { accessLoginEn, accessLoginZhCN } from './accessLogin'
+import { authRulesEn, authRulesZhCN } from './authRules'
+import { certificatesEn, certificatesZhCN } from './certificates'
 import { commonEn, commonZhCN } from './common'
 import { layoutEn, layoutZhCN } from './layout'
 import { loginEn, loginZhCN } from './login'
+import { routesEn, routesZhCN } from './routes'
+import { settingsEn, settingsZhCN } from './settings'
+import { usersEn, usersZhCN } from './users'
 
 export const resources = {
   en: {
@@ -9,11 +14,21 @@ export const resources = {
     layout: layoutEn,
     login: loginEn,
     accessLogin: accessLoginEn,
+    routes: routesEn,
+    authRules: authRulesEn,
+    users: usersEn,
+    certificates: certificatesEn,
+    settings: settingsEn,
   },
   'zh-CN': {
     common: commonZhCN,
     layout: layoutZhCN,
     login: loginZhCN,
     accessLogin: accessLoginZhCN,
+    routes: routesZhCN,
+    authRules: authRulesZhCN,
+    users: usersZhCN,
+    certificates: certificatesZhCN,
+    settings: settingsZhCN,
   },
 } as const

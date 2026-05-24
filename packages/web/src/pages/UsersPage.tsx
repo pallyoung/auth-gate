@@ -1,5 +1,6 @@
 import React from 'react'
 import { LockKeyhole, Plus, ShieldCheck, UserRound } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { UserForm } from '../components/UserForm'
@@ -10,6 +11,7 @@ import { getSessionUser } from '../lib/session-store'
 import type { Route, User, UserInput } from '../lib/api/types'
 
 export function UsersPage() {
+  const { t } = useTranslation('users')
   const [users, setUsers] = React.useState<User[]>([])
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -58,7 +60,7 @@ export function UsersPage() {
   }
 
   const handleDelete = async (user: User) => {
-    if (!confirm(`Delete user "${user.username}"?`)) return
+    if (!confirm(t('page.deleteConfirm', { username: user.username }))) return
     try {
       await usersApi.delete(user.id)
       await fetchData()
@@ -70,36 +72,57 @@ export function UsersPage() {
   const memberCount = users.filter((user) => user.role === 'member').length
   const enabledCount = users.filter((user) => user.enabled !== false).length
 
+  const roleLabel = (value: string) => {
+    switch (value) {
+      case 'member':
+        return t('roles.member')
+      case 'viewer':
+        return t('roles.viewer')
+      case 'editor':
+        return t('roles.editor')
+      case 'admin':
+        return t('roles.admin')
+      default:
+        return value
+    }
+  }
+
   const columns = [
     {
       key: 'username',
-      header: 'User',
+      header: t('table.user'),
       render: (value: string, row: User) => (
         <div>
           <div className="font-semibold text-[var(--text-primary)]">{value}</div>
-          <div className="mt-1 text-xs text-[var(--text-muted)]">{row.route_ids?.length || 0} assigned routes</div>
+          <div className="mt-1 text-xs text-[var(--text-muted)]">
+            {t('page.assignedRoutes', { count: row.route_ids?.length || 0 })}
+          </div>
         </div>
       ),
     },
     {
       key: 'role',
-      header: 'Role',
+      header: t('table.role'),
       className: 'w-32',
-      render: (value: string) => <Badge variant="primary" badgeSize="sm">{value}</Badge>,
+      render: (value: string) => <Badge variant="primary" badgeSize="sm">{roleLabel(value)}</Badge>,
     },
     {
       key: 'enabled',
-      header: 'Status',
+      header: t('table.status'),
       className: 'w-32',
-      render: (value: boolean) => <Badge variant={value !== false ? 'success' : 'default'} badgeSize="sm">{value !== false ? 'Enabled' : 'Disabled'}</Badge>,
+      render: (value: boolean) => (
+        <Badge variant={value !== false ? 'success' : 'default'} badgeSize="sm">
+          {value !== false ? t('page.enabled') : t('page.disabled')}
+        </Badge>
+      ),
     },
     {
       key: 'route_ids',
-      header: 'Access Scope',
+      header: t('table.accessScope'),
       render: (value: string[], row: User) => {
-        if (row.role === 'admin' || row.role === 'editor') return 'All routes'
-        if (!value || value.length === 0) return 'No assigned routes'
-        return `${value.length} route${value.length > 1 ? 's' : ''}`
+        if (row.role === 'admin' || row.role === 'editor') return t('page.allRoutes')
+        if (!value || value.length === 0) return t('page.noAssignedRoutes')
+        return t('routeCount', { count: value.length })
       },
     },
   ]
@@ -109,7 +132,7 @@ export function UsersPage() {
       <div className="flex h-64 items-center justify-center">
         <div className="flex items-center gap-3 text-[var(--text-muted)]">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" />
-          Loading users...
+          {t('page.loading')}
         </div>
       </div>
     )
@@ -118,55 +141,78 @@ export function UsersPage() {
   return (
     <div className="animate-rise-in">
       <PageHeader
-        eyebrow="Identity Directory"
-        title="Users"
-        description="Manage control-plane operators and route-access members from a shared account directory."
+        eyebrow={t('page.eyebrow')}
+        title={t('page.title')}
+        description={t('page.description')}
         meta={
           <>
-            <Badge variant="primary">Access Model</Badge>
-            <span className="text-sm text-[var(--text-muted)]">{users.length} managed users</span>
+            <Badge variant="primary">{t('page.badge')}</Badge>
+            <span className="text-sm text-[var(--text-muted)]">{t('page.managedUsers', { count: users.length })}</span>
           </>
         }
         action={
           canManageUsers ? (
-            <Button icon={<Plus className="h-4 w-4" />} onClick={() => { setEditingUser(null); setShowForm(true) }}>
-              Add User
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => {
+                setEditingUser(null)
+                setShowForm(true)
+              }}
+            >
+              {t('page.addUser')}
             </Button>
           ) : null
         }
       />
 
       {error && (
-        <Alert variant="error" title="User operation failed" className="mb-5">
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
           {error}
         </Alert>
       )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Enabled Users" value={enabledCount} hint="Accounts that can currently authenticate." icon={<ShieldCheck className="h-5 w-5" />} tone="primary" />
-        <MetricCard label="Route Members" value={memberCount} hint="Users intended for gateway-managed route access." icon={<LockKeyhole className="h-5 w-5" />} tone="accent" />
-        <MetricCard label="Operators" value={users.filter((user) => user.role !== 'member').length} hint="Control-plane capable accounts." icon={<UserRound className="h-5 w-5" />} />
+        <MetricCard
+          label={t('page.enabledUsers')}
+          value={enabledCount}
+          hint={t('page.enabledUsersHint')}
+          icon={<ShieldCheck className="h-5 w-5" />}
+          tone="primary"
+        />
+        <MetricCard
+          label={t('page.routeMembers')}
+          value={memberCount}
+          hint={t('page.routeMembersHint')}
+          icon={<LockKeyhole className="h-5 w-5" />}
+          tone="accent"
+        />
+        <MetricCard
+          label={t('page.operators')}
+          value={users.filter((user) => user.role !== 'member').length}
+          hint={t('page.operatorsHint')}
+          icon={<UserRound className="h-5 w-5" />}
+        />
       </div>
 
       <Card padding="lg" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Directory
+            {t('page.directoryEyebrow')}
           </div>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-            User access registry
+            {t('page.directoryTitle')}
           </h2>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Assign control-plane roles separately from route access permissions so gateway users do not automatically become admins.
+            {t('page.directoryDescription')}
           </p>
         </div>
 
         {users.length === 0 ? (
           <EmptyState
             icon={<UserRound className="h-8 w-8" />}
-            title="No users configured"
-            description="Create your first user to start assigning control-plane or route access."
-            action={canManageUsers ? <Button onClick={() => setShowForm(true)}>Create First User</Button> : undefined}
+            title={t('page.emptyTitle')}
+            description={t('page.emptyDescription')}
+            action={canManageUsers ? <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button> : undefined}
           />
         ) : (
           <DataTable
@@ -180,14 +226,20 @@ export function UsersPage() {
 
       <Modal
         open={canManageUsers && showForm}
-        onClose={() => { setShowForm(false); setEditingUser(null) }}
-        title={editingUser ? 'Edit User' : 'Add User'}
+        onClose={() => {
+          setShowForm(false)
+          setEditingUser(null)
+        }}
+        title={editingUser ? t('page.editModalTitle') : t('page.addModalTitle')}
       >
         <UserForm
           user={editingUser}
           routes={routes}
           onSubmit={editingUser ? handleUpdate : handleCreate}
-          onCancel={() => { setShowForm(false); setEditingUser(null) }}
+          onCancel={() => {
+            setShowForm(false)
+            setEditingUser(null)
+          }}
         />
       </Modal>
     </div>

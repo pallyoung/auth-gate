@@ -11,7 +11,7 @@ interface LanguageSwitcherProps {
 }
 
 export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation('common')
   const active = i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
 
   return (
@@ -21,7 +21,7 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
         className
       )}
       role="group"
-      aria-label="Language switcher"
+      aria-label={t('accessibility.languageSwitcher')}
     >
       {languageOptions.map((option) => {
         const isActive = active === option.value

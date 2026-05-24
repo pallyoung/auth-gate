@@ -1,5 +1,6 @@
 import React from 'react'
 import { Database, RefreshCw, Server, Shield } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '../components/PageHeader'
 import { Alert, Button, Card, MetricCard } from '../components/ui'
 import { configApi } from '../lib/api/config'
@@ -7,6 +8,7 @@ import { ApiError } from '../lib/api/client'
 import { getSessionUser } from '../lib/session-store'
 
 export function SettingsPage() {
+  const { t } = useTranslation(['settings', 'users'])
   const [reloading, setReloading] = React.useState(false)
   const [message, setMessage] = React.useState('')
   const [error, setError] = React.useState('')
@@ -15,6 +17,20 @@ export function SettingsPage() {
   const canReload =
     (sessionUser?.permissions?.can_manage_routes ?? false) ||
     (sessionUser?.permissions?.can_manage_auth ?? false)
+  const roleLabel = (role: string) => {
+    switch (role) {
+      case 'member':
+        return t('users:roles.member')
+      case 'viewer':
+        return t('users:roles.viewer')
+      case 'editor':
+        return t('users:roles.editor')
+      case 'admin':
+        return t('users:roles.admin')
+      default:
+        return role
+    }
+  }
 
   const handleReload = async () => {
     setReloading(true)
@@ -28,7 +44,7 @@ export function SettingsPage() {
       if (e instanceof ApiError) {
         setError(e.message)
       } else {
-        setError('Failed to reload configuration')
+        setError(t('page.reloadFallback'))
       }
     } finally {
       setReloading(false)
@@ -38,39 +54,56 @@ export function SettingsPage() {
   return (
     <div className="animate-rise-in">
       <PageHeader
-        eyebrow="Runtime Operations"
-        title="Settings"
-        description="Handle runtime reloads, inspect storage assumptions, and review operational safeguards."
+        eyebrow={t('page.eyebrow')}
+        title={t('page.title')}
+        description={t('page.description')}
       />
 
       {message && (
-        <Alert variant="success" title="Configuration reloaded" className="mb-5">
+        <Alert variant="success" title={t('page.successTitle')} className="mb-5">
           {message}
         </Alert>
       )}
       {error && (
-        <Alert variant="error" title="Settings operation failed" className="mb-5">
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
           {error}
         </Alert>
       )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Reload Access" value={canReload ? 'Granted' : 'Restricted'} hint="Derived from current session permissions." icon={<RefreshCw className="h-5 w-5" />} tone="primary" />
-        <MetricCard label="Storage" value="SQLite" hint="State persists in the local gateway database." icon={<Database className="h-5 w-5" />} tone="accent" />
-        <MetricCard label="Version" value="0.1.0" hint="Current control plane release indicator." icon={<Server className="h-5 w-5" />} />
+        <MetricCard
+          label={t('page.reloadAccess')}
+          value={canReload ? t('page.reloadGranted') : t('page.reloadRestricted')}
+          hint={t('page.reloadAccessHint')}
+          icon={<RefreshCw className="h-5 w-5" />}
+          tone="primary"
+        />
+        <MetricCard
+          label={t('page.storage')}
+          value="SQLite"
+          hint={t('page.storageHint')}
+          icon={<Database className="h-5 w-5" />}
+          tone="accent"
+        />
+        <MetricCard
+          label={t('page.version')}
+          value="0.1.0"
+          hint={t('page.versionHint')}
+          icon={<Server className="h-5 w-5" />}
+        />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <Card padding="lg" className="space-y-5">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              Runtime Control
+              {t('page.runtimeEyebrow')}
             </div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Configuration reload
+              {t('page.runtimeTitle')}
             </h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Apply manual changes from the database into the running gateway without restarting the process.
+              {t('page.runtimeDescription')}
             </p>
           </div>
 
@@ -80,9 +113,11 @@ export function SettingsPage() {
                 <RefreshCw className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Push config to runtime</h3>
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+                  {t('page.reloadCardTitle')}
+                </h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
-                  Reload configuration after route or auth changes so the runtime compiler can rebuild its active state.
+                  {t('page.reloadCardDescription')}
                 </p>
                 <Button
                   className="mt-5"
@@ -91,7 +126,7 @@ export function SettingsPage() {
                   onClick={handleReload}
                   icon={<RefreshCw className="h-4 w-4" />}
                 >
-                  {reloading ? 'Reloading...' : 'Reload Config'}
+                  {reloading ? t('page.reloadingButton') : t('page.reloadButton')}
                 </Button>
               </div>
             </div>
@@ -105,12 +140,12 @@ export function SettingsPage() {
                 <Database className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Storage</h3>
-                <p className="text-sm text-[var(--text-muted)]">Persistent control plane state.</p>
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{t('page.storageTitle')}</h3>
+                <p className="text-sm text-[var(--text-muted)]">{t('page.storageSubtitle')}</p>
               </div>
             </div>
             <p className="text-sm leading-6 text-[var(--text-muted)]">
-              Data is stored in SQLite at <code className="app-code">data/auth-gate.db</code>.
+              {t('page.storageBody', { path: 'data/auth-gate.db' })}
             </p>
           </Card>
 
@@ -120,14 +155,11 @@ export function SettingsPage() {
                 <Shield className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">Security</h3>
-                <p className="text-sm text-[var(--text-muted)]">Deployment checklist.</p>
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{t('page.securityTitle')}</h3>
+                <p className="text-sm text-[var(--text-muted)]">{t('page.securitySubtitle')}</p>
               </div>
             </div>
-            <p className="text-sm leading-6 text-[var(--text-muted)]">
-              Configure a strong <code className="app-code">auth.jwt_secret</code> before production deployment.
-              Ephemeral JWT secrets should remain development-only.
-            </p>
+            <p className="text-sm leading-6 text-[var(--text-muted)]">{t('page.securityBody')}</p>
           </Card>
 
           <Card padding="lg" className="space-y-3">
@@ -136,14 +168,14 @@ export function SettingsPage() {
                 <Server className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">About</h3>
-                <p className="text-sm text-[var(--text-muted)]">Runtime and product context.</p>
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{t('page.aboutTitle')}</h3>
+                <p className="text-sm text-[var(--text-muted)]">{t('page.aboutSubtitle')}</p>
               </div>
             </div>
             <div className="space-y-1 text-sm text-[var(--text-muted)]">
-              <p><strong>Auth Gate</strong> control plane</p>
-              <p>Version: 0.1.0</p>
-              {sessionUser ? <p>Active role: {sessionUser.role}</p> : null}
+              <p><strong>{t('page.aboutProduct')}</strong></p>
+              <p>{t('page.aboutVersion', { version: '0.1.0' })}</p>
+              {sessionUser ? <p>{t('page.aboutRole', { role: roleLabel(sessionUser.role) })}</p> : null}
             </div>
           </Card>
         </div>
