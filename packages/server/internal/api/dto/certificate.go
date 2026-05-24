@@ -13,6 +13,7 @@ type CertificateResponse struct {
 	Domain    string `json:"domain"`
 	CertPath  string `json:"cert_path"`
 	KeyPath   string `json:"key_path"`
+	DNSProvider string `json:"dns_provider"`
 	Status    string `json:"status"`
 	NotBefore string `json:"not_before,omitempty"`
 	NotAfter  string `json:"not_after,omitempty"`
@@ -38,17 +39,18 @@ type CertificateRenewRequest struct{}
 // CertificateResponseFromStore converts a store.Certificate to CertificateResponse
 func CertificateResponseFromStore(c store.Certificate) CertificateResponse {
 	return CertificateResponse{
-		ID:        c.ID,
-		Name:      c.Name,
-		Domain:    c.Domain,
-		CertPath:  c.CertPath,
-		KeyPath:   c.KeyPath,
-		Status:    c.Status,
-		NotBefore: formatTime(c.NotBefore),
-		NotAfter:  formatTime(c.NotAfter),
-		RenewAt:   formatTime(c.RenewAt),
-		CreatedAt: c.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: c.UpdatedAt.Format(time.RFC3339),
+		ID:          c.ID,
+		Name:        c.Name,
+		Domain:      c.Domain,
+		CertPath:    c.CertPath,
+		KeyPath:     c.KeyPath,
+		DNSProvider: c.DNSProvider,
+		Status:      c.Status,
+		NotBefore:   formatTime(c.NotBefore),
+		NotAfter:    formatTime(c.NotAfter),
+		RenewAt:     formatTime(c.RenewAt),
+		CreatedAt:   c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   c.UpdatedAt.Format(time.RFC3339),
 	}
 }
 

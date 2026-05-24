@@ -110,6 +110,7 @@ export interface Certificate {
   domain: string
   cert_path: string
   key_path: string
+  dns_provider: string
   status: 'pending' | 'active' | 'renewing' | 'failed'
   not_before?: string
   not_after?: string
