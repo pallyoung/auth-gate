@@ -40,47 +40,55 @@ type ServiceConfig struct {
 
 // ValidateDNSProviderConfig validates DNS provider configuration
 func ValidateDNSProviderConfig(provider string, config map[string]string) error {
-	switch strings.ToLower(provider) {
+	switch normalizeProviderName(provider) {
 	case "cloudflare":
-		if config["api_token"] == "" {
+		if trimmedConfigValue(config, "api_token") == "" {
 			return fmt.Errorf("cloudflare: api_token is required")
 		}
 	case "route53":
-		if config["access_key_id"] == "" || config["secret_access_key"] == "" {
+		if trimmedConfigValue(config, "access_key_id") == "" || trimmedConfigValue(config, "secret_access_key") == "" {
 			return fmt.Errorf("route53: access_key_id and secret_access_key are required")
 		}
-	case "pdns":
-		if config["host"] == "" || config["api_key"] == "" {
-			return fmt.Errorf("pdns: host and api_key are required")
-		}
-	case "manual":
-		// Manual mode doesn't need config
 	default:
-		return fmt.Errorf("unsupported DNS provider: %s", provider)
+		return fmt.Errorf("unsupported DNS provider: %s", strings.TrimSpace(provider))
 	}
 	return nil
 }
 
 // ParseDNSProviderConfig parses DNS provider configuration from a map
 func ParseDNSProviderConfig(provider string, config map[string]string) (acme.DNSProviderConfig, error) {
+	provider = normalizeProviderName(provider)
+
+	if err := ValidateDNSProviderConfig(provider, config); err != nil {
+		return acme.DNSProviderConfig{}, err
+	}
+
 	cfg := acme.DNSProviderConfig{
 		ProviderType: provider,
 	}
 
-	switch strings.ToLower(provider) {
+	switch provider {
 	case "cloudflare":
-		cfg.CloudFlareAPIToken = config["api_token"]
+		cfg.CloudFlareAPIToken = trimmedConfigValue(config, "api_token")
 	case "route53":
-		cfg.Route53AccessKeyID = config["access_key_id"]
-		cfg.Route53SecretAccessKey = config["secret_access_key"]
-		cfg.Route53Region = config["region"]
+		cfg.Route53AccessKeyID = trimmedConfigValue(config, "access_key_id")
+		cfg.Route53SecretAccessKey = trimmedConfigValue(config, "secret_access_key")
+		cfg.Route53Region = trimmedConfigValue(config, "region")
 	case "pdns":
-		cfg.PowerDNSHost = config["host"]
-		cfg.PowerDNSAPIKey = config["api_key"]
-		cfg.PowerDNSZone = config["zone"]
+		cfg.PowerDNSHost = trimmedConfigValue(config, "host")
+		cfg.PowerDNSAPIKey = trimmedConfigValue(config, "api_key")
+		cfg.PowerDNSZone = trimmedConfigValue(config, "zone")
 	}
 
 	return cfg, nil
+}
+
+func normalizeProviderName(provider string) string {
+	return strings.ToLower(strings.TrimSpace(provider))
+}
+
+func trimmedConfigValue(config map[string]string, key string) string {
+	return strings.TrimSpace(config[key])
 }
 
 // IsCertificateExpiringSoon returns true if the certificate expires within the given duration

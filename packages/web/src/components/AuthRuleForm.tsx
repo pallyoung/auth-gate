@@ -1,7 +1,8 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
-import { Button, Card, Input, Select } from './ui'
+import { Alert, Button, Card, Input, Select, Switch } from './ui'
 
 interface AuthRuleFormProps {
   rule: AuthRule | null
@@ -10,9 +11,23 @@ interface AuthRuleFormProps {
   onCancel: () => void
 }
 
-export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
-  const { t } = useTranslation('authRules')
-  const [form, setForm] = React.useState<AuthRuleInput>({
+function normalizeListValue(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeCommaSeparatedValue(value: string): string {
+  return normalizeListValue(value).join(',')
+}
+
+function normalizeOptionalNumber(value: number | undefined): number | undefined {
+  return value && value > 0 ? value : undefined
+}
+
+function getInitialAuthRuleForm(rule: AuthRule | null, routes: Route[]): AuthRuleInput {
+  return {
     route_id: rule?.route_id || routes[0]?.id || '',
     type: rule?.type || 'none',
     config: {
@@ -20,11 +35,42 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       secret: '',
       username: rule?.config?.username || '',
       password: '',
+      login_mode: rule?.config?.login_mode || '',
     },
-  })
+    whitelist: rule?.whitelist || [],
+    rate_limit: normalizeOptionalNumber(rule?.rate_limit),
+    burst: normalizeOptionalNumber(rule?.burst),
+    cors_allowed_origins: rule?.cors_allowed_origins || '',
+    cors_allowed_methods: rule?.cors_allowed_methods || '',
+    cors_allowed_headers: rule?.cors_allowed_headers || '',
+    cors_allow_credentials: rule?.cors_allow_credentials || false,
+    cors_max_age: normalizeOptionalNumber(rule?.cors_max_age),
+  }
+}
+
+export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
+  const { t } = useTranslation('authRules')
+  const initialForm = getInitialAuthRuleForm(rule, routes)
+  const [form, setForm] = React.useState<AuthRuleInput>(() => initialForm)
+  const [whitelistText, setWhitelistText] = React.useState(() => (initialForm.whitelist || []).join(', '))
+  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const activeSubmitRef = React.useRef<symbol | null>(null)
+  const initialFormSeed = JSON.stringify(initialForm)
+  const errorMessage = resolveLocalizedText(t, error)
+
+  React.useEffect(() => {
+    setForm(initialForm)
+    setWhitelistText((initialForm.whitelist || []).join(', '))
+    setError(null)
+  }, [initialFormSeed])
 
   const type = form.type || 'none'
   const config = form.config || {}
+  const isEditingSameType = rule?.type === type
+  const shouldRequireAPIKeySecret = type === 'apikey' && !isEditingSameType
+  const shouldRequireBearerSecret = type === 'bearer' && !isEditingSameType
+  const shouldRequireBasicPassword = type === 'basic' && !isEditingSameType
 
   const updateConfig = (next: Partial<AuthRuleInput['config']>) => {
     setForm((current) => ({
@@ -36,9 +82,115 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
     }))
   }
 
+  const updatePolicy = (next: Partial<Omit<AuthRuleInput, 'route_id' | 'type' | 'config'>>) => {
+    setForm((current) => ({
+      ...current,
+      ...next,
+    }))
+  }
+
+  const buildSubmitPayload = (): AuthRuleInput => {
+    const routeID = form.route_id.trim()
+    const headerName = (config.header_name || '').trim()
+    const secret = (config.secret || '').trim()
+    const username = (config.username || '').trim()
+    const password = config.password || ''
+    const hasPassword = password.trim() !== ''
+    const loginMode = (config.login_mode || '').trim()
+    const whitelist = form.whitelist || []
+    const initialWhitelist = initialForm.whitelist || []
+    const rateLimit = normalizeOptionalNumber(form.rate_limit)
+    const initialRateLimit = normalizeOptionalNumber(initialForm.rate_limit)
+    const burst = normalizeOptionalNumber(form.burst)
+    const initialBurst = normalizeOptionalNumber(initialForm.burst)
+    const corsAllowedOrigins = normalizeCommaSeparatedValue(form.cors_allowed_origins || '')
+    const initialCORSAllowedOrigins = normalizeCommaSeparatedValue(initialForm.cors_allowed_origins || '')
+    const corsAllowedMethods = normalizeCommaSeparatedValue(form.cors_allowed_methods || '')
+    const initialCORSAllowedMethods = normalizeCommaSeparatedValue(initialForm.cors_allowed_methods || '')
+    const corsAllowedHeaders = normalizeCommaSeparatedValue(form.cors_allowed_headers || '')
+    const initialCORSAllowedHeaders = normalizeCommaSeparatedValue(initialForm.cors_allowed_headers || '')
+    const corsAllowCredentials = !!form.cors_allow_credentials
+    const initialCORSAllowCredentials = !!initialForm.cors_allow_credentials
+    const corsMaxAge = normalizeOptionalNumber(form.cors_max_age)
+    const initialCORSMaxAge = normalizeOptionalNumber(initialForm.cors_max_age)
+    const runtimePolicy: Omit<AuthRuleInput, 'route_id' | 'type' | 'config'> = {
+      ...(whitelist.length > 0 || initialWhitelist.length > 0 ? { whitelist } : {}),
+      ...(rateLimit !== undefined || initialRateLimit !== undefined ? { rate_limit: rateLimit || 0 } : {}),
+      ...(burst !== undefined || initialBurst !== undefined ? { burst: burst || 0 } : {}),
+      ...(corsAllowedOrigins || initialCORSAllowedOrigins ? { cors_allowed_origins: corsAllowedOrigins } : {}),
+      ...(corsAllowedMethods || initialCORSAllowedMethods ? { cors_allowed_methods: corsAllowedMethods } : {}),
+      ...(corsAllowedHeaders || initialCORSAllowedHeaders ? { cors_allowed_headers: corsAllowedHeaders } : {}),
+      ...(corsAllowCredentials || initialCORSAllowCredentials ? { cors_allow_credentials: corsAllowCredentials } : {}),
+      ...(corsMaxAge !== undefined || initialCORSMaxAge !== undefined ? { cors_max_age: corsMaxAge || 0 } : {}),
+    }
+
+    switch (type) {
+      case 'apikey':
+        return {
+          route_id: routeID,
+          type,
+          config: {
+            header_name: headerName || 'X-API-Key',
+            ...(secret ? { secret } : {}),
+          },
+          ...runtimePolicy,
+        }
+      case 'bearer':
+        return {
+          route_id: routeID,
+          type,
+          config: secret ? { secret } : {},
+          ...runtimePolicy,
+        }
+      case 'basic':
+        return {
+          route_id: routeID,
+          type,
+          config: {
+            username,
+            ...(hasPassword ? { password } : {}),
+          },
+          ...runtimePolicy,
+        }
+      case 'gateway':
+        return {
+          route_id: routeID,
+          type,
+          config: {
+            login_mode: loginMode || 'form',
+          },
+          ...runtimePolicy,
+        }
+      default:
+        return {
+          route_id: routeID,
+          type,
+          config: {},
+          ...runtimePolicy,
+        }
+    }
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    await onSubmit(form)
+    if (activeSubmitRef.current) {
+      return
+    }
+
+    const submitToken = Symbol('auth-rule-form-submit')
+    activeSubmitRef.current = submitToken
+    setError(null)
+    setSubmitting(true)
+    try {
+      await onSubmit(buildSubmitPayload())
+    } catch (err) {
+      setError(getLocalizedTextState(err))
+    } finally {
+      if (activeSubmitRef.current === submitToken) {
+        activeSubmitRef.current = null
+        setSubmitting(false)
+      }
+    }
   }
 
   const ruleTypeOptions = [
@@ -51,6 +203,8 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
+
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -95,7 +249,8 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             value={config.secret || ''}
             onChange={(event) => updateConfig({ secret: event.target.value })}
             placeholder="secret-value"
-            required
+            hint={isEditingSameType ? t('form.secretRetainedHint') : undefined}
+            required={shouldRequireAPIKeySecret}
           />
         </Card>
       )}
@@ -107,8 +262,8 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             value={config.secret || ''}
             onChange={(event) => updateConfig({ secret: event.target.value })}
             placeholder="jwt-signing-secret"
-            hint={t('form.jwtSecretHint')}
-            required
+            hint={isEditingSameType ? t('form.jwtSecretRetainedHint') : t('form.jwtSecretHint')}
+            required={shouldRequireBearerSecret}
           />
         </Card>
       )}
@@ -128,7 +283,8 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             value={config.password || ''}
             onChange={(event) => updateConfig({ password: event.target.value })}
             placeholder={t('form.passwordPlaceholder')}
-            required
+            hint={isEditingSameType ? t('form.passwordRetainedHint') : undefined}
+            required={shouldRequireBasicPassword}
           />
         </Card>
       )}
@@ -146,11 +302,84 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
         </Card>
       )}
 
+      <Card tone="soft" className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Input
+          label={t('form.whitelist')}
+          value={whitelistText}
+          onChange={(event) => {
+            setWhitelistText(event.target.value)
+            updatePolicy({ whitelist: normalizeListValue(event.target.value) })
+          }}
+          placeholder={t('form.whitelistPlaceholder')}
+          hint={t('form.whitelistHint')}
+        />
+        <Input
+          label={t('form.rateLimit')}
+          type="number"
+          min={0}
+          value={form.rate_limit ?? ''}
+          onChange={(event) => updatePolicy({ rate_limit: event.target.value === '' ? undefined : Number(event.target.value) })}
+          placeholder="15"
+          hint={t('form.rateLimitHint')}
+        />
+        <Input
+          label={t('form.burst')}
+          type="number"
+          min={0}
+          value={form.burst ?? ''}
+          onChange={(event) => updatePolicy({ burst: event.target.value === '' ? undefined : Number(event.target.value) })}
+          placeholder="30"
+          hint={t('form.burstHint')}
+        />
+      </Card>
+
+      <Card tone="soft" className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Input
+            label={t('form.allowedOrigins')}
+            value={form.cors_allowed_origins || ''}
+            onChange={(event) => updatePolicy({ cors_allowed_origins: event.target.value })}
+            placeholder="https://app.example.com, .example.com"
+            hint={t('form.allowedOriginsHint')}
+          />
+          <Input
+            label={t('form.allowedMethods')}
+            value={form.cors_allowed_methods || ''}
+            onChange={(event) => updatePolicy({ cors_allowed_methods: event.target.value })}
+            placeholder="GET,POST,OPTIONS"
+            hint={t('form.allowedMethodsHint')}
+          />
+          <Input
+            label={t('form.allowedHeaders')}
+            value={form.cors_allowed_headers || ''}
+            onChange={(event) => updatePolicy({ cors_allowed_headers: event.target.value })}
+            placeholder="Authorization,Content-Type"
+            hint={t('form.allowedHeadersHint')}
+          />
+          <Input
+            label={t('form.maxAge')}
+            type="number"
+            min={0}
+            value={form.cors_max_age ?? ''}
+            onChange={(event) => updatePolicy({ cors_max_age: event.target.value === '' ? undefined : Number(event.target.value) })}
+            placeholder="7200"
+            hint={t('form.maxAgeHint')}
+          />
+        </div>
+
+        <Switch
+          label={t('form.allowCredentials')}
+          description={t('form.allowCredentialsHint')}
+          checked={!!form.cors_allow_credentials}
+          onChange={(event) => updatePolicy({ cors_allow_credentials: event.target.checked })}
+        />
+      </Card>
+
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
           {t('common:actions.cancel')}
         </Button>
-        <Button type="submit" className="w-full md:w-auto">
+        <Button type="submit" className="w-full md:w-auto" loading={submitting}>
           {rule ? t('form.update') : t('form.create')}
         </Button>
       </div>

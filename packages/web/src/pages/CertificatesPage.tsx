@@ -5,34 +5,110 @@ import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { CertificateForm } from '../components/CertificateForm'
 import { Alert, Badge, Button, Card, EmptyState, MetricCard, Modal } from '../components/ui'
+import { ApiError } from '../lib/api/client'
+import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { certificatesApi } from '../lib/api/certificates'
 import { getSessionUser } from '../lib/session-store'
 import type { Certificate as CertificateType } from '../lib/api/types'
 
+const renewableDNSProviders = new Set(['cloudflare', 'route53'])
+
 export function CertificatesPage() {
   const { t, i18n } = useTranslation('certificates')
+  const sessionUser = getSessionUser()
   const [certificates, setCertificates] = React.useState<CertificateType[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState('')
+  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [certificateListUnavailable, setCertificateListUnavailable] = React.useState(false)
+  const [certificateDirectoryUnavailable, setCertificateDirectoryUnavailable] = React.useState(false)
   const [showForm, setShowForm] = React.useState(false)
-  const [renewingId, setRenewingId] = React.useState<string | null>(null)
-  const canManageCertificates = getSessionUser()?.permissions?.can_manage_routes !== false
+  const [renewingIds, setRenewingIds] = React.useState<string[]>([])
+  const activeRenewIdsRef = React.useRef(new Set<string>())
+  const requestGenerationRef = React.useRef(0)
+  const certificatesEnabled = sessionUser?.features?.certificates === true
+  const canManageCertificates =
+    certificatesEnabled && (sessionUser?.permissions?.can_manage_routes ?? false)
+  const showDirectoryMetrics = !certificateListUnavailable
+  const errorMessage = resolveLocalizedText(t, error)
 
-  const fetchData = React.useCallback(async () => {
-    try {
-      setError('')
-      const data = await certificatesApi.list()
-      setCertificates(data)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
+  const getErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (!(err instanceof ApiError)) {
+      return { translationKey: 'errors.network' }
+    }
+
+    switch (err.code) {
+      case 'unauthorized':
+      case 'invalid_token':
+        return { translationKey: 'errors.unauthorized' }
+      case 'insufficient_permissions':
+        return { translationKey: 'errors.insufficientPermissions' }
+      case 'cert_not_found':
+        return { translationKey: 'errors.certNotFound' }
+      case 'invalid_name':
+        return { translationKey: 'errors.invalidName' }
+      case 'invalid_domain':
+        return { translationKey: 'errors.invalidDomain' }
+      case 'domain_exists':
+        return { translationKey: 'errors.domainExists' }
+      case 'invalid_provider':
+        return { translationKey: 'errors.invalidProvider' }
+      case 'dns_provider_error':
+        return { translationKey: 'errors.dnsProvider' }
+      case 'acme_error':
+        return { translationKey: 'errors.acme' }
+      case 'cert_not_active':
+        return { translationKey: 'errors.certNotActive' }
+      case 'database_error':
+        return { translationKey: 'errors.certificateStoreFailure' }
+      default:
+        return { message: err.message }
     }
   }, [])
 
+  const getListErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (err instanceof ApiError && err.code === 'database_error') {
+      return { translationKey: 'errors.certificateDirectoryUnavailable' }
+    }
+
+    return getErrorState(err)
+  }, [getErrorState])
+
+  const fetchData = React.useCallback(async () => {
+    const requestGeneration = requestGenerationRef.current + 1
+    requestGenerationRef.current = requestGeneration
+
+    try {
+      setError(null)
+      setCertificateListUnavailable(false)
+      setCertificateDirectoryUnavailable(false)
+      const data = await certificatesApi.list()
+      if (requestGenerationRef.current !== requestGeneration) {
+        return
+      }
+      setCertificates(data)
+    } catch (e) {
+      if (requestGenerationRef.current !== requestGeneration) {
+        return
+      }
+      setCertificates([])
+      setCertificateListUnavailable(true)
+      setCertificateDirectoryUnavailable(e instanceof ApiError && e.code === 'database_error')
+      setError(getListErrorState(e))
+    } finally {
+      if (requestGenerationRef.current === requestGeneration) {
+        setLoading(false)
+      }
+    }
+  }, [getListErrorState])
+
   React.useEffect(() => {
+    if (!certificatesEnabled) {
+      setLoading(false)
+      return
+    }
+
     fetchData()
-  }, [fetchData])
+  }, [certificatesEnabled, fetchData])
 
   const handleCreate = async (data: { name: string; domain: string; dns_provider: string; provider_config: Record<string, string> }) => {
     try {
@@ -40,7 +116,7 @@ export function CertificatesPage() {
       setShowForm(false)
       await fetchData()
     } catch (e) {
-      setError((e as Error).message)
+      throw new LocalizedError(getErrorState(e))
     }
   }
 
@@ -50,20 +126,27 @@ export function CertificatesPage() {
       await certificatesApi.delete(cert.id)
       await fetchData()
     } catch (e) {
-      setError((e as Error).message)
+      setError(getErrorState(e))
     }
   }
 
   const handleRenew = async (cert: CertificateType) => {
+    if (activeRenewIdsRef.current.has(cert.id)) {
+      return
+    }
     if (!confirm(t('page.renewConfirm', { domain: cert.domain }))) return
     try {
-      setRenewingId(cert.id)
+      activeRenewIdsRef.current.add(cert.id)
+      setRenewingIds((current) => (
+        current.includes(cert.id) ? current : [...current, cert.id]
+      ))
       await certificatesApi.renew(cert.id)
       await fetchData()
     } catch (e) {
-      setError((e as Error).message)
+      setError(getErrorState(e))
     } finally {
-      setRenewingId(null)
+      activeRenewIdsRef.current.delete(cert.id)
+      setRenewingIds((current) => current.filter((id) => id !== cert.id))
     }
   }
 
@@ -98,6 +181,9 @@ export function CertificatesPage() {
     if (!provider) return t('page.noDate')
     return t(`providers.${provider}` as any, { defaultValue: provider })
   }
+
+  const canRenewCertificate = (certificate: CertificateType) =>
+    certificate.status === 'active' && renewableDNSProviders.has(certificate.dns_provider)
 
   const columns = [
     {
@@ -149,6 +235,27 @@ export function CertificatesPage() {
     },
   ]
 
+  if (!certificatesEnabled) {
+    return (
+      <div className="animate-rise-in">
+        <PageHeader
+          eyebrow={t('page.eyebrow')}
+          title={t('page.title')}
+          description={t('page.description')}
+          meta={<Badge variant="default">{t('page.badge')}</Badge>}
+        />
+
+        <Card padding="lg">
+          <EmptyState
+            icon={<FileKey className="h-8 w-8" />}
+            title={t('page.disabledTitle')}
+            description={t('page.disabledDescription')}
+          />
+        </Card>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -169,11 +276,13 @@ export function CertificatesPage() {
         meta={
           <>
             <Badge variant="primary">{t('page.badge')}</Badge>
-            <span className="text-sm text-[var(--text-muted)]">{t('page.count', { count: certificates.length })}</span>
+            {showDirectoryMetrics ? (
+              <span className="text-sm text-[var(--text-muted)]">{t('page.count', { count: certificates.length })}</span>
+            ) : null}
           </>
         }
         action={
-          canManageCertificates ? (
+          canManageCertificates && !certificateListUnavailable ? (
             <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowForm(true)}>
               {t('page.provision')}
             </Button>
@@ -181,35 +290,37 @@ export function CertificatesPage() {
         }
       />
 
-      {error && (
+      {errorMessage && (
         <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
-          {error}
+          {errorMessage}
         </Alert>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard
-          label={t('page.activeCertificates')}
-          value={activeCount}
-          hint={t('page.activeCertificatesHint')}
-          icon={<FileKey className="h-5 w-5" />}
-          tone="primary"
-        />
-        <MetricCard
-          label={t('page.inProgress')}
-          value={pendingCount}
-          hint={t('page.inProgressHint')}
-          icon={<RefreshCw className="h-5 w-5" />}
-          tone="warning"
-        />
-        <MetricCard
-          label={t('page.failed')}
-          value={failedCount}
-          hint={t('page.failedHint')}
-          icon={<Key className="h-5 w-5" />}
-          tone="error"
-        />
-      </div>
+      {showDirectoryMetrics ? (
+        <div className="mb-6 grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label={t('page.activeCertificates')}
+            value={activeCount}
+            hint={t('page.activeCertificatesHint')}
+            icon={<FileKey className="h-5 w-5" />}
+            tone="primary"
+          />
+          <MetricCard
+            label={t('page.inProgress')}
+            value={pendingCount}
+            hint={t('page.inProgressHint')}
+            icon={<RefreshCw className="h-5 w-5" />}
+            tone="warning"
+          />
+          <MetricCard
+            label={t('page.failed')}
+            value={failedCount}
+            hint={t('page.failedHint')}
+            icon={<Key className="h-5 w-5" />}
+            tone="error"
+          />
+        </div>
+      ) : null}
 
       <Card padding="lg" className="space-y-5">
         <div>
@@ -227,9 +338,27 @@ export function CertificatesPage() {
         {certificates.length === 0 ? (
           <EmptyState
             icon={<FileKey className="h-8 w-8" />}
-            title={t('page.emptyTitle')}
-            description={t('page.emptyDescription')}
-            action={canManageCertificates ? <Button onClick={() => setShowForm(true)}>{t('page.provisionFirst')}</Button> : undefined}
+            title={
+              certificateDirectoryUnavailable
+                ? t('page.directoryUnavailableTitle')
+                : certificateListUnavailable
+                ? t('page.listUnavailableTitle')
+                : t('page.emptyTitle')
+            }
+            description={
+              certificateDirectoryUnavailable
+                ? t('page.directoryUnavailableDescription')
+                : certificateListUnavailable
+                ? t('page.listUnavailableDescription')
+                : canManageCertificates
+                ? t('page.emptyDescription')
+                : t('page.readOnlyEmptyDescription')
+            }
+            action={
+              canManageCertificates && !certificateListUnavailable
+                ? <Button onClick={() => setShowForm(true)}>{t('page.provisionFirst')}</Button>
+                : undefined
+            }
           />
         ) : (
           <DataTable
@@ -237,14 +366,15 @@ export function CertificatesPage() {
             data={certificates}
             onDelete={canManageCertificates ? handleDelete : undefined}
             extraActions={(row: CertificateType) => (
-              canManageCertificates && row.status === 'active' ? (
+              canManageCertificates && canRenewCertificate(row) ? (
                 <button
+                  type="button"
                   onClick={() => handleRenew(row)}
-                  disabled={renewingId === row.id}
+                  disabled={renewingIds.includes(row.id)}
                   className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[var(--primary-600)] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-50"
                 >
-                  <RefreshCw className={`h-4 w-4 ${renewingId === row.id ? 'animate-spin' : ''}`} />
-                  {renewingId === row.id ? t('page.renewing') : t('page.renew')}
+                  <RefreshCw className={`h-4 w-4 ${renewingIds.includes(row.id) ? 'animate-spin' : ''}`} />
+                  {renewingIds.includes(row.id) ? t('page.renewing') : t('page.renew')}
                 </button>
               ) : null
             )}

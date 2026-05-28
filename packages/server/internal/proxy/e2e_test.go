@@ -18,6 +18,9 @@ import (
 
 // TestRateLimit_429 verifies that requests exceeding the token bucket burst
 // return HTTP 429 with a Retry-After header.
+//
+// Use a low steady-state rate so backend roundtrip latency does not refill
+// the bucket fast enough to hide the burst limit during the test.
 func TestRateLimit_429(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -41,8 +44,8 @@ func TestRateLimit_429(t *testing.T) {
 	if err := db.CreateAuthRule(&store.AuthRule{
 		RouteID:   "rl-route",
 		Type:      "none",
-		RateLimit: 1000, // high rate per second
-		Burst:     2,    // but only 2 allowed in a burst
+		RateLimit: 1, // one request per second after the initial burst
+		Burst:     2,
 	}); err != nil {
 		t.Fatalf("CreateAuthRule error: %v", err)
 	}
@@ -52,7 +55,8 @@ func TestRateLimit_429(t *testing.T) {
 	engine.Any("/*path", Handler(mgr))
 
 	// Send 5 requests as fast as possible from the same client IP.
-	// The token bucket allows the first `Burst` requests, then rejects.
+	// With a 1 req/sec refill rate, only the first two should fit in the
+	// initial burst window before 429 responses start.
 	allowed := 0
 	rejected := 0
 	for i := 0; i < 5; i++ {

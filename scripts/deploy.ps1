@@ -38,7 +38,7 @@ $proc = Start-Process -FilePath ".\auth-gate.exe" -PassThru -NoNewWindow
 if ($proc) {
     Write-Host ""
     Write-Host "=== Deploy complete ===" -ForegroundColor Green
-    Write-Host "Service started on http://localhost:8080" -ForegroundColor Cyan
+    Write-Host "Control plane: http://localhost:8080/_authgate" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
     

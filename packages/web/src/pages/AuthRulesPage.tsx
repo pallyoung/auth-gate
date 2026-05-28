@@ -5,33 +5,120 @@ import { AuthRuleForm } from '../components/AuthRuleForm'
 import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { Alert, Badge, Button, Card, EmptyState, MetricCard, Modal } from '../components/ui'
+import { ApiError } from '../lib/api/client'
+import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { authRulesApi } from '../lib/api/auth-rules'
 import { routesApi } from '../lib/api/routes'
 import { getSessionUser } from '../lib/session-store'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 
 export function AuthRulesPage() {
-  const { t } = useTranslation('authRules')
+  const { t } = useTranslation(['authRules', 'routes'])
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [rules, setRules] = React.useState<AuthRule[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showForm, setShowForm] = React.useState(false)
   const [editingRule, setEditingRule] = React.useState<AuthRule | null>(null)
-  const [error, setError] = React.useState('')
+  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [authRuleListUnavailable, setAuthRuleListUnavailable] = React.useState(false)
+  const [authRuleDirectoryUnavailable, setAuthRuleDirectoryUnavailable] = React.useState(false)
+  const [routeListUnavailable, setRouteListUnavailable] = React.useState(false)
   const canManageAuth = getSessionUser()?.permissions?.can_manage_auth ?? false
+  const requestGenerationRef = React.useRef(0)
+  const hasAvailableRoutes = routes.length > 0
+  const showDirectoryMetrics = !authRuleListUnavailable
+  const errorMessage = resolveLocalizedText(t, error)
 
-  const fetchData = React.useCallback(async () => {
-    try {
-      setError('')
-      const [routesRes, rulesRes] = await Promise.all([routesApi.list(), authRulesApi.list()])
-      setRoutes(routesRes)
-      setRules(rulesRes)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
+  const getErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (!(err instanceof ApiError)) {
+      return { translationKey: 'errors.network' }
+    }
+
+    switch (err.code) {
+      case 'unauthorized':
+      case 'invalid_token':
+        return { translationKey: 'errors.unauthorized' }
+      case 'insufficient_permissions':
+        return { translationKey: 'errors.insufficientPermissions' }
+      case 'auth_rule_not_found':
+        return { translationKey: 'errors.authRuleNotFound' }
+      case 'route_not_found':
+        return { translationKey: 'errors.routeNotFound' }
+      case 'route_id_required':
+        return { translationKey: 'errors.routeIDRequired' }
+      case 'invalid_auth_rule_type':
+        return { translationKey: 'errors.invalidAuthRuleType' }
+      case 'missing_apikey_secret':
+        return { translationKey: 'errors.missingAPIKeySecret' }
+      case 'missing_bearer_secret':
+        return { translationKey: 'errors.missingBearerSecret' }
+      case 'missing_basic_credentials':
+        return { translationKey: 'errors.missingBasicCredentials' }
+      case 'duplicate_route_auth_rule':
+        return { translationKey: 'errors.duplicateRouteAuthRule' }
+      case 'route_store_failure':
+        return { translationKey: 'errors.routeStoreFailure' }
+      case 'auth_rule_store_failure':
+        return { translationKey: 'errors.authRuleStoreFailure' }
+      default:
+        return { message: err.message }
     }
   }, [])
+
+  const getListErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (err instanceof ApiError && err.code === 'auth_rule_store_failure') {
+      return { translationKey: 'errors.authRuleDirectoryUnavailable' }
+    }
+
+    return getErrorState(err)
+  }, [getErrorState])
+
+  const fetchData = React.useCallback(async () => {
+    const requestGeneration = requestGenerationRef.current + 1
+    requestGenerationRef.current = requestGeneration
+
+    try {
+      setError(null)
+      setAuthRuleListUnavailable(false)
+      setAuthRuleDirectoryUnavailable(false)
+      setRouteListUnavailable(false)
+      const [routesResult, rulesResult] = await Promise.allSettled([routesApi.list(), authRulesApi.list()])
+
+      if (requestGenerationRef.current !== requestGeneration) {
+        return
+      }
+
+      if (routesResult.status === 'fulfilled') {
+        setRoutes(routesResult.value)
+      } else {
+        setRoutes([])
+        setRouteListUnavailable(true)
+      }
+
+      if (rulesResult.status === 'fulfilled') {
+        setRules(rulesResult.value)
+      } else {
+        setRules([])
+        setAuthRuleListUnavailable(true)
+        setAuthRuleDirectoryUnavailable(
+          rulesResult.reason instanceof ApiError && rulesResult.reason.code === 'auth_rule_store_failure'
+        )
+      }
+
+      if (rulesResult.status === 'rejected') {
+        setError(getListErrorState(rulesResult.reason))
+        return
+      }
+
+      if (routesResult.status === 'rejected') {
+        setError(getErrorState(routesResult.reason))
+      }
+    } finally {
+      if (requestGenerationRef.current === requestGeneration) {
+        setLoading(false)
+      }
+    }
+  }, [getErrorState, getListErrorState])
 
   React.useEffect(() => {
     fetchData()
@@ -42,8 +129,8 @@ export function AuthRulesPage() {
     try {
       await authRulesApi.delete(rule.id)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      setError(getErrorState(err))
     }
   }
 
@@ -52,8 +139,8 @@ export function AuthRulesPage() {
       await authRulesApi.create(data)
       setShowForm(false)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      throw new LocalizedError(getErrorState(err))
     }
   }
 
@@ -64,8 +151,8 @@ export function AuthRulesPage() {
       setShowForm(false)
       setEditingRule(null)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      throw new LocalizedError(getErrorState(err))
     }
   }
 
@@ -123,6 +210,29 @@ export function AuthRulesPage() {
         return t('page.noCredentials')
       },
     },
+    {
+      key: 'id',
+      header: t('table.runtimePolicy'),
+      render: (_value: string, row: AuthRule) => {
+        const summaries = [
+          row.rate_limit || row.burst ? t('page.rateLimitSummary', { rate: row.rate_limit || 0, burst: row.burst || 0 }) : null,
+          row.whitelist?.length ? t('page.whitelistSummary', { count: row.whitelist.length }) : null,
+          row.cors_allowed_origins ? t('page.corsSummary', { origins: row.cors_allowed_origins }) : null,
+        ].filter(Boolean)
+
+        if (summaries.length === 0) {
+          return <span className="text-sm text-[var(--text-muted)]">{t('page.noRuntimePolicy')}</span>
+        }
+
+        return (
+          <div className="space-y-1 text-sm text-[var(--text-primary)]">
+            {summaries.map((summary) => (
+              <div key={summary}>{summary}</div>
+            ))}
+          </div>
+        )
+      },
+    },
   ]
 
   if (loading) {
@@ -145,13 +255,15 @@ export function AuthRulesPage() {
         meta={
           <>
             <Badge variant="primary">{t('page.badge')}</Badge>
-            <span className="text-sm text-[var(--text-muted)]">
-              {t('page.activeRuleDefinitions', { count: rules.length })}
-            </span>
+            {showDirectoryMetrics ? (
+              <span className="text-sm text-[var(--text-muted)]">
+                {t('page.activeRuleDefinitions', { count: rules.length })}
+              </span>
+            ) : null}
           </>
         }
         action={
-          canManageAuth ? (
+          canManageAuth && hasAvailableRoutes && !authRuleListUnavailable ? (
             <Button
               icon={<Plus className="h-4 w-4" />}
               onClick={() => {
@@ -165,34 +277,36 @@ export function AuthRulesPage() {
         }
       />
 
-      {error && (
+      {errorMessage && (
         <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
-          {error}
+          {errorMessage}
         </Alert>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard
-          label={t('page.protectedRoutes')}
-          value={new Set(rules.map((rule) => rule.route_id)).size}
-          hint={t('page.protectedRoutesHint')}
-          icon={<Shield className="h-5 w-5" />}
-          tone="primary"
-        />
-        <MetricCard
-          label={t('page.apiKeyRules')}
-          value={typeCounts.apikey || 0}
-          hint={t('page.apiKeyRulesHint')}
-          icon={<KeyRound className="h-5 w-5" />}
-          tone="accent"
-        />
-        <MetricCard
-          label={t('page.bearerAndBasic')}
-          value={(typeCounts.bearer || 0) + (typeCounts.basic || 0)}
-          hint={t('page.bearerAndBasicHint')}
-          icon={<LockKeyhole className="h-5 w-5" />}
-        />
-      </div>
+      {showDirectoryMetrics ? (
+        <div className="mb-6 grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label={t('page.protectedRoutes')}
+            value={new Set(rules.map((rule) => rule.route_id)).size}
+            hint={t('page.protectedRoutesHint')}
+            icon={<Shield className="h-5 w-5" />}
+            tone="primary"
+          />
+          <MetricCard
+            label={t('page.apiKeyRules')}
+            value={typeCounts.apikey || 0}
+            hint={t('page.apiKeyRulesHint')}
+            icon={<KeyRound className="h-5 w-5" />}
+            tone="accent"
+          />
+          <MetricCard
+            label={t('page.bearerAndBasic')}
+            value={(typeCounts.bearer || 0) + (typeCounts.basic || 0)}
+            hint={t('page.bearerAndBasicHint')}
+            icon={<LockKeyhole className="h-5 w-5" />}
+          />
+        </div>
+      ) : null}
 
       <Card padding="lg" className="space-y-5">
         <div>
@@ -210,15 +324,50 @@ export function AuthRulesPage() {
         {rules.length === 0 ? (
           <EmptyState
             icon={<Shield className="h-8 w-8" />}
-            title={t('page.emptyTitle')}
-            description={t('page.emptyDescription')}
-            action={canManageAuth ? <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button> : undefined}
+            title={
+              authRuleDirectoryUnavailable
+                ? t('page.directoryUnavailableTitle')
+                : authRuleListUnavailable
+                ? t('page.listUnavailableTitle')
+                : t('page.emptyTitle')
+            }
+            description={
+              authRuleDirectoryUnavailable
+                ? t('page.directoryUnavailableDescription')
+                : authRuleListUnavailable
+                ? t('page.listUnavailableDescription')
+                : canManageAuth
+                ? routeListUnavailable
+                  ? t('page.routeLoadUnavailableDescription')
+                  : hasAvailableRoutes
+                  ? t('page.emptyDescription')
+                  : t('page.noRoutesDescription')
+                : t('page.readOnlyEmptyDescription')
+            }
+            action={
+              canManageAuth && !authRuleListUnavailable ? (
+                routeListUnavailable ? undefined : hasAvailableRoutes ? (
+                  <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button>
+                ) : (
+                  <Button onClick={() => { window.location.hash = '/' }}>
+                    {t('routes:page.createFirst')}
+                  </Button>
+                )
+              ) : undefined
+            }
           />
         ) : (
           <DataTable
             columns={columns}
             data={rules}
-            onEdit={canManageAuth ? (rule) => { setEditingRule(rule); setShowForm(true) } : undefined}
+            onEdit={
+              canManageAuth && !routeListUnavailable
+                ? (rule) => {
+                    setEditingRule(rule)
+                    setShowForm(true)
+                  }
+                : undefined
+            }
             onDelete={canManageAuth ? handleDelete : undefined}
           />
         )}

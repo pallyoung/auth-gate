@@ -7,11 +7,16 @@ import { configApi } from '../lib/api/config'
 import { ApiError } from '../lib/api/client'
 import { getSessionUser } from '../lib/session-store'
 
+type SettingsAlertState = {
+  translationKey: string
+} | null
+
 export function SettingsPage() {
   const { t } = useTranslation(['settings', 'users'])
   const [reloading, setReloading] = React.useState(false)
-  const [message, setMessage] = React.useState('')
-  const [error, setError] = React.useState('')
+  const [message, setMessage] = React.useState<SettingsAlertState>(null)
+  const [error, setError] = React.useState<SettingsAlertState>(null)
+  const activeReloadRef = React.useRef<symbol | null>(null)
 
   const sessionUser = getSessionUser()
   const canReload =
@@ -32,22 +37,43 @@ export function SettingsPage() {
     }
   }
 
+  const getReloadErrorState = (err: unknown): Exclude<SettingsAlertState, null> => {
+    if (!(err instanceof ApiError)) {
+      return { translationKey: 'page.reloadFallback' }
+    }
+
+    switch (err.code) {
+      case 'unauthorized':
+      case 'invalid_token':
+        return { translationKey: 'page.reloadUnauthorized' }
+      case 'insufficient_permissions':
+        return { translationKey: 'page.reloadForbidden' }
+      default:
+        return { translationKey: 'page.reloadFallback' }
+    }
+  }
+
   const handleReload = async () => {
+    if (activeReloadRef.current) {
+      return
+    }
+
+    const reloadToken = Symbol('settings-reload')
+    activeReloadRef.current = reloadToken
     setReloading(true)
-    setMessage('')
-    setError('')
+    setMessage(null)
+    setError(null)
 
     try {
-      const result = await configApi.reload()
-      setMessage(result.message)
+      await configApi.reload()
+      setMessage({ translationKey: 'page.reloadSuccessMessage' })
     } catch (e) {
-      if (e instanceof ApiError) {
-        setError(e.message)
-      } else {
-        setError(t('page.reloadFallback'))
-      }
+      setError(getReloadErrorState(e))
     } finally {
-      setReloading(false)
+      if (activeReloadRef.current === reloadToken) {
+        activeReloadRef.current = null
+        setReloading(false)
+      }
     }
   }
 
@@ -59,14 +85,14 @@ export function SettingsPage() {
         description={t('page.description')}
       />
 
-      {message && (
+      {message?.translationKey && (
         <Alert variant="success" title={t('page.successTitle')} className="mb-5">
-          {message}
+          {t(message.translationKey as any)}
         </Alert>
       )}
-      {error && (
+      {error?.translationKey && (
         <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
-          {error}
+          {t(error.translationKey as any)}
         </Alert>
       )}
 

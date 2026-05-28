@@ -96,6 +96,23 @@ func TestMatch_EmptyHostMatchesAll(t *testing.T) {
 	}
 }
 
+func TestMatch_HostIsCaseInsensitive(t *testing.T) {
+	m, cleanup := newTestManager(t)
+	defer cleanup()
+
+	for _, r := range []store.Route{
+		{ID: "1", Host: "api.example.com", PathPrefix: "/api", Backend: "http://localhost:3000", Enabled: true, Priority: 0},
+	} {
+		m.db.CreateRoute(&r)
+	}
+	m.loadRoutes()
+
+	r := m.Match("API.EXAMPLE.COM", "/api/users")
+	if r == nil || r.ID != "1" {
+		t.Fatalf("Match(%q, %q) = %v, want route 1", "API.EXAMPLE.COM", "/api/users", r)
+	}
+}
+
 func TestMatch_DisabledRoutes(t *testing.T) {
 	m, cleanup := newTestManager(t)
 	defer cleanup()
@@ -182,6 +199,26 @@ func TestMatch_PriorityTieBrokenByPathLength(t *testing.T) {
 	r := m.Match("example.com", "/api/internal/users")
 	if r == nil || r.ID != "longer" {
 		t.Errorf("Match returned %v, want longer (same priority, longer path)", r)
+	}
+}
+
+func TestMatch_SkipsRouteWithUnsupportedStoredPathMatchMode(t *testing.T) {
+	m, cleanup := newTestManager(t)
+	defer cleanup()
+
+	for _, r := range []store.Route{
+		{ID: "invalid", Host: "example.com", PathPrefix: "/admin", Backend: "http://invalid", Enabled: true, PathMatchMode: "glob"},
+		{ID: "fallback", Host: "example.com", PathPrefix: "/", Backend: "http://fallback", Enabled: true},
+	} {
+		if err := m.db.CreateRoute(&r); err != nil {
+			t.Fatalf("CreateRoute() error = %v", err)
+		}
+	}
+	m.loadRoutes()
+
+	r := m.Match("example.com", "/admin/users")
+	if r == nil || r.ID != "fallback" {
+		t.Fatalf("Match() = %v, want fallback route when stored path_match_mode is unsupported", r)
 	}
 }
 

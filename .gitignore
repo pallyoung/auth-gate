@@ -45,3 +45,10 @@ logs/
 dist/
 .coder-studio
 output
+
+# Local tooling artifacts
+.playwright-cli/
+
+# Temporary server run artifacts
+packages/server/config.yaml
+packages/server/tmp.*/

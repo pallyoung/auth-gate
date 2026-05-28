@@ -5,6 +5,8 @@ import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { UserForm } from '../components/UserForm'
 import { Alert, Badge, Button, Card, EmptyState, MetricCard, Modal } from '../components/ui'
+import { ApiError } from '../lib/api/client'
+import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { routesApi } from '../lib/api/routes'
 import { usersApi } from '../lib/api/users'
 import { getSessionUser } from '../lib/session-store'
@@ -15,35 +17,123 @@ export function UsersPage() {
   const [users, setUsers] = React.useState<User[]>([])
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState('')
+  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [userListUnavailable, setUserListUnavailable] = React.useState(false)
+  const [userDirectoryUnavailable, setUserDirectoryUnavailable] = React.useState(false)
+  const [routeListUnavailable, setRouteListUnavailable] = React.useState(false)
   const [showForm, setShowForm] = React.useState(false)
   const [editingUser, setEditingUser] = React.useState<User | null>(null)
+  const requestGenerationRef = React.useRef(0)
   const canManageUsers = getSessionUser()?.permissions?.can_manage_users ?? false
+  const showDirectoryMetrics = !userListUnavailable
+  const errorMessage = resolveLocalizedText(t, error)
 
-  const fetchData = React.useCallback(async () => {
-    try {
-      setError('')
-      const [usersRes, routesRes] = await Promise.all([usersApi.list(), routesApi.list()])
-      setUsers(usersRes)
-      setRoutes(routesRes)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
+  const getErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (!(err instanceof ApiError)) {
+      return { translationKey: 'errors.network' }
+    }
+
+    switch (err.code) {
+      case 'unauthorized':
+      case 'invalid_token':
+        return { translationKey: 'errors.unauthorized' }
+      case 'insufficient_permissions':
+        return { translationKey: 'errors.insufficientPermissions' }
+      case 'user_not_found':
+        return { translationKey: 'errors.userNotFound' }
+      case 'invalid_username':
+        return { translationKey: 'errors.invalidUsername' }
+      case 'invalid_role':
+        return { translationKey: 'errors.invalidRole' }
+      case 'duplicate_user':
+        return { translationKey: 'errors.duplicateUser' }
+      case 'duplicate_route_access':
+        return { translationKey: 'errors.duplicateRouteAccess' }
+      case 'route_not_found':
+        return { translationKey: 'errors.routeNotFound' }
+      case 'route_store_failure':
+        return { translationKey: 'errors.routeStoreFailure' }
+      case 'missing_password':
+        return { translationKey: 'errors.missingPassword' }
+      case 'password_hash_failed':
+      case 'user_store_failure':
+        return { translationKey: 'errors.userStoreFailure' }
+      default:
+        return { message: err.message }
     }
   }, [])
 
+  const getListErrorState = React.useCallback((err: unknown): Exclude<LocalizedTextState, null> => {
+    if (err instanceof ApiError && err.code === 'user_store_failure') {
+      return { translationKey: 'errors.userDirectoryUnavailable' }
+    }
+
+    return getErrorState(err)
+  }, [getErrorState])
+
+  const fetchData = React.useCallback(async () => {
+    const requestGeneration = requestGenerationRef.current + 1
+    requestGenerationRef.current = requestGeneration
+
+    try {
+      setError(null)
+      setUserListUnavailable(false)
+      setUserDirectoryUnavailable(false)
+      setRouteListUnavailable(false)
+      const [usersResult, routesResult] = await Promise.allSettled([usersApi.list(), routesApi.list()])
+
+      if (requestGenerationRef.current !== requestGeneration) {
+        return
+      }
+
+      if (usersResult.status === 'fulfilled') {
+        setUsers(usersResult.value)
+      } else {
+        setUsers([])
+        setUserListUnavailable(true)
+        setUserDirectoryUnavailable(
+          usersResult.reason instanceof ApiError && usersResult.reason.code === 'user_store_failure'
+        )
+      }
+
+      if (routesResult.status === 'fulfilled') {
+        setRoutes(routesResult.value)
+      } else {
+        setRoutes([])
+        setRouteListUnavailable(true)
+      }
+
+      if (usersResult.status === 'rejected') {
+        setError(getListErrorState(usersResult.reason))
+        return
+      }
+
+      if (routesResult.status === 'rejected') {
+        setError(getErrorState(routesResult.reason))
+      }
+    } finally {
+      if (requestGenerationRef.current === requestGeneration) {
+        setLoading(false)
+      }
+    }
+  }, [getErrorState, getListErrorState])
+
   React.useEffect(() => {
+    if (!canManageUsers) {
+      setLoading(false)
+      return
+    }
+
     fetchData()
-  }, [fetchData])
+  }, [canManageUsers, fetchData])
 
   const handleCreate = async (data: UserInput) => {
     try {
       await usersApi.create(data)
       setShowForm(false)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      throw new LocalizedError(getErrorState(err))
     }
   }
 
@@ -54,8 +144,8 @@ export function UsersPage() {
       setShowForm(false)
       setEditingUser(null)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      throw new LocalizedError(getErrorState(err))
     }
   }
 
@@ -64,13 +154,14 @@ export function UsersPage() {
     try {
       await usersApi.delete(user.id)
       await fetchData()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch (err) {
+      setError(getErrorState(err))
     }
   }
 
-  const memberCount = users.filter((user) => user.role === 'member').length
+  const routeAccessUserCount = users.filter((user) => (user.route_ids?.length ?? 0) > 0).length
   const enabledCount = users.filter((user) => user.enabled !== false).length
+  const operatorCount = users.filter((user) => user.role !== 'member').length
 
   const roleLabel = (value: string) => {
     switch (value) {
@@ -120,12 +211,32 @@ export function UsersPage() {
       key: 'route_ids',
       header: t('table.accessScope'),
       render: (value: string[], row: User) => {
-        if (row.role === 'admin' || row.role === 'editor') return t('page.allRoutes')
         if (!value || value.length === 0) return t('page.noAssignedRoutes')
         return t('routeCount', { count: value.length })
       },
     },
   ]
+
+  if (!canManageUsers) {
+    return (
+      <div className="animate-rise-in">
+        <PageHeader
+          eyebrow={t('page.eyebrow')}
+          title={t('page.title')}
+          description={t('page.description')}
+          meta={<Badge variant="default">{t('page.badge')}</Badge>}
+        />
+
+        <Card padding="lg">
+          <EmptyState
+            icon={<UserRound className="h-8 w-8" />}
+            title={t('page.disabledTitle')}
+            description={t('page.disabledDescription')}
+          />
+        </Card>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -147,11 +258,13 @@ export function UsersPage() {
         meta={
           <>
             <Badge variant="primary">{t('page.badge')}</Badge>
-            <span className="text-sm text-[var(--text-muted)]">{t('page.managedUsers', { count: users.length })}</span>
+            {showDirectoryMetrics ? (
+              <span className="text-sm text-[var(--text-muted)]">{t('page.managedUsers', { count: users.length })}</span>
+            ) : null}
           </>
         }
         action={
-          canManageUsers ? (
+          canManageUsers && !userListUnavailable ? (
             <Button
               icon={<Plus className="h-4 w-4" />}
               onClick={() => {
@@ -165,34 +278,36 @@ export function UsersPage() {
         }
       />
 
-      {error && (
+      {errorMessage && (
         <Alert variant="error" title={t('page.errorTitle')} className="mb-5">
-          {error}
+          {errorMessage}
         </Alert>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <MetricCard
-          label={t('page.enabledUsers')}
-          value={enabledCount}
-          hint={t('page.enabledUsersHint')}
-          icon={<ShieldCheck className="h-5 w-5" />}
-          tone="primary"
-        />
-        <MetricCard
-          label={t('page.routeMembers')}
-          value={memberCount}
-          hint={t('page.routeMembersHint')}
-          icon={<LockKeyhole className="h-5 w-5" />}
-          tone="accent"
-        />
-        <MetricCard
-          label={t('page.operators')}
-          value={users.filter((user) => user.role !== 'member').length}
-          hint={t('page.operatorsHint')}
-          icon={<UserRound className="h-5 w-5" />}
-        />
-      </div>
+      {showDirectoryMetrics ? (
+        <div className="mb-6 grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label={t('page.enabledUsers')}
+            value={enabledCount}
+            hint={t('page.enabledUsersHint')}
+            icon={<ShieldCheck className="h-5 w-5" />}
+            tone="primary"
+          />
+          <MetricCard
+            label={t('page.routeAccessUsers')}
+            value={routeAccessUserCount}
+            hint={t('page.routeAccessUsersHint')}
+            icon={<LockKeyhole className="h-5 w-5" />}
+            tone="accent"
+          />
+          <MetricCard
+            label={t('page.operators')}
+            value={operatorCount}
+            hint={t('page.operatorsHint')}
+            icon={<UserRound className="h-5 w-5" />}
+          />
+        </div>
+      ) : null}
 
       <Card padding="lg" className="space-y-5">
         <div>
@@ -210,9 +325,25 @@ export function UsersPage() {
         {users.length === 0 ? (
           <EmptyState
             icon={<UserRound className="h-8 w-8" />}
-            title={t('page.emptyTitle')}
-            description={t('page.emptyDescription')}
-            action={canManageUsers ? <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button> : undefined}
+            title={
+              userDirectoryUnavailable
+                ? t('page.directoryUnavailableTitle')
+                : userListUnavailable
+                ? t('page.listUnavailableTitle')
+                : t('page.emptyTitle')
+            }
+            description={
+              userDirectoryUnavailable
+                ? t('page.directoryUnavailableDescription')
+                : userListUnavailable
+                ? t('page.listUnavailableDescription')
+                : t('page.emptyDescription')
+            }
+            action={
+              canManageUsers && !userListUnavailable
+                ? <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button>
+                : undefined
+            }
           />
         ) : (
           <DataTable
@@ -235,6 +366,7 @@ export function UsersPage() {
         <UserForm
           user={editingUser}
           routes={routes}
+          routeListUnavailable={routeListUnavailable}
           onSubmit={editingUser ? handleUpdate : handleCreate}
           onCancel={() => {
             setShowForm(false)

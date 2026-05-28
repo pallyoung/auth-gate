@@ -3,20 +3,28 @@ package routes
 import (
 	"database/sql"
 	"errors"
+	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
+	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/service/runtime"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
 const (
-	ErrCodeRouteNotFound         = "route_not_found"
-	ErrCodeMissingRouteFields    = "missing_route_fields"
-	ErrCodeInvalidRoutePathPrefix = "invalid_route_path_prefix"
-	ErrCodeReservedRoutePathPrefix = "reserved_route_path_prefix"
-	ErrCodeInvalidRouteBackend   = "invalid_route_backend"
-	ErrCodeRouteStoreFailure     = "route_store_failure"
+	ErrCodeRouteNotFound             = "route_not_found"
+	ErrCodeMissingRouteFields        = "missing_route_fields"
+	ErrCodeInvalidRoutePathPrefix    = "invalid_route_path_prefix"
+	ErrCodeInvalidRoutePathMatchMode = "invalid_route_path_match_mode"
+	ErrCodeInvalidRoutePathRegex     = "invalid_route_path_regex"
+	ErrCodeReservedRoutePathPrefix   = "reserved_route_path_prefix"
+	ErrCodeInvalidRouteHost          = "invalid_route_host"
+	ErrCodeInvalidRouteBackend       = "invalid_route_backend"
+	ErrCodeInvalidRouteBackendWeight = "invalid_route_backend_weight"
+	ErrCodeInvalidRouteRedirectCode  = "invalid_route_redirect_code"
+	ErrCodeRouteStoreFailure         = "route_store_failure"
 )
 
 const controlPlaneReservedPathPrefix = "/_authgate"
@@ -67,13 +75,32 @@ type CreateInput struct {
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool
+	TimeoutMs     int
+	RetryAttempts int
 	Backends      []store.Backend
 	PathMatchMode string
 	RewriteTarget string
 	RedirectCode  int
 }
 
-type UpdateInput = CreateInput
+type UpdateInput struct {
+	Name          *string
+	Host          *string
+	PathPrefix    *string
+	Backend       *string
+	StripPrefix   *bool
+	Enabled       *bool
+	Priority      *int
+	TLSCert       *string
+	TLSKey        *string
+	TLSEnabled    *bool
+	TimeoutMs     *int
+	RetryAttempts *int
+	Backends      *[]store.Backend
+	PathMatchMode *string
+	RewriteTarget *string
+	RedirectCode  *int
+}
 
 func NewService(db *store.SQLite, reloader runtime.Reloader) *Service {
 	return &Service{
@@ -87,6 +114,9 @@ func (s *Service) List() ([]store.Route, error) {
 	if err != nil {
 		return nil, newError(ErrCodeRouteStoreFailure, "failed to list routes", err)
 	}
+	for i := range routes {
+		routes[i] = normalizeStoredRoute(routes[i])
+	}
 	return routes, nil
 }
 
@@ -98,13 +128,14 @@ func (s *Service) Get(id string) (*store.Route, error) {
 		}
 		return nil, newError(ErrCodeRouteStoreFailure, "failed to get route", err)
 	}
-	return route, nil
+	normalized := normalizeStoredRoute(*route)
+	return &normalized, nil
 }
 
 func (s *Service) Create(input CreateInput) (*store.Route, error) {
 	route := &store.Route{
 		Name:          strings.TrimSpace(input.Name),
-		Host:          strings.TrimSpace(input.Host),
+		Host:          normalizeHost(input.Host),
 		PathPrefix:    strings.TrimSpace(input.PathPrefix),
 		Backend:       strings.TrimSpace(input.Backend),
 		StripPrefix:   input.StripPrefix,
@@ -113,11 +144,14 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 		TLSCert:       strings.TrimSpace(input.TLSCert),
 		TLSKey:        strings.TrimSpace(input.TLSKey),
 		TLSEnabled:    input.TLSEnabled,
+		TimeoutMs:     input.TimeoutMs,
+		RetryAttempts: input.RetryAttempts,
 		Backends:      input.Backends,
-		PathMatchMode: input.PathMatchMode,
-		RewriteTarget: input.RewriteTarget,
+		PathMatchMode: normalizePathMatchMode(input.PathMatchMode),
+		RewriteTarget: strings.TrimSpace(input.RewriteTarget),
 		RedirectCode:  input.RedirectCode,
 	}
+	route.Backends = normalizeBackends(route.Backends)
 	if err := validate(route); err != nil {
 		return nil, err
 	}
@@ -129,23 +163,61 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 }
 
 func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
-	route := &store.Route{
-		ID:            id,
-		Name:          strings.TrimSpace(input.Name),
-		Host:          strings.TrimSpace(input.Host),
-		PathPrefix:    strings.TrimSpace(input.PathPrefix),
-		Backend:       strings.TrimSpace(input.Backend),
-		StripPrefix:   input.StripPrefix,
-		Enabled:       input.Enabled,
-		Priority:      input.Priority,
-		TLSCert:       strings.TrimSpace(input.TLSCert),
-		TLSKey:        strings.TrimSpace(input.TLSKey),
-		TLSEnabled:    input.TLSEnabled,
-		Backends:      input.Backends,
-		PathMatchMode: input.PathMatchMode,
-		RewriteTarget: input.RewriteTarget,
-		RedirectCode:  input.RedirectCode,
+	route, err := s.Get(id)
+	if err != nil {
+		return nil, err
 	}
+
+	if input.Name != nil {
+		route.Name = strings.TrimSpace(*input.Name)
+	}
+	if input.Host != nil {
+		route.Host = normalizeHost(*input.Host)
+	}
+	if input.PathPrefix != nil {
+		route.PathPrefix = strings.TrimSpace(*input.PathPrefix)
+	}
+	if input.Backend != nil {
+		route.Backend = strings.TrimSpace(*input.Backend)
+	}
+	if input.StripPrefix != nil {
+		route.StripPrefix = *input.StripPrefix
+	}
+	if input.Enabled != nil {
+		route.Enabled = *input.Enabled
+	}
+	if input.Priority != nil {
+		route.Priority = *input.Priority
+	}
+	if input.TLSCert != nil {
+		route.TLSCert = strings.TrimSpace(*input.TLSCert)
+	}
+	if input.TLSKey != nil {
+		route.TLSKey = strings.TrimSpace(*input.TLSKey)
+	}
+	if input.TLSEnabled != nil {
+		route.TLSEnabled = *input.TLSEnabled
+	}
+	if input.TimeoutMs != nil {
+		route.TimeoutMs = *input.TimeoutMs
+	}
+	if input.RetryAttempts != nil {
+		route.RetryAttempts = *input.RetryAttempts
+	}
+	if input.Backends != nil {
+		route.Backends = *input.Backends
+	}
+	if input.PathMatchMode != nil {
+		route.PathMatchMode = normalizePathMatchMode(*input.PathMatchMode)
+	}
+	if input.RewriteTarget != nil {
+		route.RewriteTarget = strings.TrimSpace(*input.RewriteTarget)
+	}
+	if input.RedirectCode != nil {
+		route.RedirectCode = *input.RedirectCode
+	}
+	route.Backends = normalizeBackends(route.Backends)
+
 	if err := validate(route); err != nil {
 		return nil, err
 	}
@@ -177,16 +249,72 @@ func (s *Service) reload() {
 }
 
 func validate(route *store.Route) error {
-	if route.Backend == "" {
-		return newError(ErrCodeMissingRouteFields, "backend required", nil)
+	if route.Backend == "" && len(route.Backends) == 0 {
+		return newError(ErrCodeMissingRouteFields, "backend or backends required", nil)
 	}
-	if route.PathPrefix != "" && !strings.HasPrefix(route.PathPrefix, "/") {
+	if !isValidPathMatchMode(route.PathMatchMode) {
+		return newError(ErrCodeInvalidRoutePathMatchMode, "path_match_mode must be one of prefix, exact, stop, regex, or regex_i", nil)
+	}
+	if isRegexPathMatchMode(route.PathMatchMode) {
+		if _, err := compileRoutePathRegex(route.PathMatchMode, route.PathPrefix); err != nil {
+			return newError(ErrCodeInvalidRoutePathRegex, "path_prefix must be a valid regular expression for the selected path match mode", err)
+		}
+	}
+	if requiresLeadingSlash(route.PathMatchMode) && route.PathPrefix != "" && !strings.HasPrefix(route.PathPrefix, "/") {
 		return newError(ErrCodeInvalidRoutePathPrefix, "path_prefix must start with /", nil)
 	}
 	if route.PathPrefix == controlPlaneReservedPathPrefix || strings.HasPrefix(route.PathPrefix, controlPlaneReservedPathPrefix+"/") {
 		return newError(ErrCodeReservedRoutePathPrefix, "path_prefix conflicts with reserved control-plane paths", nil)
 	}
-	backendURL, err := url.Parse(route.Backend)
+	if !routehost.IsValid(route.Host) {
+		return newError(ErrCodeInvalidRouteHost, routehost.InvalidMessage, nil)
+	}
+	if route.Backend != "" {
+		if err := validateBackendURL(route.Backend); err != nil {
+			return err
+		}
+	}
+	for _, backend := range route.Backends {
+		if err := validateBackendURL(backend.URL); err != nil {
+			return err
+		}
+		if backend.Weight <= 0 {
+			return newError(ErrCodeInvalidRouteBackendWeight, "backend weight must be greater than 0", nil)
+		}
+	}
+	if !isValidRedirectCode(route.RedirectCode) {
+		return newError(ErrCodeInvalidRouteRedirectCode, "redirect_code must be 0, 301, or 302", nil)
+	}
+	return nil
+}
+
+func isValidRedirectCode(code int) bool {
+	return code == 0 || code == http.StatusMovedPermanently || code == http.StatusFound
+}
+
+func isValidPathMatchMode(pathMatchMode string) bool {
+	switch pathMatchMode {
+	case "", "exact", "stop", "regex", "regex_i":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRegexPathMatchMode(pathMatchMode string) bool {
+	return pathMatchMode == "regex" || pathMatchMode == "regex_i"
+}
+
+func compileRoutePathRegex(pathMatchMode, pathPrefix string) (*regexp.Regexp, error) {
+	pattern := pathPrefix
+	if pathMatchMode == "regex_i" {
+		pattern = "(?i)" + pattern
+	}
+	return regexp.Compile(pattern)
+}
+
+func validateBackendURL(raw string) error {
+	backendURL, err := url.Parse(raw)
 	if err != nil || backendURL.Scheme == "" || backendURL.Host == "" {
 		return newError(ErrCodeInvalidRouteBackend, "backend must be a valid http or https URL", err)
 	}
@@ -194,4 +322,50 @@ func validate(route *store.Route) error {
 		return newError(ErrCodeInvalidRouteBackend, "backend must be a valid http or https URL", nil)
 	}
 	return nil
+}
+
+func normalizeBackends(backends []store.Backend) []store.Backend {
+	if len(backends) == 0 {
+		return backends
+	}
+
+	normalized := make([]store.Backend, len(backends))
+	for i, backend := range backends {
+		backend.URL = strings.TrimSpace(backend.URL)
+		normalized[i] = backend
+	}
+	return normalized
+}
+
+func requiresLeadingSlash(pathMatchMode string) bool {
+	switch pathMatchMode {
+	case "regex", "regex_i":
+		return false
+	default:
+		return true
+	}
+}
+
+func normalizePathMatchMode(pathMatchMode string) string {
+	pathMatchMode = strings.ToLower(strings.TrimSpace(pathMatchMode))
+	switch pathMatchMode {
+	case "", "prefix":
+		return ""
+	default:
+		return pathMatchMode
+	}
+}
+
+func normalizeHost(host string) string {
+	return routehost.Normalize(host)
+}
+
+func normalizeStoredRoute(route store.Route) store.Route {
+	route.Host = normalizeHost(route.Host)
+	route.PathMatchMode = normalizePathMatchMode(route.PathMatchMode)
+	route.RewriteTarget = strings.TrimSpace(route.RewriteTarget)
+	if !isValidRedirectCode(route.RedirectCode) {
+		route.RedirectCode = 0
+	}
+	return route
 }

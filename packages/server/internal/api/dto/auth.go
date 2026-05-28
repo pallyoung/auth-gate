@@ -13,29 +13,31 @@ type LoginResponse struct {
 	Permissions Permissions `json:"permissions"`
 }
 
-func SessionUserResponse(user store.User) User {
+func SessionUserResponse(user store.User, certificatesEnabled bool) User {
 	return User{
 		ID:       user.ID,
 		Username: user.Username,
 		Role:     user.Role,
 		RouteIDs: user.RouteIDs,
+		Features: FeaturesResponse(certificatesEnabled),
 	}
 }
 
-func LoginResponseFromStore(token string, user store.User, permissions store.Permissions) LoginResponse {
+func LoginResponseFromStore(token string, user store.User, permissions store.Permissions, certificatesEnabled bool) LoginResponse {
 	return LoginResponse{
 		Token:       token,
-		User:        SessionUserResponse(user),
-		Permissions: PermissionsResponse(permissions),
+		User:        SessionUserResponse(user, certificatesEnabled),
+		Permissions: *PermissionsResponse(permissions),
 	}
 }
 
-func CurrentUserResponse(user store.User, permissions store.Permissions) User {
+func CurrentUserResponse(user store.User, permissions store.Permissions, certificatesEnabled bool) User {
 	return User{
 		ID:          user.ID,
 		Username:    user.Username,
 		Role:        user.Role,
 		RouteIDs:    user.RouteIDs,
 		Permissions: PermissionsResponse(permissions),
+		Features:    FeaturesResponse(certificatesEnabled),
 	}
 }

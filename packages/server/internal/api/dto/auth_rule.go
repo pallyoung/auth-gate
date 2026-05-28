@@ -20,19 +20,57 @@ type AuthRuleConfigWriteRequest struct {
 	LoginMode  string `json:"login_mode,omitempty"`
 }
 
-type AuthRule struct {
-	ID        string         `json:"id"`
-	RouteID   string         `json:"route_id"`
-	Type      string         `json:"type"`
-	Config    AuthRuleConfig `json:"config"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+type AuthRuleConfigUpdateRequest struct {
+	HeaderName *string `json:"header_name,omitempty"`
+	Secret     *string `json:"secret,omitempty"`
+	Username   *string `json:"username,omitempty"`
+	Password   *string `json:"password,omitempty"`
+	LoginMode  *string `json:"login_mode,omitempty"`
 }
 
-type AuthRuleWriteRequest struct {
-	RouteID   string                     `json:"route_id" binding:"required"`
-	Type      string                     `json:"type"`
-	Config    AuthRuleConfigWriteRequest `json:"config"`
+type AuthRule struct {
+	ID                   string         `json:"id"`
+	RouteID              string         `json:"route_id"`
+	Type                 string         `json:"type"`
+	Config               AuthRuleConfig `json:"config"`
+	Whitelist            []string       `json:"whitelist,omitempty"`
+	RateLimit            int            `json:"rate_limit"`
+	Burst                int            `json:"burst"`
+	CORSAllowedOrigins   string         `json:"cors_allowed_origins,omitempty"`
+	CORSAllowedMethods   string         `json:"cors_allowed_methods,omitempty"`
+	CORSAllowedHeaders   string         `json:"cors_allowed_headers,omitempty"`
+	CORSAllowCredentials bool           `json:"cors_allow_credentials"`
+	CORSMaxAge           int            `json:"cors_max_age"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+}
+
+type AuthRuleCreateRequest struct {
+	RouteID              string                     `json:"route_id" binding:"required"`
+	Type                 string                     `json:"type"`
+	Config               AuthRuleConfigWriteRequest `json:"config"`
+	Whitelist            []string                   `json:"whitelist,omitempty"`
+	RateLimit            int                        `json:"rate_limit"`
+	Burst                int                        `json:"burst"`
+	CORSAllowedOrigins   string                     `json:"cors_allowed_origins,omitempty"`
+	CORSAllowedMethods   string                     `json:"cors_allowed_methods,omitempty"`
+	CORSAllowedHeaders   string                     `json:"cors_allowed_headers,omitempty"`
+	CORSAllowCredentials bool                       `json:"cors_allow_credentials"`
+	CORSMaxAge           int                        `json:"cors_max_age"`
+}
+
+type AuthRuleUpdateRequest struct {
+	RouteID              *string                     `json:"route_id,omitempty"`
+	Type                 *string                     `json:"type,omitempty"`
+	Config               AuthRuleConfigUpdateRequest `json:"config"`
+	Whitelist            *[]string                   `json:"whitelist,omitempty"`
+	RateLimit            *int                        `json:"rate_limit,omitempty"`
+	Burst                *int                        `json:"burst,omitempty"`
+	CORSAllowedOrigins   *string                     `json:"cors_allowed_origins,omitempty"`
+	CORSAllowedMethods   *string                     `json:"cors_allowed_methods,omitempty"`
+	CORSAllowedHeaders   *string                     `json:"cors_allowed_headers,omitempty"`
+	CORSAllowCredentials *bool                       `json:"cors_allow_credentials,omitempty"`
+	CORSMaxAge           *int                        `json:"cors_max_age,omitempty"`
 }
 
 func AuthRuleResponse(rule store.AuthRule) AuthRule {
@@ -45,8 +83,16 @@ func AuthRuleResponse(rule store.AuthRule) AuthRule {
 			Username:   rule.Config.Username,
 			LoginMode:  rule.Config.LoginMode,
 		},
-		CreatedAt: rule.CreatedAt,
-		UpdatedAt: rule.UpdatedAt,
+		Whitelist:            rule.Whitelist,
+		RateLimit:            rule.RateLimit,
+		Burst:                rule.Burst,
+		CORSAllowedOrigins:   rule.CORSAllowedOrigins,
+		CORSAllowedMethods:   rule.CORSAllowedMethods,
+		CORSAllowedHeaders:   rule.CORSAllowedHeaders,
+		CORSAllowCredentials: rule.CORSAllowCredentials,
+		CORSMaxAge:           rule.CORSMaxAge,
+		CreatedAt:            rule.CreatedAt,
+		UpdatedAt:            rule.UpdatedAt,
 	}
 }
 

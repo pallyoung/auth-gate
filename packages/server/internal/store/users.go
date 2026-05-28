@@ -36,6 +36,7 @@ type Permissions struct {
 }
 
 func GetPermissions(role string) Permissions {
+	role = normalizeStoredUserRole(role)
 	switch role {
 	case RoleAdmin:
 		return Permissions{CanManageRoutes: true, CanManageAuth: true, CanManageUsers: true, CanViewLogs: true}
@@ -47,6 +48,7 @@ func GetPermissions(role string) Permissions {
 }
 
 func CanAccessControlPlane(role string) bool {
+	role = normalizeStoredUserRole(role)
 	switch role {
 	case RoleAdmin, RoleEditor, RoleViewer:
 		return true
@@ -58,10 +60,6 @@ func CanAccessControlPlane(role string) bool {
 func UserHasRouteAccess(user *User, routeID string) bool {
 	if user == nil || !user.Enabled {
 		return false
-	}
-	switch user.Role {
-	case RoleAdmin, RoleEditor:
-		return true
 	}
 	for _, allowedRouteID := range user.RouteIDs {
 		if allowedRouteID == routeID {
@@ -85,6 +83,7 @@ func (s *SQLite) ListUsers() ([]User, error) {
 		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &enabled, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
+		u.Role = normalizeStoredUserRole(u.Role)
 		u.Enabled = enabled == 1
 		routeIDs, err := s.listUserRouteIDs(u.ID)
 		if err != nil {
@@ -104,6 +103,7 @@ func (s *SQLite) GetUserByUsername(username string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.Role = normalizeStoredUserRole(u.Role)
 	u.Enabled = enabled == 1
 	routeIDs, err := s.listUserRouteIDs(u.ID)
 	if err != nil {
@@ -121,6 +121,7 @@ func (s *SQLite) GetUserByID(id string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.Role = normalizeStoredUserRole(u.Role)
 	u.Enabled = enabled == 1
 	routeIDs, err := s.listUserRouteIDs(u.ID)
 	if err != nil {
@@ -248,6 +249,10 @@ func normalizeRouteIDs(routeIDs []string) []string {
 	return result
 }
 
+func normalizeStoredUserRole(role string) string {
+	return strings.ToLower(strings.TrimSpace(role))
+}
+
 func (s *SQLite) VerifyPassword(user *User, password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	return err == nil
@@ -259,7 +264,8 @@ func HashPassword(password string) (string, error) {
 }
 
 func (s *SQLite) EnsureAdmin(username, password string) (bool, error) {
-	if strings.TrimSpace(username) == "" {
+	username = strings.TrimSpace(username)
+	if username == "" {
 		username = "admin"
 	}
 	if password == "" {
@@ -276,7 +282,7 @@ func (s *SQLite) EnsureAdmin(username, password string) (bool, error) {
 			return false, err
 		}
 		if err := s.CreateUser(&User{
-			Username:     "admin",
+			Username:     username,
 			PasswordHash: hash,
 			Role:         RoleAdmin,
 			Enabled:      true,

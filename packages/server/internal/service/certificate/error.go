@@ -9,6 +9,7 @@ import (
 const (
 	ErrCodeCertNotFound    = "cert_not_found"
 	ErrCodeDatabase        = "database_error"
+	ErrCodeInvalidName     = "invalid_name"
 	ErrCodeInvalidDomain   = "invalid_domain"
 	ErrCodeDomainExists    = "domain_exists"
 	ErrCodeDNSProvider     = "dns_provider_error"
@@ -26,9 +27,9 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.cause != nil {
-		return fmt.Sprintf("%s: %s (%v)", e.code, e.message, e.cause)
+		return fmt.Sprintf("%s (%v)", e.message, e.cause)
 	}
-	return fmt.Sprintf("%s: %s", e.code, e.message)
+	return e.message
 }
 
 func (e *Error) Code() string {

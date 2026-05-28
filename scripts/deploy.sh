@@ -143,6 +143,7 @@ sleep 2
 if kill -0 $AUTH_GATE_PID 2>/dev/null; then
     echo ""
     echo -e "${GREEN}✓ Auth Gate 已启动 (PID: $AUTH_GATE_PID, 端口 8080)${NC}"
+    echo "控制台地址: http://localhost:8080/_authgate"
     echo "日志文件: $DIST_DIR/auth-gate.log"
     echo "查看日志: tail -f $DIST_DIR/auth-gate.log"
 else

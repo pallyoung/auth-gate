@@ -1,18 +1,22 @@
 import React from 'react'
 import { cn } from '../../lib/utils'
 
+type MetricCardTone = 'primary' | 'accent' | 'neutral' | 'warning' | 'error'
+
 interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   label: string
   value: string | number
   hint?: string
   icon?: React.ReactNode
-  tone?: 'primary' | 'accent' | 'neutral'
+  tone?: MetricCardTone
 }
 
-const toneStyles = {
+const toneStyles: Record<MetricCardTone, string> = {
   primary: 'from-[rgba(15,143,139,0.18)] to-transparent text-[var(--primary-700)]',
   accent: 'from-[rgba(189,122,24,0.18)] to-transparent text-[var(--accent-600)]',
   neutral: 'from-[rgba(23,33,45,0.08)] to-transparent text-[var(--text-secondary)]',
+  warning: 'from-[var(--warning-light)] to-transparent text-[var(--warning)]',
+  error: 'from-[var(--error-light)] to-transparent text-[var(--error)]',
 }
 
 export function MetricCard({

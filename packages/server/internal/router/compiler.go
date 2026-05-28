@@ -1,9 +1,11 @@
 package router
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
@@ -22,11 +24,12 @@ const (
 
 // parsePathMatchMode parses nginx-style path prefix syntax.
 // Supported patterns:
-//   =  /exact/path    → exact match
-//   ~  ~/regex$       → case-sensitive regex
-//   ~* ~/~*[Rr]egex$  → case-insensitive regex
-//   ^~ ~/prefix       → stop on first prefix match
-//   (none) /prefix    → plain prefix match
+//
+//	=  /exact/path    → exact match
+//	~  ~/regex$       → case-sensitive regex
+//	~* ~/~*[Rr]egex$  → case-insensitive regex
+//	^~ ~/prefix       → stop on first prefix match
+//	(none) /prefix    → plain prefix match
 func parsePathMatchMode(pathPrefix string) (mode string, pattern string) {
 	s := strings.TrimLeft(pathPrefix, " \t")
 	if s == "" {
@@ -90,10 +93,16 @@ func compileRoutes(routes []store.Route, authRules []store.AuthRule) []Route {
 
 	compiled := make([]Route, 0, len(routes))
 	for _, route := range routes {
+		effectiveMode, ok := normalizeStoredPathMatchMode(route.PathMatchMode)
+		if !ok {
+			// Skip malformed legacy rows so unsupported stored modes never capture traffic.
+			continue
+		}
+
 		compiledRoute := Route{
 			ID:            route.ID,
 			Name:          route.Name,
-			Host:          route.Host,
+			Host:          normalizeStoredHost(route.Host),
 			Backend:       route.Backend,
 			Backends:      route.Backends,
 			StripPrefix:   route.StripPrefix,
@@ -102,11 +111,10 @@ func compileRoutes(routes []store.Route, authRules []store.AuthRule) []Route {
 			TimeoutMs:     route.TimeoutMs,
 			RetryAttempts: route.RetryAttempts,
 			PathMatchMode: route.PathMatchMode,
-			RewriteTarget: route.RewriteTarget,
-			RedirectCode:  route.RedirectCode,
+			RewriteTarget: strings.TrimSpace(route.RewriteTarget),
+			RedirectCode:  normalizeStoredRedirectCode(route.RedirectCode),
 		}
 
-		effectiveMode := route.PathMatchMode
 		if effectiveMode == "" {
 			effectiveMode, compiledRoute.PathPrefix = parsePathMatchMode(route.PathPrefix)
 		} else {
@@ -212,10 +220,10 @@ func pathLenCmp(a, b Route) int {
 
 func compileAuthRule(rule store.AuthRule) AuthRule {
 	return AuthRule{
-		ID:                   rule.ID,
-		RouteID:              rule.RouteID,
-		Type:                 rule.Type,
-		Config:               AuthConfig{
+		ID:      rule.ID,
+		RouteID: rule.RouteID,
+		Type:    normalizeStoredAuthRuleType(rule.Type),
+		Config: AuthConfig{
 			HeaderName: rule.Config.HeaderName,
 			Secret:     rule.Config.Secret,
 			Username:   rule.Config.Username,
@@ -226,11 +234,40 @@ func compileAuthRule(rule store.AuthRule) AuthRule {
 		RateLimit:            rule.RateLimit,
 		Burst:                rule.Burst,
 		CORSAllowedOrigins:   rule.CORSAllowedOrigins,
-		CORSAllowedMethods:  rule.CORSAllowedMethods,
-		CORSAllowedHeaders:  rule.CORSAllowedHeaders,
+		CORSAllowedMethods:   rule.CORSAllowedMethods,
+		CORSAllowedHeaders:   rule.CORSAllowedHeaders,
 		CORSAllowCredentials: rule.CORSAllowCredentials,
 		CORSMaxAge:           rule.CORSMaxAge,
 	}
+}
+
+func normalizeStoredAuthRuleType(ruleType string) string {
+	return strings.ToLower(strings.TrimSpace(ruleType))
+}
+
+func normalizeStoredRedirectCode(code int) int {
+	switch code {
+	case http.StatusMovedPermanently, http.StatusFound:
+		return code
+	default:
+		return 0
+	}
+}
+
+func normalizeStoredPathMatchMode(pathMatchMode string) (string, bool) {
+	pathMatchMode = strings.ToLower(strings.TrimSpace(pathMatchMode))
+	switch pathMatchMode {
+	case "", "prefix":
+		return "", true
+	case "exact", "stop", "regex", "regex_i":
+		return pathMatchMode, true
+	default:
+		return "", false
+	}
+}
+
+func normalizeStoredHost(host string) string {
+	return routehost.Normalize(host)
 }
 
 // ApplyRewrite applies rewrite_target using regex capture groups.

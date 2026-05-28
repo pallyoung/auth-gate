@@ -14,8 +14,8 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/google/uuid"
 	"github.com/pallyoung/auth-gate/packages/server/internal/acme"
-	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 	"github.com/pallyoung/auth-gate/packages/server/internal/service/runtime"
+	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
 // Service handles certificate provisioning and renewal
@@ -26,17 +26,18 @@ type Service struct {
 	acmeEmail string
 	acme      *acme.Client
 	mu        sync.RWMutex
+	tasks     sync.WaitGroup
 
 	// Renewal
-	renewer   *Renewer
-	stopCh    chan struct{}
+	renewer *Renewer
+	stopCh  chan struct{}
 }
 
 // Config holds service configuration
 type Config struct {
-	DataDir   string // Base directory for ACME data and certificates
-	ACMEEmail string // Email for ACME account
-	UseStaging bool  // Use Let's Encrypt staging (for testing)
+	DataDir    string // Base directory for ACME data and certificates
+	ACMEEmail  string // Email for ACME account
+	UseStaging bool   // Use Let's Encrypt staging (for testing)
 }
 
 // NewService creates a new certificate service
@@ -68,37 +69,41 @@ func NewService(db *store.SQLite, cfg Config, reloader runtime.Reloader) (*Servi
 
 // ProvisionInput holds input for certificate provisioning
 type ProvisionInput struct {
-	Name       string
-	Domain     string // e.g., "*.example.com" or "example.com"
+	Name        string
+	Domain      string // e.g., "*.example.com" or "example.com"
 	DNSProvider acme.DNSProviderConfig
 }
 
 // Provision creates a new certificate for the given domain
 func (s *Service) Provision(_ context.Context, input ProvisionInput) (*store.Certificate, error) {
-	// Validate domain
-	if err := validateDomain(input.Domain); err != nil {
+	name, err := normalizeCertificateName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	domain, err := normalizeCertificateDomain(input.Domain)
+	if err != nil {
 		return nil, newError(ErrCodeInvalidDomain, err.Error(), nil)
 	}
 
 	// Check if certificate already exists for this domain
-	existing, err := s.db.GetCertificateByDomain(input.Domain)
+	existing, err := s.db.GetCertificateByDomain(domain)
 	if err != nil {
 		return nil, newError(ErrCodeDatabase, "failed to check existing certificate", err)
 	}
 	if existing != nil {
-		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+input.Domain, nil)
+		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+domain, nil)
 	}
 
 	// Create certificate record
 	cert := &store.Certificate{
-		ID:               uuid.New().String(),
-		Name:             input.Name,
-		Domain:           input.Domain,
-		Status:           store.CertStatusPending,
-		DNSProvider:      input.DNSProvider.ProviderType,
+		ID:                uuid.New().String(),
+		Name:              name,
+		Domain:            domain,
+		Status:            store.CertStatusPending,
+		DNSProvider:       input.DNSProvider.ProviderType,
 		DNSProviderConfig: encryptProviderConfig(input.DNSProvider),
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	// Save to database
@@ -107,7 +112,10 @@ func (s *Service) Provision(_ context.Context, input ProvisionInput) (*store.Cer
 	}
 
 	// Provision in background
-	go s.provisionCertificate(cert.ID, input)
+	input.Domain = domain
+	s.runAsync(func() {
+		s.provisionCertificate(cert.ID, input)
+	})
 
 	return cert, nil
 }
@@ -197,9 +205,9 @@ func (s *Service) Renew(id string) error {
 	}
 
 	// Renew in background
-	go func() {
+	s.runAsync(func() {
 		s.renewCertificate(cert, provider)
-	}()
+	})
 
 	return nil
 }
@@ -261,14 +269,30 @@ func (s *Service) StopRenewer() {
 	}
 }
 
+// Wait blocks until all in-flight background provisioning and renewal jobs exit.
+func (s *Service) Wait() {
+	if s == nil {
+		return
+	}
+	s.tasks.Wait()
+}
+
 // List returns all certificates
 func (s *Service) List() ([]store.Certificate, error) {
-	return s.db.ListCertificates()
+	certs, err := s.db.ListCertificates()
+	if err != nil {
+		return nil, newError(ErrCodeDatabase, "failed to list certificates", err)
+	}
+	return certs, nil
 }
 
 // Get returns a certificate by ID
 func (s *Service) Get(id string) (*store.Certificate, error) {
-	return s.db.GetCertificate(id)
+	cert, err := s.db.GetCertificate(id)
+	if err != nil {
+		return nil, newError(ErrCodeDatabase, "failed to get certificate", err)
+	}
+	return cert, nil
 }
 
 // Delete removes a certificate
@@ -341,6 +365,30 @@ func parseDomain(domain string) []string {
 
 func normalizeDomain(domain string) string {
 	return strings.ReplaceAll(domain, "*", "wildcard")
+}
+
+func (s *Service) runAsync(fn func()) {
+	s.tasks.Add(1)
+	go func() {
+		defer s.tasks.Done()
+		fn()
+	}()
+}
+
+func normalizeCertificateName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", newError(ErrCodeInvalidName, "certificate name required", nil)
+	}
+	return name, nil
+}
+
+func normalizeCertificateDomain(domain string) (string, error) {
+	domain = strings.TrimSpace(domain)
+	if err := validateDomain(domain); err != nil {
+		return "", err
+	}
+	return domain, nil
 }
 
 func encryptProviderConfig(config acme.DNSProviderConfig) string {

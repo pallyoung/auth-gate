@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -38,11 +39,11 @@ func newProxyTestDB(t *testing.T) *store.SQLite {
 // Test the path-rewriting logic in isolation, mirroring what proxy.go does in Director.
 func TestPathRewrite(t *testing.T) {
 	tests := []struct {
-		name        string
-		pathPrefix  string
-		strip       bool
-		reqPath     string
-		wantPath    string
+		name       string
+		pathPrefix string
+		strip      bool
+		reqPath    string
+		wantPath   string
 	}{
 		{"strip prefix", "/api", true, "/api/users/123", "/users/123"},
 		{"strip prefix root", "/api", true, "/api", "/"},
@@ -92,6 +93,46 @@ func TestForwardedHeaders(t *testing.T) {
 	}
 }
 
+func TestForwardedProto_UsesFirstReverseProxyValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/secure", nil)
+	req.Header.Set("X-Forwarded-Proto", "https, http")
+
+	if got := forwardedProto(req); got != "https" {
+		t.Fatalf("forwardedProto() = %q, want %q", got, "https")
+	}
+}
+
+func TestForwardedProto_PrefersDirectTLSOverForwardedHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/secure", nil)
+	req.TLS = &tls.ConnectionState{}
+	req.Header.Set("X-Forwarded-Proto", "http")
+
+	if got := forwardedProto(req); got != "https" {
+		t.Fatalf("forwardedProto() = %q, want %q", got, "https")
+	}
+}
+
+func TestSanitizeAccessRedirect_FallsBackForSchemeRelativePaths(t *testing.T) {
+	fallback := "/cloud"
+
+	tests := []struct {
+		name string
+		next string
+	}{
+		{name: "triple slash external host", next: "///evil.com/path"},
+		{name: "triple slash without suffix", next: "///evil.com"},
+		{name: "leading slash backslash host", next: `/\evil.com/path`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SanitizeAccessRedirect(tt.next, fallback); got != fallback {
+				t.Fatalf("SanitizeAccessRedirect(%q, %q) = %q, want fallback %q", tt.next, fallback, got, fallback)
+			}
+		})
+	}
+}
+
 // Test the host:port stripping logic used in proxy.go.
 func TestHostPortStripping(t *testing.T) {
 	tests := []struct {
@@ -100,16 +141,15 @@ func TestHostPortStripping(t *testing.T) {
 	}{
 		{"example.com:8080", "example.com"},
 		{"example.com", "example.com"},
+		{"[2001:db8::1]:8443", "2001:db8::1"},
+		{"[2001:db8::1]", "2001:db8::1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.host, func(t *testing.T) {
-			host := tt.host
-			if idx := strings.Index(host, ":"); idx != -1 {
-				host = host[:idx]
-			}
+			host := requestMatchHost(tt.host)
 			if host != tt.want {
-				t.Errorf("stripPort(%q) = %q, want %q", tt.host, host, tt.want)
+				t.Errorf("requestMatchHost(%q) = %q, want %q", tt.host, host, tt.want)
 			}
 		})
 	}
@@ -155,6 +195,93 @@ func TestWriteUnauthorized_BasicSetsChallengeHeader(t *testing.T) {
 	}
 	if got := w.Header().Get("WWW-Authenticate"); got != `Basic realm="Cloud Console"` {
 		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Basic realm="Cloud Console"`)
+	}
+}
+
+func TestProxyNormalizesLegacyStoredBasicAuthRuleType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "Cloud Console",
+		PathPrefix: "/cloud",
+		Backend:    "http://example.com",
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+	if err := db.CreateAuthRule(&store.AuthRule{
+		RouteID: "route-1",
+		Type:    " BASIC ",
+		Config: store.AuthConfig{
+			Username: "admin",
+			Password: "supersecret",
+		},
+	}); err != nil {
+		t.Fatalf("CreateAuthRule() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.Code, http.StatusUnauthorized)
+	}
+	if got := resp.Header().Get("WWW-Authenticate"); got != `Basic realm="Cloud Console"` {
+		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Basic realm="Cloud Console"`)
+	}
+}
+
+func TestProxyMatchesLegacyStoredAPIKeyConfigWithWhitespace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "Cloud Console",
+		PathPrefix: "/cloud",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+	if err := db.CreateAuthRule(&store.AuthRule{
+		RouteID: "route-1",
+		Type:    " APIKEY ",
+		Config: store.AuthConfig{
+			HeaderName: " X-Route-Key ",
+			Secret:     " shared-secret ",
+		},
+	}); err != nil {
+		t.Fatalf("CreateAuthRule() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
+	req.Header.Set("X-Route-Key", "shared-secret")
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if resp.Body.String() != "upstream-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "upstream-ok")
 	}
 }
 
@@ -253,6 +380,17 @@ func TestRouteAllowedByClaims_UsesCurrentRouteAssignments(t *testing.T) {
 	}
 }
 
+func TestRouteAllowedByClaims_DoesNotGrantUnassignedOperatorAccess(t *testing.T) {
+	claims := &auth.Claims{
+		Role:     store.RoleAdmin,
+		RouteIDs: nil,
+	}
+
+	if routeAllowedByClaims(claims, "route-1") {
+		t.Fatal("routeAllowedByClaims() = true, want false")
+	}
+}
+
 func TestBalancer_WeightedRoundRobin_RespectsWeight(t *testing.T) {
 	backends := []store.Backend{
 		{URL: "http://a", Weight: 3},
@@ -283,7 +421,9 @@ func TestBalancer_PicksAllBackends(t *testing.T) {
 	bl := newBalancer(backends)
 	seen := make(map[string]bool)
 	for i := 0; i < 30; i++ {
-		if bk, ok := bl.pick(); ok { seen[bk.URL] = true }
+		if bk, ok := bl.pick(); ok {
+			seen[bk.URL] = true
+		}
 	}
 	for _, b := range backends {
 		if !seen[b.URL] {
@@ -301,7 +441,9 @@ func TestBalancer_ConsecutivePicksAreWeighted(t *testing.T) {
 	bl := newBalancer(backends)
 	counts := map[string]int{}
 	for i := 0; i < 20; i++ {
-		if bk, ok := bl.pick(); ok { counts[bk.URL]++ }
+		if bk, ok := bl.pick(); ok {
+			counts[bk.URL]++
+		}
 	}
 	// Both should be close to 10 each; neither should be 0 or 20
 	if counts["http://a"] == 0 || counts["http://b"] == 0 {
@@ -391,9 +533,9 @@ func TestRetryProxy_RoundRobinAcrossAllBackends(t *testing.T) {
 
 	// Build a route with two backends.
 	_ = &router.Route{
-		ID:          "lb-route",
-		PathPrefix:  "/api",
-		Backend:     aURL.Host,
+		ID:         "lb-route",
+		PathPrefix: "/api",
+		Backend:    aURL.Host,
 		Backends: []store.Backend{
 			{URL: aURL.Host, Weight: 1},
 			{URL: bURL.Host, Weight: 1},
@@ -446,6 +588,369 @@ func TestRetryProxy_UsesCorrectBackendHost(t *testing.T) {
 
 	if req.Host != host {
 		t.Errorf("req.Host = %q, want %q", req.Host, host)
+	}
+}
+
+func TestProxyRegexInsensitiveRewriteTargetIsApplied(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:            "regex-i-route",
+		PathPrefix:    "^/api/(.*)$",
+		PathMatchMode: "regex_i",
+		RewriteTarget: "/rewritten/$1",
+		Backend:       upstream.URL,
+		Enabled:       true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/API/Users", nil)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "/rewritten/Users" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "/rewritten/Users")
+	}
+}
+
+func TestProxyMatchesRouteWhenStoredPathMatchModeHasWhitespaceAndUppercase(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:            "regex-i-route-legacy",
+		PathPrefix:    "^/api/(.*)$",
+		PathMatchMode: " REGEX_I ",
+		RewriteTarget: "/rewritten/$1",
+		Backend:       upstream.URL,
+		Enabled:       true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/API/Users", nil)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "/rewritten/Users" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "/rewritten/Users")
+	}
+}
+
+func TestProxyMatchesRouteForIPv6HostWithPort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ipv6-ok"))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "ipv6-route",
+		Host:       "2001:db8::1",
+		PathPrefix: "/api",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "http://[2001:db8::1]/api/users", nil)
+	req.Host = "[2001:db8::1]:8443"
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "ipv6-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "ipv6-ok")
+	}
+}
+
+func TestProxyIgnoresWhitespaceOnlyRedirectTarget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:            "redirect-route",
+		PathPrefix:    "/billing",
+		RewriteTarget: "   ",
+		RedirectCode:  302,
+		Backend:       upstream.URL,
+		Enabled:       true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/billing/invoices", nil)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, location=%q body=%s", resp.Code, http.StatusOK, resp.Header().Get("Location"), resp.Body.String())
+	}
+	if resp.Body.String() != "upstream-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "upstream-ok")
+	}
+	if location := resp.Header().Get("Location"); location != "" {
+		t.Fatalf("Location = %q, want empty", location)
+	}
+}
+
+func TestProxyIgnoresLegacyUnsupportedRedirectCode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:            "legacy-redirect-route",
+		PathPrefix:    "/legacy",
+		RewriteTarget: "/new-home",
+		RedirectCode:  http.StatusTemporaryRedirect,
+		Backend:       upstream.URL,
+		Enabled:       true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/legacy/dashboard", nil)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, location=%q body=%s", resp.Code, http.StatusOK, resp.Header().Get("Location"), resp.Body.String())
+	}
+	if resp.Body.String() != "upstream-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "upstream-ok")
+	}
+	if location := resp.Header().Get("Location"); location != "" {
+		t.Fatalf("Location = %q, want empty", location)
+	}
+}
+
+func TestProxyForwardsHTTPSProtoToUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(r.Header.Get("X-Forwarded-Proto")))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "https-route",
+		PathPrefix: "/secure",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "https://example.com/secure", nil)
+	req.TLS = &tls.ConnectionState{}
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "https" {
+		t.Fatalf("X-Forwarded-Proto = %q, want %q", resp.Body.String(), "https")
+	}
+}
+
+func TestProxyLegacyInvalidBackendWeights_ReturnsStructuredErrorWithoutPanicking(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "invalid-weight-route",
+		PathPrefix: "/api",
+		Backend:    "http://example.com",
+		Backends: []store.Backend{
+			{URL: "http://backend-a.example.com", Weight: 1},
+			{URL: "http://backend-b.example.com", Weight: -1},
+		},
+		Enabled: true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	resp := httptest.NewRecorder()
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		engine.ServeHTTP(resp, req)
+	}()
+
+	if recovered != nil {
+		t.Fatalf("ServeHTTP panicked: %v", recovered)
+	}
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusInternalServerError, resp.Body.String())
+	}
+	if resp.Body.String() != "{\"error\":{\"code\":\"invalid_backend\",\"message\":\"invalid backend\"}}" {
+		t.Fatalf("body = %s", resp.Body.String())
+	}
+}
+
+func TestProxySingleOpenBackend_StillProxiesWithoutPanicking(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
+
+	localCS := &circuitState{breakers: map[string]*circuitBreaker{}}
+	for i := 0; i < circuitFailureThreshold; i++ {
+		localCS.recordFailure(upstream.URL)
+	}
+	if !localCS.isOpen(upstream.URL) {
+		t.Fatal("upstream should be open in circuit breaker precondition")
+	}
+
+	origCS := cs
+	cs = localCS
+	defer func() { cs = origCS }()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "single-open-route",
+		PathPrefix: "/api",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	resp := httptest.NewRecorder()
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		engine.ServeHTTP(resp, req)
+	}()
+
+	if recovered != nil {
+		t.Fatalf("ServeHTTP panicked: %v", recovered)
+	}
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "upstream-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "upstream-ok")
+	}
+}
+
+func TestProxyPreservesForwardedHTTPSProtoFromReverseProxy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(r.Header.Get("X-Forwarded-Proto")))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "proxied-https-route",
+		PathPrefix: "/secure",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr))
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/secure", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if strings.TrimSpace(resp.Body.String()) != "https" {
+		t.Fatalf("X-Forwarded-Proto = %q, want %q", resp.Body.String(), "https")
 	}
 }
 
@@ -755,5 +1260,51 @@ func TestBalancer_PickSkipsOpenBackends(t *testing.T) {
 	// "http://a" should be the only one picked
 	if seen["http://a"] == 0 {
 		t.Error("healthy backend http://a was never picked")
+	}
+}
+
+func TestTransportCache_ReturnsSameInstanceForSameKey(t *testing.T) {
+	tc := newTransportCache()
+	key := transportKey{DialTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, MaxIdleConns: 10}
+
+	t1 := tc.get(key)
+	t2 := tc.get(key)
+
+	if t1 != t2 {
+		t.Error("expected same transport instance for identical keys")
+	}
+}
+
+func TestTransportCache_ReturnsDifferentInstanceForDifferentKey(t *testing.T) {
+	tc := newTransportCache()
+	key1 := transportKey{DialTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, MaxIdleConns: 10}
+	key2 := transportKey{DialTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, MaxIdleConns: 10}
+
+	t1 := tc.get(key1)
+	t2 := tc.get(key2)
+
+	if t1 == t2 {
+		t.Error("expected different transport instances for different keys")
+	}
+}
+
+func TestTransportCache_DefaultIdleConnsWhenZero(t *testing.T) {
+	tc := newTransportCache()
+	key := transportKey{DialTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, MaxIdleConns: 0}
+
+	tr := tc.get(key)
+	// Default should be 2 when MaxIdleConns is 0
+	if tr.MaxIdleConnsPerHost != 2 {
+		t.Errorf("MaxIdleConnsPerHost = %d, want 2", tr.MaxIdleConnsPerHost)
+	}
+}
+
+func TestTransportCache_RespectsConfiguredIdleConns(t *testing.T) {
+	tc := newTransportCache()
+	key := transportKey{DialTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, MaxIdleConns: 20}
+
+	tr := tc.get(key)
+	if tr.MaxIdleConnsPerHost != 20 {
+		t.Errorf("MaxIdleConnsPerHost = %d, want 20", tr.MaxIdleConnsPerHost)
 	}
 }

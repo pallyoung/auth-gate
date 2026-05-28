@@ -10,7 +10,7 @@ import (
 
 func (s *SQLite) ListAuthRules() ([]AuthRule, error) {
 	rows, err := s.db.Query(`
-		SELECT id, route_id, type, config, whitelist, rate_limit, burst, created_at, updated_at
+		SELECT id, route_id, type, config, whitelist, rate_limit, burst, cors_allowed_origins, cors_allowed_methods, cors_allowed_headers, cors_allow_credentials, cors_max_age, created_at, updated_at
 		FROM auth_rules
 	`)
 	if err != nil {
@@ -23,7 +23,22 @@ func (s *SQLite) ListAuthRules() ([]AuthRule, error) {
 		var r AuthRule
 		var configStr string
 		var whitelistStr string
-		if err := rows.Scan(&r.ID, &r.RouteID, &r.Type, &configStr, &whitelistStr, &r.RateLimit, &r.Burst, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&r.ID,
+			&r.RouteID,
+			&r.Type,
+			&configStr,
+			&whitelistStr,
+			&r.RateLimit,
+			&r.Burst,
+			&r.CORSAllowedOrigins,
+			&r.CORSAllowedMethods,
+			&r.CORSAllowedHeaders,
+			&r.CORSAllowCredentials,
+			&r.CORSMaxAge,
+			&r.CreatedAt,
+			&r.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		r.Config = ParseAuthConfig(configStr)
@@ -38,9 +53,24 @@ func (s *SQLite) GetAuthRule(id string) (*AuthRule, error) {
 	var configStr string
 	var whitelistStr string
 	err := s.db.QueryRow(`
-		SELECT id, route_id, type, config, whitelist, rate_limit, burst, created_at, updated_at
+		SELECT id, route_id, type, config, whitelist, rate_limit, burst, cors_allowed_origins, cors_allowed_methods, cors_allowed_headers, cors_allow_credentials, cors_max_age, created_at, updated_at
 		FROM auth_rules WHERE id = ?
-	`, id).Scan(&r.ID, &r.RouteID, &r.Type, &configStr, &whitelistStr, &r.RateLimit, &r.Burst, &r.CreatedAt, &r.UpdatedAt)
+	`, id).Scan(
+		&r.ID,
+		&r.RouteID,
+		&r.Type,
+		&configStr,
+		&whitelistStr,
+		&r.RateLimit,
+		&r.Burst,
+		&r.CORSAllowedOrigins,
+		&r.CORSAllowedMethods,
+		&r.CORSAllowedHeaders,
+		&r.CORSAllowCredentials,
+		&r.CORSMaxAge,
+		&r.CreatedAt,
+		&r.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -54,9 +84,24 @@ func (s *SQLite) GetAuthRuleByRouteID(routeID string) (*AuthRule, error) {
 	var configStr string
 	var whitelistStr string
 	err := s.db.QueryRow(`
-		SELECT id, route_id, type, config, whitelist, rate_limit, burst, created_at, updated_at
+		SELECT id, route_id, type, config, whitelist, rate_limit, burst, cors_allowed_origins, cors_allowed_methods, cors_allowed_headers, cors_allow_credentials, cors_max_age, created_at, updated_at
 		FROM auth_rules WHERE route_id = ?
-	`, routeID).Scan(&r.ID, &r.RouteID, &r.Type, &configStr, &whitelistStr, &r.RateLimit, &r.Burst, &r.CreatedAt, &r.UpdatedAt)
+	`, routeID).Scan(
+		&r.ID,
+		&r.RouteID,
+		&r.Type,
+		&configStr,
+		&whitelistStr,
+		&r.RateLimit,
+		&r.Burst,
+		&r.CORSAllowedOrigins,
+		&r.CORSAllowedMethods,
+		&r.CORSAllowedHeaders,
+		&r.CORSAllowCredentials,
+		&r.CORSMaxAge,
+		&r.CreatedAt,
+		&r.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +120,9 @@ func (s *SQLite) CreateAuthRule(r *AuthRule) error {
 
 	wl, _ := json.Marshal(r.Whitelist)
 	_, err := s.db.Exec(`
-		INSERT INTO auth_rules (id, route_id, type, config, whitelist, rate_limit, burst, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, r.ID, r.RouteID, r.Type, r.Config.ToJSON(), string(wl), r.RateLimit, r.Burst, r.CreatedAt, r.UpdatedAt)
+		INSERT INTO auth_rules (id, route_id, type, config, whitelist, rate_limit, burst, cors_allowed_origins, cors_allowed_methods, cors_allowed_headers, cors_allow_credentials, cors_max_age, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, r.ID, r.RouteID, r.Type, r.Config.ToJSON(), string(wl), r.RateLimit, r.Burst, r.CORSAllowedOrigins, r.CORSAllowedMethods, r.CORSAllowedHeaders, r.CORSAllowCredentials, r.CORSMaxAge, r.CreatedAt, r.UpdatedAt)
 	return err
 }
 
@@ -86,9 +131,9 @@ func (s *SQLite) UpdateAuthRule(r *AuthRule) error {
 
 	wl, _ := json.Marshal(r.Whitelist)
 	result, err := s.db.Exec(`
-		UPDATE auth_rules SET route_id = ?, type = ?, config = ?, whitelist = ?, rate_limit = ?, burst = ?, updated_at = ?
+		UPDATE auth_rules SET route_id = ?, type = ?, config = ?, whitelist = ?, rate_limit = ?, burst = ?, cors_allowed_origins = ?, cors_allowed_methods = ?, cors_allowed_headers = ?, cors_allow_credentials = ?, cors_max_age = ?, updated_at = ?
 		WHERE id = ?
-	`, r.RouteID, r.Type, r.Config.ToJSON(), string(wl), r.RateLimit, r.Burst, r.UpdatedAt, r.ID)
+	`, r.RouteID, r.Type, r.Config.ToJSON(), string(wl), r.RateLimit, r.Burst, r.CORSAllowedOrigins, r.CORSAllowedMethods, r.CORSAllowedHeaders, r.CORSAllowCredentials, r.CORSMaxAge, r.UpdatedAt, r.ID)
 	if err != nil {
 		return err
 	}

@@ -5,12 +5,17 @@ export interface Permissions {
   can_view_logs: boolean
 }
 
+export interface Features {
+  certificates: boolean
+}
+
 export interface SessionUser {
   id: string
   username: string
   role: string
   route_ids?: string[]
   permissions?: Permissions
+  features?: Features
 }
 
 export interface User {
@@ -37,9 +42,15 @@ export interface Route {
   host: string
   path_prefix: string
   backend: string
+  backends?: RouteBackend[]
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  tls_cert?: string
+  tls_key?: string
+  tls_enabled?: boolean
+  timeout_ms?: number
+  retry_attempts?: number
   path_match_mode?: string
   rewrite_target?: string
   redirect_code?: number
@@ -47,14 +58,31 @@ export interface Route {
   updated_at: string
 }
 
+export interface RouteBackend {
+  url: string
+  weight: number
+  dial_timeout_ms?: number
+  read_timeout_ms?: number
+  write_timeout_ms?: number
+  max_idle_conns?: number
+  rewrite_target?: string
+  redirect_code?: number
+}
+
 export interface RouteInput {
   name?: string
   host?: string
   path_prefix: string
   backend: string
+  backends?: RouteBackend[]
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  tls_cert?: string
+  tls_key?: string
+  tls_enabled?: boolean
+  timeout_ms?: number
+  retry_attempts?: number
   path_match_mode?: string
   rewrite_target?: string
   redirect_code?: number
@@ -76,6 +104,14 @@ export interface AuthRule {
   route_id: string
   type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
   config: AuthRuleConfig
+  whitelist?: string[]
+  rate_limit?: number
+  burst?: number
+  cors_allowed_origins?: string
+  cors_allowed_methods?: string
+  cors_allowed_headers?: string
+  cors_allow_credentials?: boolean
+  cors_max_age?: number
   created_at: string
   updated_at: string
 }
@@ -84,6 +120,14 @@ export interface AuthRuleInput {
   route_id: string
   type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
   config: AuthRuleSecretConfig
+  whitelist?: string[]
+  rate_limit?: number
+  burst?: number
+  cors_allowed_origins?: string
+  cors_allowed_methods?: string
+  cors_allowed_headers?: string
+  cors_allow_credentials?: boolean
+  cors_max_age?: number
 }
 
 export interface LoginResponse {

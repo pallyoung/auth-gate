@@ -2,13 +2,19 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
+const certificateSelectColumns = `
+	id, name, domain, cert_path, key_path, dns_provider, dns_provider_config,
+	status, not_before, not_after, renew_at,
+	created_at, updated_at
+`
+
 func (s *SQLite) ListCertificates() ([]Certificate, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, domain, cert_path, key_path, dns_provider, dns_provider_config,
-			   status, not_before, not_after, renew_at, created_at, updated_at
+		SELECT ` + certificateSelectColumns + `
 		FROM certificates ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -19,7 +25,7 @@ func (s *SQLite) ListCertificates() ([]Certificate, error) {
 	var certs []Certificate
 	for rows.Next() {
 		var c Certificate
-		var notBefore, notAfter, renewAt sql.NullTime
+		var notBefore, notAfter, renewAt any
 		var certPath, keyPath, dnsProvider, dnsProviderConfig sql.NullString
 		var name sql.NullString
 
@@ -37,14 +43,14 @@ func (s *SQLite) ListCertificates() ([]Certificate, error) {
 		c.DNSProvider = dnsProvider.String
 		c.DNSProviderConfig = dnsProviderConfig.String
 
-		if notBefore.Valid {
-			c.NotBefore = notBefore.Time
+		if c.NotBefore, err = scanCertificateTime(notBefore); err != nil {
+			return nil, err
 		}
-		if notAfter.Valid {
-			c.NotAfter = notAfter.Time
+		if c.NotAfter, err = scanCertificateTime(notAfter); err != nil {
+			return nil, err
 		}
-		if renewAt.Valid {
-			c.RenewAt = renewAt.Time
+		if c.RenewAt, err = scanCertificateTime(renewAt); err != nil {
+			return nil, err
 		}
 
 		certs = append(certs, c)
@@ -54,13 +60,12 @@ func (s *SQLite) ListCertificates() ([]Certificate, error) {
 
 func (s *SQLite) GetCertificate(id string) (*Certificate, error) {
 	var c Certificate
-	var notBefore, notAfter, renewAt sql.NullTime
+	var notBefore, notAfter, renewAt any
 	var certPath, keyPath, dnsProvider, dnsProviderConfig sql.NullString
 	var name sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, name, domain, cert_path, key_path, dns_provider, dns_provider_config,
-			   status, not_before, not_after, renew_at, created_at, updated_at
+		SELECT `+certificateSelectColumns+`
 		FROM certificates WHERE id = ?
 	`, id).Scan(
 		&c.ID, &name, &c.Domain, &certPath, &keyPath, &dnsProvider, &dnsProviderConfig,
@@ -79,14 +84,14 @@ func (s *SQLite) GetCertificate(id string) (*Certificate, error) {
 	c.DNSProvider = dnsProvider.String
 	c.DNSProviderConfig = dnsProviderConfig.String
 
-	if notBefore.Valid {
-		c.NotBefore = notBefore.Time
+	if c.NotBefore, err = scanCertificateTime(notBefore); err != nil {
+		return nil, err
 	}
-	if notAfter.Valid {
-		c.NotAfter = notAfter.Time
+	if c.NotAfter, err = scanCertificateTime(notAfter); err != nil {
+		return nil, err
 	}
-	if renewAt.Valid {
-		c.RenewAt = renewAt.Time
+	if c.RenewAt, err = scanCertificateTime(renewAt); err != nil {
+		return nil, err
 	}
 
 	return &c, nil
@@ -94,13 +99,12 @@ func (s *SQLite) GetCertificate(id string) (*Certificate, error) {
 
 func (s *SQLite) GetCertificateByDomain(domain string) (*Certificate, error) {
 	var c Certificate
-	var notBefore, notAfter, renewAt sql.NullTime
+	var notBefore, notAfter, renewAt any
 	var certPath, keyPath, dnsProvider, dnsProviderConfig sql.NullString
 	var name sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, name, domain, cert_path, key_path, dns_provider, dns_provider_config,
-			   status, not_before, not_after, renew_at, created_at, updated_at
+		SELECT `+certificateSelectColumns+`
 		FROM certificates WHERE domain = ?
 	`, domain).Scan(
 		&c.ID, &name, &c.Domain, &certPath, &keyPath, &dnsProvider, &dnsProviderConfig,
@@ -119,14 +123,14 @@ func (s *SQLite) GetCertificateByDomain(domain string) (*Certificate, error) {
 	c.DNSProvider = dnsProvider.String
 	c.DNSProviderConfig = dnsProviderConfig.String
 
-	if notBefore.Valid {
-		c.NotBefore = notBefore.Time
+	if c.NotBefore, err = scanCertificateTime(notBefore); err != nil {
+		return nil, err
 	}
-	if notAfter.Valid {
-		c.NotAfter = notAfter.Time
+	if c.NotAfter, err = scanCertificateTime(notAfter); err != nil {
+		return nil, err
 	}
-	if renewAt.Valid {
-		c.RenewAt = renewAt.Time
+	if c.RenewAt, err = scanCertificateTime(renewAt); err != nil {
+		return nil, err
 	}
 
 	return &c, nil
@@ -161,10 +165,9 @@ func (s *SQLite) DeleteCertificate(id string) error {
 // ListExpiringCertificates returns certificates that need renewal
 func (s *SQLite) ListExpiringCertificates(before time.Time) ([]Certificate, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, domain, cert_path, key_path, dns_provider, dns_provider_config,
-			   status, not_before, not_after, renew_at, created_at, updated_at
+		SELECT `+certificateSelectColumns+`
 		FROM certificates
-		WHERE status = 'active' AND renew_at <= ?
+		WHERE status = 'active' AND NULLIF(renew_at, '') <= ?
 	`, before)
 	if err != nil {
 		return nil, err
@@ -174,7 +177,7 @@ func (s *SQLite) ListExpiringCertificates(before time.Time) ([]Certificate, erro
 	var certs []Certificate
 	for rows.Next() {
 		var c Certificate
-		var notBefore, notAfter, renewAt sql.NullTime
+		var notBefore, notAfter, renewAt any
 		var certPath, keyPath, dnsProvider, dnsProviderConfig sql.NullString
 		var name sql.NullString
 
@@ -192,17 +195,45 @@ func (s *SQLite) ListExpiringCertificates(before time.Time) ([]Certificate, erro
 		c.DNSProvider = dnsProvider.String
 		c.DNSProviderConfig = dnsProviderConfig.String
 
-		if notBefore.Valid {
-			c.NotBefore = notBefore.Time
+		if c.NotBefore, err = scanCertificateTime(notBefore); err != nil {
+			return nil, err
 		}
-		if notAfter.Valid {
-			c.NotAfter = notAfter.Time
+		if c.NotAfter, err = scanCertificateTime(notAfter); err != nil {
+			return nil, err
 		}
-		if renewAt.Valid {
-			c.RenewAt = renewAt.Time
+		if c.RenewAt, err = scanCertificateTime(renewAt); err != nil {
+			return nil, err
 		}
 
 		certs = append(certs, c)
 	}
 	return certs, nil
+}
+
+func scanCertificateTime(value any) (time.Time, error) {
+	switch typed := value.(type) {
+	case nil:
+		return time.Time{}, nil
+	case time.Time:
+		return typed, nil
+	case string:
+		if typed == "" {
+			return time.Time{}, nil
+		}
+		return parseCertificateTimeString(typed)
+	case []byte:
+		if len(typed) == 0 {
+			return time.Time{}, nil
+		}
+		return parseCertificateTimeString(string(typed))
+	default:
+		return time.Time{}, fmt.Errorf("unsupported certificate time value type %T", value)
+	}
+}
+
+func parseCertificateTimeString(value string) (time.Time, error) {
+	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return parsed, nil
+	}
+	return time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", value)
 }

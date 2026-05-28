@@ -13,7 +13,7 @@ import (
 // DNSProviderConfig holds configuration for different DNS providers
 type DNSProviderConfig struct {
 	// Common fields
-	ProviderType string // "cloudflare", "route53", "pdns", "manual"
+	ProviderType string // "cloudflare", "route53"
 
 	// CloudFlare
 	CloudFlareAPIToken string
@@ -36,10 +36,6 @@ func NewDNSProvider(config DNSProviderConfig) (challenge.Provider, error) {
 		return newCloudFlareProvider(config.CloudFlareAPIToken)
 	case "route53":
 		return newRoute53Provider(config.Route53AccessKeyID, config.Route53SecretAccessKey, config.Route53Region)
-	case "pdns":
-		return newPowerDNSProvider(config.PowerDNSHost, config.PowerDNSAPIKey, config.PowerDNSZone)
-	case "manual":
-		return newManualProvider()
 	default:
 		return nil, fmt.Errorf("unsupported DNS provider: %s", config.ProviderType)
 	}

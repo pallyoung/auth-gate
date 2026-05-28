@@ -101,6 +101,8 @@ func (m *Manager) Match(host, path string) *Route {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	host = normalizeStoredHost(host)
+
 	for i := range m.routes {
 		r := &m.routes[i]
 		if !r.Enabled {

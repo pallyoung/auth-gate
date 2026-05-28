@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -52,9 +53,9 @@ type circuitState struct {
 const (
 	circuitFailureThreshold = 5
 	circuitRecoveryWindow   = 30 * time.Second
-	circuitClosed    = 0
-	circuitOpen      = 1
-	circuitHalfOpen  = 2
+	circuitClosed           = 0
+	circuitOpen             = 1
+	circuitHalfOpen         = 2
 )
 
 // accessLogEntry is a structured JSON log entry written to stdout on every proxied request.
@@ -83,9 +84,55 @@ func (accessWriter) Write(p []byte) (int, error) {
 // accessLogger writes structured JSON access logs to stdout (not stderr).
 var accessLogger = log.New(accessWriter{}, "", log.LstdFlags)
 
+var (
+	errInvalidRuntimeBackend = errors.New("invalid runtime backend")
+	errNoBackendConfigured   = errors.New("no backend configured")
+)
+
 func init() {
 	cs = &circuitState{breakers: map[string]*circuitBreaker{}}
 }
+
+// transportKey identifies a reusable base http.Transport by its effective
+// timeout and connection-pool settings.
+type transportKey struct {
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	MaxIdleConns int
+}
+
+// transportCache pools *http.Transport instances so that identical backend
+// configurations reuse the same underlying TCP connection pool.
+type transportCache struct {
+	mu    sync.Mutex
+	cache map[transportKey]*http.Transport
+}
+
+func newTransportCache() *transportCache {
+	return &transportCache{cache: map[transportKey]*http.Transport{}}
+}
+
+func (tc *transportCache) get(key transportKey) *http.Transport {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if t, ok := tc.cache[key]; ok {
+		return t
+	}
+	maxIdle := key.MaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 2
+	}
+	t := &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: key.DialTimeout}).DialContext,
+		ResponseHeaderTimeout: key.ReadTimeout,
+		MaxIdleConnsPerHost:   maxIdle,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	tc.cache[key] = t
+	return t
+}
+
+var defaultTransportCache = newTransportCache()
 
 func (cs *circuitState) recordFailure(backendURL string) {
 	if backendURL == "" {
@@ -296,13 +343,99 @@ func isWebSocketRequest(h *http.Header) bool {
 		strings.Contains(strings.ToLower(h.Get("Connection")), "upgrade")
 }
 
+func forwardedProto(req *http.Request) string {
+	if req != nil {
+		if req.TLS != nil {
+			return "https"
+		}
+		if header := strings.TrimSpace(req.Header.Get("X-Forwarded-Proto")); header != "" {
+			if first, _, _ := strings.Cut(header, ","); first != "" {
+				switch strings.ToLower(strings.TrimSpace(first)) {
+				case "https", "wss":
+					return "https"
+				case "http", "ws":
+					return "http"
+				}
+			}
+		}
+		if req.URL != nil {
+			switch strings.ToLower(req.URL.Scheme) {
+			case "https", "wss":
+				return "https"
+			}
+		}
+	}
+	return "http"
+}
+
+func requestMatchHost(authority string) string {
+	authority = strings.TrimSpace(authority)
+	if authority == "" {
+		return ""
+	}
+	if strings.HasPrefix(authority, "[") {
+		if idx := strings.LastIndex(authority, "]"); idx != -1 {
+			return authority[1:idx]
+		}
+	}
+	if host, _, err := net.SplitHostPort(authority); err == nil {
+		return host
+	}
+	return authority
+}
+
+func parseRuntimeBackendURL(raw string) (*url.URL, error) {
+	backendURL, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || backendURL.Scheme == "" || backendURL.Host == "" {
+		return nil, errInvalidRuntimeBackend
+	}
+	if backendURL.Scheme != "http" && backendURL.Scheme != "https" {
+		return nil, errInvalidRuntimeBackend
+	}
+	return backendURL, nil
+}
+
+func selectRuntimeBackend(route *router.Route) (*url.URL, store.Backend, error) {
+	backends := route.EffectiveBackends()
+	if len(backends) == 0 {
+		return nil, store.Backend{}, errNoBackendConfigured
+	}
+
+	if len(backends) == 1 {
+		backendURL, err := parseRuntimeBackendURL(backends[0].URL)
+		if err != nil {
+			return nil, store.Backend{}, err
+		}
+		return backendURL, backends[0], nil
+	}
+
+	for _, backend := range backends {
+		if backend.Weight <= 0 {
+			return nil, store.Backend{}, errInvalidRuntimeBackend
+		}
+	}
+
+	bl := newBalancer(backends)
+	if bl == nil {
+		return nil, store.Backend{}, errInvalidRuntimeBackend
+	}
+
+	picked, ok := bl.pick()
+	if !ok {
+		return nil, store.Backend{}, errNoBackendConfigured
+	}
+
+	backendURL, err := parseRuntimeBackendURL(picked.URL)
+	if err != nil {
+		return nil, store.Backend{}, err
+	}
+	return backendURL, picked, nil
+}
+
 func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startedAt := time.Now()
-		host := c.Request.Host
-		if idx := strings.Index(host, ":"); idx != -1 {
-			host = host[:idx]
-		}
+		host := requestMatchHost(c.Request.Host)
 		path := c.Request.URL.Path
 
 		route := routerMgr.Match(host, path)
@@ -373,48 +506,26 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 		// WebSocket detection: before backend URL parsing so empty-backend routes work
 		if isWebSocketRequest(&c.Request.Header) {
-			backends := route.EffectiveBackends()
-			var backendURL *url.URL
-			if len(backends) > 0 {
-				if len(backends) > 1 {
-					bl := newBalancer(backends)
-					if picked, ok := bl.pick(); ok {
-						backendURL, _ = url.Parse(picked.URL)
-					}
-				} else if !cs.isOpen(backends[0].URL) {
-					backendURL, _ = url.Parse(backends[0].URL)
+			backendURL, _, err := selectRuntimeBackend(route)
+			if err != nil {
+				if errors.Is(err, errNoBackendConfigured) {
+					handleWebSocket(c, nil, route)
+					return
 				}
-			}
-			if backendURL == nil || backendURL.Host == "" {
-				backendURL, _ = url.Parse(route.Backend)
+				c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "invalid_backend",
+						Message: "invalid backend",
+					},
+				})
+				return
 			}
 			handleWebSocket(c, backendURL, route)
 			return
 		}
 
-		// 多后端负载均衡，跳过熔断 open 的后端
-		backends := route.EffectiveBackends()
-		var backendURL *url.URL
-		var parseErr error
-		var picked store.Backend
-		var pickedOK bool
-
-		if len(backends) > 1 {
-			bl := newBalancer(backends)
-			picked, pickedOK = bl.pick()
-			if pickedOK {
-				backendURL, parseErr = url.Parse(picked.URL)
-			}
-		} else if len(backends) == 1 {
-			picked = backends[0]
-			pickedOK = !cs.isOpen(picked.URL)
-			if pickedOK {
-				backendURL, parseErr = url.Parse(picked.URL)
-			}
-		} else {
-			backendURL, parseErr = url.Parse(route.Backend)
-		}
-		if parseErr != nil {
+		backendURL, picked, err := selectRuntimeBackend(route)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
 				Error: httpresponse.ErrorDetail{
 					Code:    "invalid_backend",
@@ -453,12 +564,11 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 		proxy := httputil.NewSingleHostReverseProxy(backendURL)
 
-		baseTransport := &http.Transport{
-			DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
-			ResponseHeaderTimeout: readTimeout,
-
-			ExpectContinueTimeout: 1 * time.Second,
-		}
+		baseTransport := defaultTransportCache.get(transportKey{
+			DialTimeout:  dialTimeout,
+			ReadTimeout:  readTimeout,
+			MaxIdleConns: picked.MaxIdleConns,
+		})
 
 		proxy.Transport = newWriteTimeoutTransport(
 			newRetryTransport(baseTransport, maxRetries),
@@ -473,14 +583,9 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 
 			// 传递原始请求信息
 			req.Header.Set("X-Forwarded-Host", c.Request.Host)
-			req.Header.Set("X-Forwarded-Proto", "http")
+			req.Header.Set("X-Forwarded-Proto", forwardedProto(c.Request))
 			req.Header.Set("X-Forwarded-For", c.ClientIP())
 			req.Header.Set("X-Real-IP", c.ClientIP())
-
-			// SSE: ensure flushing
-			if f, ok := c.Writer.(http.Flusher); ok {
-				f.Flush()
-			}
 
 			// 去掉前缀
 			if route.StripPrefix {
@@ -491,7 +596,7 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 			}
 
 			// 正则 rewrite
-			if route.RewriteTarget != "" && route.PathMatchMode == "regex" && route.PathRegex != nil {
+			if route.RewriteTarget != "" && (route.PathMatchMode == "regex" || route.PathMatchMode == "regex_i") && route.PathRegex != nil {
 				newPath := route.PathRegex.ReplaceAllString(req.URL.Path, route.RewriteTarget)
 				if newPath != req.URL.Path {
 					log.Printf("rewrite route_id=%s: %s -> %s", route.ID, req.URL.Path, newPath)
@@ -508,25 +613,23 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, httpresponse.ErrorEnvelope{
 				Error: httpresponse.ErrorDetail{
 					Code:    "backend_error",
-					Message: fmt.Sprintf("backend error: %v", err),
+					Message: "upstream request failed",
 				},
 			})
 		}
 
-		// 记录最终响应状态
-		sw := &statusWriter{ResponseWriter: c.Writer, status: http.StatusOK}
-		c.Writer = sw
-
-		proxy.ServeHTTP(sw, c.Request)
+		proxyWriter := &proxyResponseWriter{ResponseWriter: c.Writer}
+		proxy.ServeHTTP(proxyWriter, c.Request)
+		finalStatus := c.Writer.Status()
 		// 正常 2xx 响应记录成功（用于半开状态的恢复探测）
-		if sw.status >= 200 && sw.status < 300 {
+		if finalStatus >= 200 && finalStatus < 300 {
 			cs.recordSuccess(backendHost)
 		}
 
 		latency := time.Since(startedAt)
-		metrics.RecordRequest(route.ID, c.Request.Method, statusLabel(sw.status), float64(latency.Milliseconds()))
+		metrics.RecordRequest(route.ID, c.Request.Method, statusLabel(finalStatus), float64(latency.Milliseconds()))
 		if backendHost != "" {
-			metrics.RecordBackendHealth(route.ID, backendHost, sw.status < 500)
+			metrics.RecordBackendHealth(route.ID, backendHost, finalStatus < 500)
 		}
 
 		// 结构化访问日志
@@ -537,7 +640,7 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 			Path:             c.Request.URL.Path,
 			BackendURL:       backendHost,
 			BackendLatencyMs: latency.Milliseconds(),
-			StatusCode:       sw.status,
+			StatusCode:       finalStatus,
 			ClientIP:         c.ClientIP(),
 			UserAgent:        c.Request.UserAgent(),
 		}
@@ -580,7 +683,7 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 		c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
 			Error: httpresponse.ErrorDetail{
 				Code:    "internal_error",
-				Message: fmt.Sprintf("hijack failed: %v", err),
+				Message: "websocket upgrade failed",
 			},
 		})
 		return
@@ -598,19 +701,19 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 
 	// Build WebSocket upgrade request with all original headers preserved
 	req := &http.Request{
-		Method:    "GET",
-		URL:       backendURL,
-		Host:      backendURL.Host,
-		Proto:     "HTTP/1.1",
+		Method:     "GET",
+		URL:        backendURL,
+		Host:       backendURL.Host,
+		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
-		Header:    make(http.Header),
+		Header:     make(http.Header),
 	}
 	for k, v := range c.Request.Header {
 		req.Header[k] = v
 	}
 	req.Header.Set("X-Forwarded-Host", c.Request.Host)
-	req.Header.Set("X-Forwarded-Proto", "http")
+	req.Header.Set("X-Forwarded-Proto", forwardedProto(c.Request))
 	req.Header.Set("X-Forwarded-For", c.ClientIP())
 	req.Header.Set("X-Real-IP", c.ClientIP())
 
@@ -629,6 +732,7 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		log.Printf("WebSocket route_id=%s: backend returned %d instead of 101", route.ID, resp.StatusCode)
 		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		clientConn.Write([]byte(fmt.Sprintf("HTTP/1.1 %d %s\r\n\r\n%s", resp.StatusCode, resp.Status, string(body))))
 		return
 	}
@@ -639,44 +743,13 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 }
 
 // pipeWebSocket proxies data bidirectionally between two connections.
-// statusWriter wraps http.ResponseWriter to capture the final status code.
-type statusWriter struct {
-	http.ResponseWriter
-	status int
+// proxyResponseWriter preserves Gin's native status tracking while smoothing
+// over optional interfaces that httptest.ResponseRecorder does not implement.
+type proxyResponseWriter struct {
+	gin.ResponseWriter
 }
 
-func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusWriter) Status() int {
-	return w.status
-}
-
-func (w *statusWriter) Size() int {
-	return 0
-}
-
-func (w *statusWriter) Written() bool {
-	return w.status > 0
-}
-
-func (w *statusWriter) WriteString(s string) (int, error) {
-	return w.ResponseWriter.Write([]byte(s))
-}
-
-func (w *statusWriter) WriteHeaderNow() {
-	// no-op: already handled by WriteHeader
-}
-
-func (w *statusWriter) Flush() {
-	if f, ok := w.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func (w *statusWriter) CloseNotify() <-chan bool {
+func (w *proxyResponseWriter) CloseNotify() <-chan bool {
 	var result <-chan bool
 	func() {
 		defer func() { recover() }()
@@ -691,18 +764,11 @@ func (w *statusWriter) CloseNotify() <-chan bool {
 	return ch
 }
 
-func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (w *proxyResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
 		return h.Hijack()
 	}
-	return nil, nil, nil
-}
-
-func (w *statusWriter) Pusher() http.Pusher {
-	if p, ok := w.ResponseWriter.(http.Pusher); ok {
-		return p
-	}
-	return nil
+	return nil, nil, http.ErrNotSupported
 }
 
 // statusLabel returns a short label for HTTP status codes for use in metrics.
@@ -742,10 +808,6 @@ func pipeWebSocket(a, b net.Conn) {
 func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
 	if claims == nil {
 		return false
-	}
-	switch claims.Role {
-	case store.RoleAdmin, store.RoleEditor:
-		return true
 	}
 	for _, allowedRouteID := range claims.RouteIDs {
 		if allowedRouteID == routeID {

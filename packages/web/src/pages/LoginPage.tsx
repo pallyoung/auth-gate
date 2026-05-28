@@ -8,30 +8,88 @@ import { Button, Card, Input } from '../components/ui'
 
 interface LoginPageProps {
   onLogin: (username: string, password: string) => Promise<LoginResponse>
+  sessionNotice?: 'expired' | 'recovery_failed' | null
+  onSessionNoticeShown?: () => void
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+type LoginErrorState = {
+  translationKey?: string
+  message?: string
+} | null
+
+export function LoginPage({
+  onLogin,
+  sessionNotice = null,
+  onSessionNoticeShown,
+}: LoginPageProps) {
   const { t } = useTranslation('login')
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
-  const [error, setError] = React.useState('')
+  const [error, setError] = React.useState<LoginErrorState>(null)
   const [loading, setLoading] = React.useState(false)
+  const activeSubmitRef = React.useRef<symbol | null>(null)
+
+  React.useEffect(() => {
+    if (!sessionNotice) {
+      return
+    }
+
+    setError({
+      translationKey:
+        sessionNotice === 'expired'
+          ? 'errors.sessionExpired'
+          : 'errors.sessionUnavailable',
+    })
+    onSessionNoticeShown?.()
+  }, [onSessionNoticeShown, sessionNotice])
+
+  const getErrorState = (err: ApiError): Exclude<LoginErrorState, null> => {
+    switch (err.code) {
+      case 'unauthorized':
+      case 'invalid_token':
+        return { translationKey: 'errors.sessionExpired' }
+      case 'invalid_credentials':
+        return { translationKey: 'errors.invalidCredentials' }
+      case 'user_disabled':
+        return { translationKey: 'errors.userDisabled' }
+      case 'control_plane_access_denied':
+        return { translationKey: 'errors.controlPlaneAccessDenied' }
+      case 'session_store_failure':
+      case 'token_generation_failed':
+        return { translationKey: 'errors.sessionUnavailable' }
+      default:
+        return { message: err.message }
+    }
+  }
+
+  const errorMessage = error?.translationKey
+    ? t(error.translationKey as any)
+    : error?.message || ''
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    setError('')
+    if (activeSubmitRef.current) {
+      return
+    }
+
+    const submitToken = Symbol('login-submit')
+    activeSubmitRef.current = submitToken
+    setError(null)
     setLoading(true)
 
     try {
-      await onLogin(username, password)
+      await onLogin(username.trim(), password)
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setError(getErrorState(err))
       } else {
-        setError(t('errors.network'))
+        setError({ translationKey: 'errors.network' })
       }
     } finally {
-      setLoading(false)
+      if (activeSubmitRef.current === submitToken) {
+        activeSubmitRef.current = null
+        setLoading(false)
+      }
     }
   }
 
@@ -96,12 +154,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            {error && (
+            {errorMessage && (
               <div
                 className="rounded-[20px] border border-[rgba(208,71,75,0.16)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
                 role="alert"
               >
-                {error}
+                {errorMessage}
               </div>
             )}
 
@@ -110,6 +168,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               type="text"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
               placeholder={t('fields.usernamePlaceholder')}
               leftIcon={<User className="h-4 w-4" />}
               required
@@ -120,6 +179,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
               placeholder={t('fields.passwordPlaceholder')}
               leftIcon={<Lock className="h-4 w-4" />}
               required

@@ -33,7 +33,7 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
             aria-pressed={isActive}
             onClick={() => void i18n.changeLanguage(option.value)}
             className={cn(
-              'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
+              'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
               isActive
                 ? 'bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-sm)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'

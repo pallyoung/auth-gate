@@ -29,18 +29,17 @@
 ### 开发模式
 
 ```bash
-# 安装前端依赖
-cd web && npm install && cd ..
-
-# 启动服务 (自动构建前端)
+# 启动打包产物
 make run
 
-# 或分别运行
-make web-build  # 构建前端
-make dev        # 开发模式 (不构建前端)
+# 或手动运行启动脚本
+./scripts/run.sh
+
+# 仅启动后端开发服务
+cd packages/server && make dev
 ```
 
-服务启动后访问 http://localhost:8080
+服务启动后访问 http://localhost:8080/_authgate
 
 ### 构建发布
 
@@ -55,36 +54,31 @@ make build
 
 ```yaml
 server:
-  host: "0.0.0.0"
-  port: 8080
+  addr: ":8080"
 
 database:
   path: "./data/auth-gate.db"
 
 auth:
   jwt_secret: "your-secret-key"
-  token_expiry: 24h
+  bootstrap_admin_password: "change-this-password"
 ```
 
-## 默认账号
+## 首次登录
 
 - 用户名: `admin`
-- 密码: `admin`
+- 密码: 使用 `BOOTSTRAP_ADMIN_PASSWORD` 环境变量或 `auth.bootstrap_admin_password`
+- 未配置时，服务会生成一次性密码并在启动日志中打印
 
 ## 项目结构
 
 ```
 auth-gate/
-├── cmd/server/          # 程序入口
-├── internal/
-│   ├── api/            # REST API
-│   ├── auth/           # 鉴权模块
-│   ├── config/         # 配置加载
-│   ├── proxy/          # 反向代理
-│   ├── router/         # 路由匹配
-│   └── store/          # SQLite 存储
-├── web/                # 前端代码
-├── configs/            # 配置文件
+├── packages/
+│   ├── server/         # Go 后端服务
+│   └── web/            # React 前端
+├── scripts/            # 构建/部署脚本
+├── docs/               # 项目文档
 └── e2e/                # 端到端测试
 ```
 
@@ -92,15 +86,15 @@ auth-gate/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/auth/login | 登录 |
-| GET | /api/routes | 路由列表 |
-| POST | /api/routes | 创建路由 |
-| PUT | /api/routes/:id | 更新路由 |
-| DELETE | /api/routes/:id | 删除路由 |
-| GET | /api/auth-rules | 鉴权规则列表 |
-| POST | /api/auth-rules | 创建鉴权规则 |
-| PUT | /api/auth-rules/:id | 更新鉴权规则 |
-| DELETE | /api/auth-rules/:id | 删除鉴权规则 |
+| POST | /_authgate/api/auth/login | 登录 |
+| GET | /_authgate/api/routes | 路由列表 |
+| POST | /_authgate/api/routes | 创建路由 |
+| PUT | /_authgate/api/routes/:id | 更新路由 |
+| DELETE | /_authgate/api/routes/:id | 删除路由 |
+| GET | /_authgate/api/auth-rules | 鉴权规则列表 |
+| POST | /_authgate/api/auth-rules | 创建鉴权规则 |
+| PUT | /_authgate/api/auth-rules/:id | 更新鉴权规则 |
+| DELETE | /_authgate/api/auth-rules/:id | 删除鉴权规则 |
 
 ## License
 

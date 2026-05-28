@@ -19,7 +19,7 @@ func NewSQLite(path string) (*SQLite, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=foreign_keys(1)", path))
+	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)", path))
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +37,8 @@ func NewSQLite(path string) (*SQLite, error) {
 		cert_path TEXT DEFAULT '',
 		key_path TEXT DEFAULT '',
 		tls_enabled INTEGER DEFAULT 0,
+		timeout_ms INTEGER DEFAULT 0,
+		retry_attempts INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -48,6 +50,12 @@ func NewSQLite(path string) (*SQLite, error) {
 		config TEXT DEFAULT '{}',
 		whitelist TEXT DEFAULT '[]',
 		rate_limit INTEGER DEFAULT 0,
+		burst INTEGER DEFAULT 0,
+		cors_allowed_origins TEXT DEFAULT '',
+		cors_allowed_methods TEXT DEFAULT '',
+		cors_allowed_headers TEXT DEFAULT '',
+		cors_allow_credentials INTEGER DEFAULT 0,
+		cors_max_age INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE CASCADE
@@ -111,7 +119,14 @@ func NewSQLite(path string) (*SQLite, error) {
 		`ALTER TABLE routes ADD COLUMN path_match_mode TEXT DEFAULT ''`,
 		`ALTER TABLE routes ADD COLUMN rewrite_target TEXT DEFAULT ''`,
 		`ALTER TABLE routes ADD COLUMN redirect_code INTEGER DEFAULT 0`,
+		`ALTER TABLE routes ADD COLUMN timeout_ms INTEGER DEFAULT 0`,
+		`ALTER TABLE routes ADD COLUMN retry_attempts INTEGER DEFAULT 0`,
 		`ALTER TABLE auth_rules ADD COLUMN burst INTEGER DEFAULT 0`,
+		`ALTER TABLE auth_rules ADD COLUMN cors_allowed_origins TEXT DEFAULT ''`,
+		`ALTER TABLE auth_rules ADD COLUMN cors_allowed_methods TEXT DEFAULT ''`,
+		`ALTER TABLE auth_rules ADD COLUMN cors_allowed_headers TEXT DEFAULT ''`,
+		`ALTER TABLE auth_rules ADD COLUMN cors_allow_credentials INTEGER DEFAULT 0`,
+		`ALTER TABLE auth_rules ADD COLUMN cors_max_age INTEGER DEFAULT 0`,
 		// Certificate table migrations (add columns if upgrading from older version)
 		`ALTER TABLE certificates ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
 	}

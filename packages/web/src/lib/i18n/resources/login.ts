@@ -26,6 +26,15 @@ export const loginEn = {
     passwordPlaceholder: 'Enter password',
   },
   errors: {
+    sessionExpired: 'Your session has expired. Sign in again to continue.',
+    invalidCredentials:
+      "We couldn't sign you in with that username and password. Check your credentials and try again.",
+    userDisabled:
+      'This account has been disabled. Contact your administrator or try a different account.',
+    controlPlaneAccessDenied:
+      "This account doesn't have access to the control plane. Contact your administrator or try a different account.",
+    sessionUnavailable:
+      "We couldn't start your control plane session right now. Try again in a moment.",
     network: 'Network error',
   },
 } as const
@@ -56,6 +65,11 @@ export const loginZhCN = {
     passwordPlaceholder: '输入密码',
   },
   errors: {
+    sessionExpired: '你的会话已过期。请重新登录后继续。',
+    invalidCredentials: '无法使用该用户名和密码登录。请检查凭据后重试。',
+    userDisabled: '该账号已被禁用。请联系管理员或尝试其他账号。',
+    controlPlaneAccessDenied: '该账号无权访问控制台。请联系管理员或尝试其他账号。',
+    sessionUnavailable: '当前无法启动控制台会话。请稍后重试。',
     network: '网络错误',
   },
 } as const

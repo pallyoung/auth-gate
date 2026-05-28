@@ -3,6 +3,7 @@ package session
 import (
 	"database/sql"
 	"errors"
+	"strings"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
@@ -68,6 +69,7 @@ func NewService(db *store.SQLite) *Service {
 }
 
 func (s *Service) Login(username, password string) (*Session, error) {
+	username = strings.TrimSpace(username)
 	user, err := s.db.GetUserByUsername(username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -98,6 +100,7 @@ func (s *Service) Login(username, password string) (*Session, error) {
 }
 
 func (s *Service) LoginForRoute(routeID, username, password string) (*RouteSession, error) {
+	username = strings.TrimSpace(username)
 	if _, err := s.db.GetRoute(routeID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newError(ErrCodeRouteNotFound, "route not found", err)

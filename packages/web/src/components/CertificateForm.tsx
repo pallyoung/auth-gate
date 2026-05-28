@@ -1,5 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { Alert, Button, Card, Input, Select } from './ui'
 
 interface CertificateFormProps {
@@ -15,8 +16,10 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     dns_provider: 'cloudflare',
   })
   const [providerConfig, setProviderConfig] = React.useState<Record<string, string>>({})
-  const [error, setError] = React.useState('')
+  const [error, setError] = React.useState<LocalizedTextState>(null)
   const [submitting, setSubmitting] = React.useState(false)
+  const activeSubmitRef = React.useRef<symbol | null>(null)
+  const errorMessage = resolveLocalizedText(t, error)
 
   const handleDnsProviderChange = (value: string) => {
     setForm({ ...form, dns_provider: value })
@@ -35,53 +38,72 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     setProviderConfig((current) => ({ ...current, [key]: value }))
   }
 
+  const normalizeProviderConfig = React.useCallback((config: Record<string, string>) => {
+    const normalized = Object.fromEntries(
+      Object.entries(config).map(([key, value]) => [key, value.trim()])
+    )
+    return normalized
+  }, [])
+
   const dnsProviderOptions = [
     { value: 'cloudflare', label: t('providers.cloudflare') },
     { value: 'route53', label: t('providers.route53') },
-    { value: 'manual', label: t('providers.manual') },
   ]
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    setError('')
+    if (activeSubmitRef.current) {
+      return
+    }
+
+    const submitToken = Symbol('certificate-form-submit')
+    activeSubmitRef.current = submitToken
+    setError(null)
     setSubmitting(true)
 
-    // Validate domain
-    const domainRegex = /^(\*\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/
-    if (!domainRegex.test(form.domain)) {
-      setError(t('form.invalidDomain'))
-      setSubmitting(false)
-      return
-    }
-
-    // Validate provider config
-    if (form.dns_provider === 'cloudflare' && !providerConfig.api_token) {
-      setError(t('form.cloudflareRequired'))
-      setSubmitting(false)
-      return
-    }
-    if (form.dns_provider === 'route53' && (!providerConfig.access_key_id || !providerConfig.secret_access_key)) {
-      setError(t('form.route53Required'))
-      setSubmitting(false)
-      return
-    }
-
     try {
+      const normalizedDomain = form.domain.trim()
+      const normalizedProviderConfig = normalizeProviderConfig(providerConfig)
+
+      // Validate domain
+      const domainRegex = /^(\*\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/
+      if (!domainRegex.test(normalizedDomain)) {
+        setError({ translationKey: 'form.invalidDomain' })
+        return
+      }
+
+      // Validate provider config
+      if (form.dns_provider === 'cloudflare' && !normalizedProviderConfig.api_token) {
+        setError({ translationKey: 'form.cloudflareRequired' })
+        return
+      }
+      if (
+        form.dns_provider === 'route53' &&
+        (!normalizedProviderConfig.access_key_id || !normalizedProviderConfig.secret_access_key)
+      ) {
+        setError({ translationKey: 'form.route53Required' })
+        return
+      }
+
       await onSubmit({
         name: form.name,
-        domain: form.domain,
+        domain: normalizedDomain,
         dns_provider: form.dns_provider,
-        provider_config: providerConfig,
+        provider_config: normalizedProviderConfig,
       })
     } catch (e) {
-      setError((e as Error).message)
-      setSubmitting(false)
+      setError(getLocalizedTextState(e))
+    } finally {
+      if (activeSubmitRef.current === submitToken) {
+        activeSubmitRef.current = null
+        setSubmitting(false)
+      }
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {error && <Alert variant="error">{error}</Alert>}
+      {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
 
       <Card tone="soft" className="space-y-5">
         <div>
@@ -167,14 +189,6 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
               placeholder="us-east-1"
               hint={t('form.route53RegionHint')}
             />
-          </div>
-        )}
-
-        {form.dns_provider === 'manual' && (
-          <div className="rounded-[18px] border border-[var(--warning-500)]/30 bg-[var(--warning-500)]/10 px-4 py-4">
-            <p className="text-sm text-[var(--text-primary)]">
-              <strong>{t('form.manualTitle')}</strong> {t('form.manualDescription')}
-            </p>
           </div>
         )}
       </Card>

@@ -27,6 +27,9 @@ interface LayoutProps {
       can_manage_users: boolean
       can_view_logs: boolean
     }
+    features?: {
+      certificates: boolean
+    }
   }
   onLogout?: () => void
 }
@@ -34,29 +37,32 @@ interface LayoutProps {
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
   const { t } = useTranslation(['layout', 'users'])
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const previousActiveElement = React.useRef<HTMLElement | null>(null)
+  const sidebarRef = React.useRef<HTMLElement | null>(null)
+  const closeSidebarButtonRef = React.useRef<HTMLButtonElement | null>(null)
 
-  const navItems = React.useMemo(() => {
-    const items = [
+  const allNavItems = React.useMemo(() => {
+    return [
       {
         path: '/',
         icon: RouteIcon,
         label: t('sections.routes.label'),
         description: t('sections.routes.description'),
-        visible: user?.permissions?.can_manage_routes !== false,
+        visible: true,
       },
       {
         path: '/certificates',
         icon: FileKey,
         label: t('sections.certificates.label'),
         description: t('sections.certificates.description'),
-        visible: user?.permissions?.can_manage_routes !== false,
+        visible: user?.features?.certificates === true,
       },
       {
         path: '/auth',
         icon: KeyRound,
         label: t('sections.auth.label'),
         description: t('sections.auth.description'),
-        visible: user?.permissions?.can_manage_auth !== false,
+        visible: true,
       },
       {
         path: '/users',
@@ -73,12 +79,90 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         visible: true,
       },
     ]
-
-    return items.filter((item) => item.visible)
   }, [t, user])
+  const navItems = React.useMemo(
+    () => allNavItems.filter((item) => item.visible),
+    [allNavItems]
+  )
 
-  const activeItem = navItems.find((item) => item.path === currentPath) ?? navItems[0]
+  const activeItem =
+    allNavItems.find((item) => item.path === currentPath) ??
+    navItems[0] ??
+    allNavItems[0]
   const closeSidebar = () => setSidebarOpen(false)
+  const getSidebarFocusableElements = React.useCallback(() => {
+    if (!sidebarRef.current) {
+      return [] as HTMLElement[]
+    }
+
+    return Array.from(
+      sidebarRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    )
+  }, [])
+
+  React.useEffect(() => {
+    if (sidebarOpen) {
+      previousActiveElement.current = document.activeElement as HTMLElement
+      document.body.style.overflow = 'hidden'
+      closeSidebarButtonRef.current?.focus()
+      return
+    }
+
+    document.body.style.overflow = ''
+    previousActiveElement.current?.focus()
+  }, [sidebarOpen])
+
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (!sidebarOpen) {
+        return
+      }
+
+      if (event.key === 'Escape') {
+        closeSidebar()
+        return
+      }
+
+      if (event.key !== 'Tab') {
+        return
+      }
+
+      const focusableElements = getSidebarFocusableElements()
+      if (focusableElements.length === 0) {
+        return
+      }
+
+      const [firstFocusableElement] = focusableElements
+      const lastFocusableElement = focusableElements[focusableElements.length - 1]
+      const activeElement = document.activeElement as HTMLElement | null
+
+      if (!activeElement || !sidebarRef.current?.contains(activeElement)) {
+        event.preventDefault()
+        firstFocusableElement.focus()
+        return
+      }
+
+      if (event.shiftKey && activeElement === firstFocusableElement) {
+        event.preventDefault()
+        lastFocusableElement.focus()
+        return
+      }
+
+      if (!event.shiftKey && activeElement === lastFocusableElement) {
+        event.preventDefault()
+        firstFocusableElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.body.style.overflow = ''
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [getSidebarFocusableElements, sidebarOpen])
+
   const roleLabel = (role: string) => {
     switch (role) {
       case 'member':
@@ -172,8 +256,9 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
                 <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">{roleLabel(user.role)}</p>
               </div>
               <button
+                type="button"
                 onClick={onLogout}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:h-10 md:w-10"
                 aria-label={t('user.logout')}
               >
                 <LogOut className="h-4 w-4" />
@@ -202,6 +287,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
 
       {sidebarOpen && (
         <aside
+          ref={sidebarRef}
           className="glass-panel-strong fixed left-3 top-3 z-50 flex h-[calc(100vh-1.5rem)] w-[var(--sidebar-width)] flex-col overflow-hidden transition-transform duration-[var(--duration-slow)] md:hidden"
           role="dialog"
           aria-modal="true"
@@ -209,8 +295,10 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         >
           <div className="absolute right-4 top-4 z-10">
             <button
+              type="button"
+              ref={closeSidebarButtonRef}
               onClick={closeSidebar}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
               aria-label={t('navigation.closeMenu')}
             >
               <X className="h-5 w-5" />
@@ -224,6 +312,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         <header className="sticky top-0 z-30 border-b border-[rgba(255,255,255,0.35)] bg-[rgba(246,243,236,0.72)] backdrop-blur-xl md:hidden">
           <div className="flex h-[var(--header-height)] items-center justify-between px-4">
             <button
+              type="button"
               onClick={() => setSidebarOpen(true)}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(255,255,255,0.72)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
               aria-label={t('navigation.openMenu')}

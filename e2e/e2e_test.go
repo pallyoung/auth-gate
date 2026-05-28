@@ -31,6 +31,11 @@ type routeResponse struct {
 	PathPrefix string `json:"path_prefix"`
 }
 
+const (
+	controlPlaneBasePath    = "/_authgate"
+	controlPlaneAPIBasePath = controlPlaneBasePath + "/api"
+)
+
 func TestAuthGateRealE2E(t *testing.T) {
 	t.Parallel()
 
@@ -79,14 +84,19 @@ func TestAuthGateRealE2E(t *testing.T) {
 	}
 	defer stopProcess(t, serverCmd)
 
-	waitForHTTPReady(t, baseURL+"/", &serverLogs)
+	waitForHTTPReady(t, baseURL+controlPlaneBasePath, &serverLogs)
 
-	indexBody := getBody(t, http.MethodGet, baseURL+"/", "", nil, http.StatusOK)
-	if !strings.Contains(indexBody, "<div id=\"root\"></div>") {
-		t.Fatalf("GET / returned unexpected body: %q", indexBody)
+	rootBody := getBody(t, http.MethodGet, baseURL+"/", "", nil, http.StatusNotFound)
+	if !strings.Contains(rootBody, `"code":"route_not_found"`) {
+		t.Fatalf("GET / returned unexpected body: %q", rootBody)
 	}
 
-	loginRaw := getBody(t, http.MethodPost, baseURL+"/api/auth/login", fmt.Sprintf(`{"username":"admin","password":%q}`, bootstrapPassword), map[string]string{
+	indexBody := getBody(t, http.MethodGet, baseURL+controlPlaneBasePath, "", nil, http.StatusOK)
+	if !strings.Contains(indexBody, "<div id=\"root\"></div>") {
+		t.Fatalf("GET %s returned unexpected body: %q", controlPlaneBasePath, indexBody)
+	}
+
+	loginRaw := getBody(t, http.MethodPost, baseURL+controlPlaneAPIBasePath+"/auth/login", fmt.Sprintf(`{"username":"admin","password":%q}`, bootstrapPassword), map[string]string{
 		"Content-Type": "application/json",
 	}, http.StatusOK)
 
@@ -98,7 +108,7 @@ func TestAuthGateRealE2E(t *testing.T) {
 		t.Fatalf("login token is empty")
 	}
 
-	routeRaw := getBody(t, http.MethodPost, baseURL+"/api/routes", fmt.Sprintf(`{"name":"backend","path_prefix":"/backend","backend":%q,"strip_prefix":true,"enabled":true}`, backend.URL), map[string]string{
+	routeRaw := getBody(t, http.MethodPost, baseURL+controlPlaneAPIBasePath+"/routes", fmt.Sprintf(`{"name":"backend","path_prefix":"/backend","backend":%q,"strip_prefix":true,"enabled":true}`, backend.URL), map[string]string{
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + login.Token,
 	}, http.StatusCreated)
@@ -129,7 +139,7 @@ func TestAuthGateRealE2E(t *testing.T) {
 	}
 
 	authRuleBody := fmt.Sprintf(`{"route_id":%q,"type":"apikey","config":{"secret":"secret-123","header_name":"X-API-Key"}}`, route.ID)
-	_ = getBody(t, http.MethodPost, baseURL+"/api/auth-rules", authRuleBody, map[string]string{
+	_ = getBody(t, http.MethodPost, baseURL+controlPlaneAPIBasePath+"/auth-rules", authRuleBody, map[string]string{
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + login.Token,
 	}, http.StatusCreated)

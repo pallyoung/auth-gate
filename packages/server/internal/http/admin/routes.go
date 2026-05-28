@@ -14,8 +14,8 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
-	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
+	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
 	sessionservice "github.com/pallyoung/auth-gate/packages/server/internal/service/session"
 	usersservice "github.com/pallyoung/auth-gate/packages/server/internal/service/users"
@@ -31,7 +31,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 	userSvc := usersservice.NewService(db)
 
 	group.POST("/auth/logout", logoutHandler())
-	group.GET("/auth/me", meHandler(db))
+	group.GET("/auth/me", meHandler(db, certSvc))
 
 	group.GET("/routes", listRoutes(routeSvc))
 	group.GET("/routes/:id", getRoute(routeSvc))
@@ -79,8 +79,9 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 	_ = sessionSvc
 }
 
-func LoginRoute(db *store.SQLite) gin.HandlerFunc {
+func LoginRoute(db *store.SQLite, certSvc *certservice.Service) gin.HandlerFunc {
 	sessionSvc := sessionservice.NewService(db)
+	certificatesEnabled := certSvc != nil
 
 	return func(c *gin.Context) {
 		var req dto.LoginRequest
@@ -95,7 +96,7 @@ func LoginRoute(db *store.SQLite) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, dto.LoginResponseFromStore(session.Token, session.User, session.Permissions))
+		c.JSON(http.StatusOK, dto.LoginResponseFromStore(session.Token, session.User, session.Permissions, certificatesEnabled))
 	}
 }
 
@@ -105,7 +106,9 @@ func logoutHandler() gin.HandlerFunc {
 	}
 }
 
-func meHandler(db *store.SQLite) gin.HandlerFunc {
+func meHandler(db *store.SQLite, certSvc *certservice.Service) gin.HandlerFunc {
+	certificatesEnabled := certSvc != nil
+
 	return func(c *gin.Context) {
 		current := auth.GetCurrentUser(c)
 		user, err := db.GetUserByID(current.UserID)
@@ -114,7 +117,7 @@ func meHandler(db *store.SQLite) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, dto.CurrentUserResponse(*user, store.GetPermissions(user.Role)))
+		c.JSON(http.StatusOK, dto.CurrentUserResponse(*user, store.GetPermissions(user.Role), certificatesEnabled))
 	}
 }
 
@@ -142,7 +145,7 @@ func getRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 
 func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req dto.RouteWriteRequest
+		var req dto.RouteCreateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -159,6 +162,8 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			TimeoutMs:     req.TimeoutMs,
+			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
 			PathMatchMode: req.PathMatchMode,
 			RewriteTarget: req.RewriteTarget,
@@ -174,7 +179,7 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 
 func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req dto.RouteWriteRequest
+		var req dto.RouteUpdateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -191,6 +196,8 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			TimeoutMs:     req.TimeoutMs,
+			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
 			PathMatchMode: req.PathMatchMode,
 			RewriteTarget: req.RewriteTarget,
@@ -238,7 +245,7 @@ func getAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 
 func createAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req dto.AuthRuleWriteRequest
+		var req dto.AuthRuleCreateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -254,6 +261,14 @@ func createAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 				Password:   req.Config.Password,
 				LoginMode:  req.Config.LoginMode,
 			},
+			Whitelist:            req.Whitelist,
+			RateLimit:            req.RateLimit,
+			Burst:                req.Burst,
+			CORSAllowedOrigins:   req.CORSAllowedOrigins,
+			CORSAllowedMethods:   req.CORSAllowedMethods,
+			CORSAllowedHeaders:   req.CORSAllowedHeaders,
+			CORSAllowCredentials: req.CORSAllowCredentials,
+			CORSMaxAge:           req.CORSMaxAge,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -265,7 +280,7 @@ func createAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 
 func updateAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req dto.AuthRuleWriteRequest
+		var req dto.AuthRuleUpdateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -274,13 +289,21 @@ func updateAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 		rule, err := authRuleSvc.Update(c.Param("id"), authrulesservice.UpdateInput{
 			RouteID: req.RouteID,
 			Type:    req.Type,
-			Config: authrulesservice.AuthConfigInput{
+			Config: authrulesservice.UpdateAuthConfigInput{
 				HeaderName: req.Config.HeaderName,
 				Secret:     req.Config.Secret,
 				Username:   req.Config.Username,
 				Password:   req.Config.Password,
 				LoginMode:  req.Config.LoginMode,
 			},
+			Whitelist:            req.Whitelist,
+			RateLimit:            req.RateLimit,
+			Burst:                req.Burst,
+			CORSAllowedOrigins:   req.CORSAllowedOrigins,
+			CORSAllowedMethods:   req.CORSAllowedMethods,
+			CORSAllowedHeaders:   req.CORSAllowedHeaders,
+			CORSAllowCredentials: req.CORSAllowCredentials,
+			CORSMaxAge:           req.CORSMaxAge,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -422,8 +445,8 @@ func createCertificate(certSvc *certservice.Service) gin.HandlerFunc {
 		}
 
 		cert, err := certSvc.Provision(context.Background(), certservice.ProvisionInput{
-			Name:       req.Name,
-			Domain:     req.Domain,
+			Name:        req.Name,
+			Domain:      req.Domain,
 			DNSProvider: dnsConfig,
 		})
 		if err != nil {
@@ -460,16 +483,18 @@ func certServiceError(c *gin.Context, err error) bool {
 		return false
 	}
 
+	message := certservice.Message(err)
+
 	switch targetCode := certservice.Code(err); targetCode {
 	case certservice.ErrCodeCertNotFound:
-		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case certservice.ErrCodeInvalidDomain, certservice.ErrCodeDomainExists,
+		writeError(c, http.StatusNotFound, targetCode, message)
+	case certservice.ErrCodeInvalidName, certservice.ErrCodeInvalidDomain, certservice.ErrCodeDomainExists,
 		certservice.ErrCodeInvalidProvider, certservice.ErrCodeCertNotActive:
-		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+		writeError(c, http.StatusBadRequest, targetCode, message)
 	case certservice.ErrCodeDNSProvider:
-		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+		writeError(c, http.StatusBadRequest, targetCode, message)
 	default:
-		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+		writeError(c, http.StatusInternalServerError, targetCode, message)
 	}
 	return true
 }
@@ -495,7 +520,7 @@ func routeServiceError(c *gin.Context, err error) bool {
 	switch targetCode := routesservice.Code(err); targetCode {
 	case routesservice.ErrCodeRouteNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeReservedRoutePathPrefix, routesservice.ErrCodeInvalidRouteBackend:
+	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeInvalidRoutePathMatchMode, routesservice.ErrCodeInvalidRoutePathRegex, routesservice.ErrCodeReservedRoutePathPrefix, routesservice.ErrCodeInvalidRouteHost, routesservice.ErrCodeInvalidRouteBackend, routesservice.ErrCodeInvalidRouteBackendWeight, routesservice.ErrCodeInvalidRouteRedirectCode:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
@@ -535,7 +560,7 @@ func userServiceError(c *gin.Context, err error) bool {
 	switch targetCode := usersservice.Code(err); targetCode {
 	case usersservice.ErrCodeUserNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case usersservice.ErrCodeInvalidRole, usersservice.ErrCodeDuplicateUser, usersservice.ErrCodeMissingPassword, usersservice.ErrCodeDuplicateRouteAccess, usersservice.ErrCodeRouteNotFound:
+	case usersservice.ErrCodeInvalidUsername, usersservice.ErrCodeInvalidRole, usersservice.ErrCodeDuplicateUser, usersservice.ErrCodeMissingPassword, usersservice.ErrCodeDuplicateRouteAccess, usersservice.ErrCodeRouteNotFound:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())

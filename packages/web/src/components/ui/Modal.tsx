@@ -29,23 +29,70 @@ export function Modal({
   const { t } = useTranslation('common')
   const previousActiveElement = useRef<HTMLElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const getFocusableElements = React.useCallback(() => {
+    if (!panelRef.current) {
+      return [] as HTMLElement[]
+    }
+
+    return Array.from(
+      panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    )
+  }, [])
 
   useEffect(() => {
     if (open) {
       previousActiveElement.current = document.activeElement as HTMLElement
       document.body.style.overflow = 'hidden'
-      panelRef.current?.focus()
+      const [firstFocusableElement] = getFocusableElements()
+      ;(firstFocusableElement ?? panelRef.current)?.focus()
       return
     }
 
     document.body.style.overflow = ''
     previousActiveElement.current?.focus()
-  }, [open])
+  }, [getFocusableElements, open])
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && open) {
+      if (!open) {
+        return
+      }
+
+      if (event.key === 'Escape') {
         onClose()
+        return
+      }
+
+      if (event.key !== 'Tab') {
+        return
+      }
+
+      const focusableElements = getFocusableElements()
+      if (focusableElements.length === 0) {
+        return
+      }
+
+      const [firstFocusableElement] = focusableElements
+      const lastFocusableElement = focusableElements[focusableElements.length - 1]
+      const activeElement = document.activeElement as HTMLElement | null
+
+      if (!activeElement || !panelRef.current?.contains(activeElement)) {
+        event.preventDefault()
+        firstFocusableElement.focus()
+        return
+      }
+
+      if (event.shiftKey && activeElement === firstFocusableElement) {
+        event.preventDefault()
+        lastFocusableElement.focus()
+        return
+      }
+
+      if (!event.shiftKey && activeElement === lastFocusableElement) {
+        event.preventDefault()
+        firstFocusableElement.focus()
       }
     }
 
@@ -84,8 +131,9 @@ export function Modal({
                 {title}
               </h2>
               <button
+                type="button"
                 onClick={onClose}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:h-10 md:w-10"
                 aria-label={t('actions.closeModal')}
               >
                 <X className="h-4 w-4" />

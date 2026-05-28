@@ -24,28 +24,49 @@ interface DataTableProps<T> {
   columns: Column<T>[]
   data: T[]
   onEdit?: (row: T) => void
-  onDelete?: (row: T) => void
+  onDelete?: (row: T) => void | Promise<void>
   extraActions?: (row: T) => React.ReactNode
   renderMobileCard?: (row: T) => React.ReactNode
   emptyMessage?: string
+}
+
+function getColumnValue<T>(row: T, key: keyof T | string) {
+  const path = String(key)
+
+  if (!path.includes('.')) {
+    return row[key as keyof T]
+  }
+
+  return path.split('.').reduce<unknown>((value, segment) => {
+    if (value === null || value === undefined || typeof value !== 'object') {
+      return undefined
+    }
+
+    return (value as Record<string, unknown>)[segment]
+  }, row)
 }
 
 function ActionButton({
   label,
   danger = false,
   onClick,
+  disabled = false,
   children,
 }: {
   label: string
   danger?: boolean
   onClick: () => void
+  disabled?: boolean
   children: React.ReactNode
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
       className={[
-        'flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-[var(--duration-fast)]',
+        'flex h-11 w-11 items-center justify-center rounded-full border transition-all duration-[var(--duration-fast)] md:h-9 md:w-9',
+        'disabled:cursor-not-allowed disabled:opacity-50',
         danger
           ? 'border-[rgba(208,71,75,0.14)] text-[var(--error)] hover:bg-[var(--error-light)]'
           : 'border-[var(--border-default)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
@@ -67,7 +88,26 @@ export function DataTable<T extends { id: string }>({
   emptyMessage,
 }: DataTableProps<T>) {
   const { t } = useTranslation('common')
+  const [pendingDeleteIds, setPendingDeleteIds] = React.useState<string[]>([])
+  const activeDeleteIdsRef = React.useRef(new Set<string>())
   const resolvedEmptyMessage = emptyMessage ?? t('table.noData')
+  const handleDelete = async (row: T) => {
+    if (!onDelete || activeDeleteIdsRef.current.has(row.id)) {
+      return
+    }
+
+    activeDeleteIdsRef.current.add(row.id)
+    setPendingDeleteIds((current) => (
+      current.includes(row.id) ? current : [...current, row.id]
+    ))
+
+    try {
+      await onDelete(row)
+    } finally {
+      activeDeleteIdsRef.current.delete(row.id)
+      setPendingDeleteIds((current) => current.filter((id) => id !== row.id))
+    }
+  }
   const mobileCardRenderer =
     renderMobileCard ||
     ((row: T) => (
@@ -76,7 +116,7 @@ export function DataTable<T extends { id: string }>({
           {columns
             .filter((col) => !col.hideOnMobile)
             .map((col) => {
-              const value = (row as any)[col.key]
+              const value = getColumnValue(row, col.key)
               return (
                 <div key={col.key as string} className="flex items-start justify-between gap-4">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -98,7 +138,14 @@ export function DataTable<T extends { id: string }>({
               </ActionButton>
             )}
             {onDelete && (
-              <ActionButton label={t('actions.delete')} danger onClick={() => onDelete(row)}>
+              <ActionButton
+                label={t('actions.delete')}
+                danger
+                disabled={pendingDeleteIds.includes(row.id)}
+                onClick={() => {
+                  void handleDelete(row)
+                }}
+              >
                 <Trash2 className="h-4 w-4" />
               </ActionButton>
             )}
@@ -133,9 +180,7 @@ export function DataTable<T extends { id: string }>({
               data.map((row) => (
                 <TableRow key={row.id}>
                   {columns.map((col) => {
-                    const value = col.key.toString().includes('.')
-                      ? (row as any)[col.key]
-                      : row[col.key as keyof T]
+                    const value = getColumnValue(row, col.key)
                     return (
                       <TableCell key={col.key as string} className={col.className}>
                         {col.render ? col.render(value, row) : String(value ?? '-')}
@@ -152,7 +197,14 @@ export function DataTable<T extends { id: string }>({
                           </ActionButton>
                         )}
                         {onDelete && (
-                          <ActionButton label={t('actions.delete')} danger onClick={() => onDelete(row)}>
+                          <ActionButton
+                            label={t('actions.delete')}
+                            danger
+                            disabled={pendingDeleteIds.includes(row.id)}
+                            onClick={() => {
+                              void handleDelete(row)
+                            }}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </ActionButton>
                         )}

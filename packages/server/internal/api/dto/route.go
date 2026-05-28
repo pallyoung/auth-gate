@@ -7,40 +7,63 @@ import (
 )
 
 type Route struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Host         string          `json:"host"`
-	PathPrefix   string          `json:"path_prefix"`
-	Backend      string          `json:"backend"`
-	StripPrefix  bool            `json:"strip_prefix"`
-	Enabled      bool            `json:"enabled"`
-	Priority     int             `json:"priority"`
-	TLSCert      string          `json:"tls_cert,omitempty"`
-	TLSKey       string          `json:"tls_key,omitempty"`
-	TLSEnabled   bool            `json:"tls_enabled"`
-	Backends     []store.Backend `json:"backends,omitempty"`
-	PathMatchMode string         `json:"path_match_mode,omitempty"`
-	RewriteTarget string         `json:"rewrite_target,omitempty"`
-	RedirectCode  int            `json:"redirect_code,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
-}
-
-type RouteWriteRequest struct {
+	ID            string          `json:"id"`
 	Name          string          `json:"name"`
 	Host          string          `json:"host"`
 	PathPrefix    string          `json:"path_prefix"`
-	Backend       string          `json:"backend" binding:"required"`
+	Backend       string          `json:"backend"`
+	StripPrefix   bool            `json:"strip_prefix"`
+	Enabled       bool            `json:"enabled"`
+	Priority      int             `json:"priority"`
+	TLSCert       string          `json:"tls_cert,omitempty"`
+	TLSKey        string          `json:"tls_key,omitempty"`
+	TLSEnabled    bool            `json:"tls_enabled"`
+	TimeoutMs     int             `json:"timeout_ms,omitempty"`
+	RetryAttempts int             `json:"retry_attempts,omitempty"`
+	Backends      []store.Backend `json:"backends,omitempty"`
+	PathMatchMode string          `json:"path_match_mode,omitempty"`
+	RewriteTarget string          `json:"rewrite_target,omitempty"`
+	RedirectCode  int             `json:"redirect_code,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type RouteCreateRequest struct {
+	Name          string          `json:"name"`
+	Host          string          `json:"host"`
+	PathPrefix    string          `json:"path_prefix"`
+	Backend       string          `json:"backend"`
 	StripPrefix   bool            `json:"strip_prefix"`
 	Enabled       bool            `json:"enabled"`
 	Priority      int             `json:"priority"`
 	TLSCert       string          `json:"tls_cert"`
 	TLSKey        string          `json:"tls_key"`
 	TLSEnabled    bool            `json:"tls_enabled"`
+	TimeoutMs     int             `json:"timeout_ms"`
+	RetryAttempts int             `json:"retry_attempts"`
 	Backends      []store.Backend `json:"backends"`
 	PathMatchMode string          `json:"path_match_mode"`
 	RewriteTarget string          `json:"rewrite_target"`
 	RedirectCode  int             `json:"redirect_code"`
+}
+
+type RouteUpdateRequest struct {
+	Name          *string          `json:"name,omitempty"`
+	Host          *string          `json:"host,omitempty"`
+	PathPrefix    *string          `json:"path_prefix,omitempty"`
+	Backend       *string          `json:"backend,omitempty"`
+	StripPrefix   *bool            `json:"strip_prefix,omitempty"`
+	Enabled       *bool            `json:"enabled,omitempty"`
+	Priority      *int             `json:"priority,omitempty"`
+	TLSCert       *string          `json:"tls_cert,omitempty"`
+	TLSKey        *string          `json:"tls_key,omitempty"`
+	TLSEnabled    *bool            `json:"tls_enabled,omitempty"`
+	TimeoutMs     *int             `json:"timeout_ms,omitempty"`
+	RetryAttempts *int             `json:"retry_attempts,omitempty"`
+	Backends      *[]store.Backend `json:"backends,omitempty"`
+	PathMatchMode *string          `json:"path_match_mode,omitempty"`
+	RewriteTarget *string          `json:"rewrite_target,omitempty"`
+	RedirectCode  *int             `json:"redirect_code,omitempty"`
 }
 
 func RouteResponse(route store.Route) Route {
@@ -56,6 +79,8 @@ func RouteResponse(route store.Route) Route {
 		TLSCert:       route.TLSCert,
 		TLSKey:        route.TLSKey,
 		TLSEnabled:    route.TLSEnabled,
+		TimeoutMs:     route.TimeoutMs,
+		RetryAttempts: route.RetryAttempts,
 		Backends:      route.Backends,
 		PathMatchMode: route.PathMatchMode,
 		RewriteTarget: route.RewriteTarget,

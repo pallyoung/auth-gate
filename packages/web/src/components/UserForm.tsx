@@ -1,24 +1,40 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import type { Route, User, UserInput } from '../lib/api/types'
-import { Button, Card, Input, Select, Switch } from './ui'
+import { Alert, Button, Card, Input, Select, Switch } from './ui'
 
 interface UserFormProps {
   user: User | null
   routes: Route[]
+  routeListUnavailable?: boolean
   onSubmit: (data: UserInput) => Promise<void> | void
   onCancel: () => void
 }
 
-export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
-  const { t } = useTranslation('users')
-  const [form, setForm] = React.useState<UserInput>({
+function getInitialUserForm(user: User | null): UserInput {
+  return {
     username: user?.username || '',
     password: '',
     role: user?.role || 'member',
     enabled: user?.enabled ?? true,
     route_ids: user?.route_ids || [],
-  })
+  }
+}
+
+export function UserForm({ user, routes, routeListUnavailable = false, onSubmit, onCancel }: UserFormProps) {
+  const { t } = useTranslation('users')
+  const [form, setForm] = React.useState<UserInput>(() => getInitialUserForm(user))
+  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const activeSubmitRef = React.useRef<symbol | null>(null)
+  const initialFormSeed = JSON.stringify(getInitialUserForm(user))
+  const errorMessage = resolveLocalizedText(t, error)
+
+  React.useEffect(() => {
+    setForm(getInitialUserForm(user))
+    setError(null)
+  }, [initialFormSeed])
 
   const toggleRoute = (routeID: string) => {
     setForm((current) => ({
@@ -31,7 +47,24 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    await onSubmit(form)
+    if (activeSubmitRef.current) {
+      return
+    }
+
+    const submitToken = Symbol('user-form-submit')
+    activeSubmitRef.current = submitToken
+    setError(null)
+    setSubmitting(true)
+    try {
+      await onSubmit(form)
+    } catch (err) {
+      setError(getLocalizedTextState(err))
+    } finally {
+      if (activeSubmitRef.current === submitToken) {
+        activeSubmitRef.current = null
+        setSubmitting(false)
+      }
+    }
   }
 
   const needsRouteAssignments = form.role === 'member'
@@ -44,6 +77,8 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
+
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -102,9 +137,15 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
         </div>
 
         {routes.length === 0 ? (
-          <div className="rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-5 text-sm text-[var(--text-muted)]">
-            {t('form.noRoutes')}
-          </div>
+          routeListUnavailable ? (
+            <Alert variant="warning">
+              {t('form.routeListUnavailable')}
+            </Alert>
+          ) : (
+            <div className="rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-5 text-sm text-[var(--text-muted)]">
+              {t('form.noRoutes')}
+            </div>
+          )
         ) : (
           <div className="space-y-3">
             {routes.map((route) => {
@@ -137,7 +178,7 @@ export function UserForm({ user, routes, onSubmit, onCancel }: UserFormProps) {
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">
           {t('common:actions.cancel')}
         </Button>
-        <Button type="submit" className="w-full md:w-auto">
+        <Button type="submit" className="w-full md:w-auto" loading={submitting}>
           {user ? t('form.update') : t('form.create')}
         </Button>
       </div>

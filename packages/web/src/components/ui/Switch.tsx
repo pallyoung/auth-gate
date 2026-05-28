@@ -31,6 +31,8 @@ export function Switch({
   ...props
 }: SwitchProps) {
   const switchId = id || label?.toLowerCase().replace(/\s+/g, '-')
+  const labelId = label ? `${switchId}-label` : undefined
+  const descriptionId = description ? `${switchId}-description` : undefined
 
   return (
     <label
@@ -38,13 +40,15 @@ export function Switch({
       className="flex items-center justify-between gap-4 rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-xl"
     >
       <div className="min-w-0">
-        {label && <div className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>}
-        {description && <div className="mt-1 text-xs text-[var(--text-muted)]">{description}</div>}
+        {label && <div id={labelId} className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>}
+        {description && <div id={descriptionId} className="mt-1 text-xs text-[var(--text-muted)]">{description}</div>}
       </div>
       <div className="relative shrink-0">
         <input
           type="checkbox"
           id={switchId}
+          aria-labelledby={labelId}
+          aria-describedby={descriptionId}
           checked={checked}
           onChange={onChange}
           className="peer sr-only"

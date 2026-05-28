@@ -67,4 +67,10 @@ clean:
 	-rm -rf packages/web/node_modules
 
 test:
-	cd packages/server && go test ./...
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		powershell -ExecutionPolicy Bypass -Command "Set-Location packages/server; go test ./...; Set-Location ../web; npm test; npm run build; Set-Location ../../e2e; go test ./..."; \
+	else \
+		cd packages/server && go test ./... && \
+		cd ../web && npm test && npm run build && \
+		cd ../../e2e && go test ./...; \
+	fi

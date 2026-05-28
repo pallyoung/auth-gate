@@ -56,6 +56,21 @@ func TestServiceLogin_ReturnsSession(t *testing.T) {
 	}
 }
 
+func TestServiceLogin_TrimsUsernameBeforeLookup(t *testing.T) {
+	auth.ConfigureJWTSecret("test-secret")
+	db := newTestDB(t)
+	createUser(t, db, "admin", "password123", store.RoleAdmin, true)
+	svc := NewService(db)
+
+	session, err := svc.Login("  admin\t", "password123")
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if session.User.Username != "admin" {
+		t.Fatalf("session.User.Username = %q, want %q", session.User.Username, "admin")
+	}
+}
+
 func TestServiceLogin_RejectsDisabledUser(t *testing.T) {
 	auth.ConfigureJWTSecret("test-secret")
 	db := newTestDB(t)
@@ -83,6 +98,21 @@ func TestServiceLogin_RejectsRouteOnlyUserForControlPlane(t *testing.T) {
 	}
 	if Code(err) != ErrCodeControlPlaneAccessDenied {
 		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeControlPlaneAccessDenied)
+	}
+}
+
+func TestServiceLogin_NormalizesLegacyStoredRoleForControlPlaneAccess(t *testing.T) {
+	auth.ConfigureJWTSecret("test-secret")
+	db := newTestDB(t)
+	createUser(t, db, "viewer", "password123", " VIEWER ", true)
+	svc := NewService(db)
+
+	session, err := svc.Login("viewer", "password123")
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if session.User.Role != store.RoleViewer {
+		t.Fatalf("session.User.Role = %q, want %q", session.User.Role, store.RoleViewer)
 	}
 }
 
@@ -128,5 +158,79 @@ func TestServiceLoginForRoute_ValidatesAssignedAccess(t *testing.T) {
 	}
 	if Code(err) != ErrCodeRouteNotFound {
 		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeRouteNotFound)
+	}
+}
+
+func TestServiceLoginForRoute_TrimsUsernameBeforeLookup(t *testing.T) {
+	auth.ConfigureJWTSecret("test-secret")
+	db := newTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "svc",
+		PathPrefix: "/svc",
+		Backend:    "http://example.com",
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	hash, err := store.HashPassword("password123")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+	if err := db.CreateUser(&store.User{
+		Username:     "member",
+		PasswordHash: hash,
+		Role:         store.RoleMember,
+		Enabled:      true,
+		RouteIDs:     []string{"route-1"},
+	}); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	svc := NewService(db)
+	routeSession, err := svc.LoginForRoute("route-1", "  member  ", "password123")
+	if err != nil {
+		t.Fatalf("LoginForRoute() error = %v", err)
+	}
+	if routeSession.User.Username != "member" {
+		t.Fatalf("routeSession.User.Username = %q, want %q", routeSession.User.Username, "member")
+	}
+}
+
+func TestServiceLoginForRoute_DoesNotGrantUnassignedOperatorAccess(t *testing.T) {
+	auth.ConfigureJWTSecret("test-secret")
+	db := newTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-1",
+		Name:       "svc",
+		PathPrefix: "/svc",
+		Backend:    "http://example.com",
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	hash, err := store.HashPassword("password123")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+	if err := db.CreateUser(&store.User{
+		Username:     "editor",
+		PasswordHash: hash,
+		Role:         store.RoleEditor,
+		Enabled:      true,
+		RouteIDs:     nil,
+	}); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	svc := NewService(db)
+	_, err = svc.LoginForRoute("route-1", "editor", "password123")
+	if err == nil {
+		t.Fatal("LoginForRoute() error = nil, want route access denied")
+	}
+	if Code(err) != ErrCodeRouteAccessDenied {
+		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeRouteAccessDenied)
 	}
 }

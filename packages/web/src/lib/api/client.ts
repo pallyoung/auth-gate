@@ -33,8 +33,8 @@ async function doRequest<T>(path: string, options?: RequestOptions): Promise<T> 
   }
 
   const res = await fetch(`${controlPlaneAPIBasePath}${path}`, { ...options, headers })
-  if (res.status === 401 && authMode === 'control-plane') {
-    clearSession()
+  if (res.status === 401 && authMode === 'control-plane' && token && getSessionToken() === token) {
+    clearSession('expired')
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: { message: 'Unknown error' } })) as ApiErrorEnvelope

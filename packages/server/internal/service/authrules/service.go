@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	ErrCodeAuthRuleNotFound         = "auth_rule_not_found"
-	ErrCodeRouteNotFound            = "route_not_found"
-	ErrCodeRouteIDRequired          = "route_id_required"
-	ErrCodeInvalidAuthRuleType      = "invalid_auth_rule_type"
-	ErrCodeMissingAPIKeySecret      = "missing_apikey_secret"
-	ErrCodeMissingBearerSecret      = "missing_bearer_secret"
-	ErrCodeMissingBasicCredentials  = "missing_basic_credentials"
-	ErrCodeDuplicateRouteAuthRule   = "duplicate_route_auth_rule"
-	ErrCodeAuthRuleStoreFailure     = "auth_rule_store_failure"
+	ErrCodeAuthRuleNotFound        = "auth_rule_not_found"
+	ErrCodeRouteNotFound           = "route_not_found"
+	ErrCodeRouteIDRequired         = "route_id_required"
+	ErrCodeInvalidAuthRuleType     = "invalid_auth_rule_type"
+	ErrCodeMissingAPIKeySecret     = "missing_apikey_secret"
+	ErrCodeMissingBearerSecret     = "missing_bearer_secret"
+	ErrCodeMissingBasicCredentials = "missing_basic_credentials"
+	ErrCodeDuplicateRouteAuthRule  = "duplicate_route_auth_rule"
+	ErrCodeAuthRuleStoreFailure    = "auth_rule_store_failure"
 )
 
 type Error struct {
@@ -59,13 +59,41 @@ type AuthConfigInput struct {
 	LoginMode  string
 }
 
-type CreateInput struct {
-	RouteID   string
-	Type      string
-	Config    AuthConfigInput
+type UpdateAuthConfigInput struct {
+	HeaderName *string
+	Secret     *string
+	Username   *string
+	Password   *string
+	LoginMode  *string
 }
 
-type UpdateInput = CreateInput
+type CreateInput struct {
+	RouteID              string
+	Type                 string
+	Config               AuthConfigInput
+	Whitelist            []string
+	RateLimit            int
+	Burst                int
+	CORSAllowedOrigins   string
+	CORSAllowedMethods   string
+	CORSAllowedHeaders   string
+	CORSAllowCredentials bool
+	CORSMaxAge           int
+}
+
+type UpdateInput struct {
+	RouteID              *string
+	Type                 *string
+	Config               UpdateAuthConfigInput
+	Whitelist            *[]string
+	RateLimit            *int
+	Burst                *int
+	CORSAllowedOrigins   *string
+	CORSAllowedMethods   *string
+	CORSAllowedHeaders   *string
+	CORSAllowCredentials *bool
+	CORSMaxAge           *int
+}
 
 type Service struct {
 	db       *store.SQLite
@@ -84,6 +112,9 @@ func (s *Service) List() ([]store.AuthRule, error) {
 	if err != nil {
 		return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to list auth rules", err)
 	}
+	for i := range rules {
+		rules[i] = normalizeStoredAuthRule(rules[i])
+	}
 	return rules, nil
 }
 
@@ -95,11 +126,12 @@ func (s *Service) Get(id string) (*store.AuthRule, error) {
 		}
 		return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to get auth rule", err)
 	}
-	return rule, nil
+	normalized := normalizeStoredAuthRule(*rule)
+	return &normalized, nil
 }
 
 func (s *Service) Create(input CreateInput) (*store.AuthRule, error) {
-	rule, err := s.build(input, nil)
+	rule, err := s.buildCreate(input)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +150,7 @@ func (s *Service) Update(id string, input UpdateInput) (*store.AuthRule, error) 
 	if err != nil {
 		return nil, err
 	}
-	rule, err := s.build(input, existing)
+	rule, err := s.buildUpdate(input, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +179,7 @@ func (s *Service) Delete(id string) error {
 	return nil
 }
 
-func (s *Service) build(input CreateInput, existing *store.AuthRule) (*store.AuthRule, error) {
+func (s *Service) buildCreate(input CreateInput) (*store.AuthRule, error) {
 	routeID := strings.TrimSpace(input.RouteID)
 	if routeID == "" {
 		return nil, newError(ErrCodeRouteIDRequired, "route_id required", nil)
@@ -170,10 +202,6 @@ func (s *Service) build(input CreateInput, existing *store.AuthRule) (*store.Aut
 		Password:   input.Config.Password,
 		LoginMode:  strings.TrimSpace(input.Config.LoginMode),
 	}
-
-	if existing != nil {
-		config = mergeProtectedAuthConfig(existing.Config, config, ruleType)
-	}
 	if ruleType == "gateway" && config.LoginMode == "" {
 		config.LoginMode = "form"
 	}
@@ -182,9 +210,128 @@ func (s *Service) build(input CreateInput, existing *store.AuthRule) (*store.Aut
 	}
 
 	return &store.AuthRule{
-		RouteID:   routeID,
-		Type:      ruleType,
-		Config:    config,
+		RouteID:              routeID,
+		Type:                 ruleType,
+		Config:               config,
+		Whitelist:            normalizeStringSlice(input.Whitelist),
+		RateLimit:            input.RateLimit,
+		Burst:                input.Burst,
+		CORSAllowedOrigins:   normalizeCommaSeparated(input.CORSAllowedOrigins),
+		CORSAllowedMethods:   normalizeCommaSeparated(input.CORSAllowedMethods),
+		CORSAllowedHeaders:   normalizeCommaSeparated(input.CORSAllowedHeaders),
+		CORSAllowCredentials: input.CORSAllowCredentials,
+		CORSMaxAge:           input.CORSMaxAge,
+	}, nil
+}
+
+func (s *Service) buildUpdate(input UpdateInput, existing *store.AuthRule) (*store.AuthRule, error) {
+	routeID := existing.RouteID
+	if input.RouteID != nil {
+		routeID = strings.TrimSpace(*input.RouteID)
+	}
+	if routeID == "" {
+		return nil, newError(ErrCodeRouteIDRequired, "route_id required", nil)
+	}
+	if _, err := s.db.GetRoute(routeID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, newError(ErrCodeRouteNotFound, "route not found", err)
+		}
+		return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to load route", err)
+	}
+
+	ruleType := existing.Type
+	if input.Type != nil {
+		ruleType = strings.ToLower(strings.TrimSpace(*input.Type))
+		if ruleType == "" {
+			ruleType = "none"
+		}
+	}
+	sameType := ruleType == existing.Type
+
+	config := store.AuthConfig{}
+	if sameType {
+		config = existing.Config
+	}
+
+	if input.Config.HeaderName != nil {
+		config.HeaderName = strings.TrimSpace(*input.Config.HeaderName)
+	}
+	if input.Config.Secret != nil {
+		config.Secret = strings.TrimSpace(*input.Config.Secret)
+	}
+	if input.Config.Username != nil {
+		config.Username = strings.TrimSpace(*input.Config.Username)
+	}
+	if input.Config.Password != nil {
+		if strings.TrimSpace(*input.Config.Password) != "" {
+			config.Password = *input.Config.Password
+		} else if !sameType {
+			config.Password = ""
+		}
+	}
+	if input.Config.LoginMode != nil {
+		config.LoginMode = strings.TrimSpace(*input.Config.LoginMode)
+	}
+
+	whitelist := existing.Whitelist
+	if input.Whitelist != nil {
+		whitelist = normalizeStringSlice(*input.Whitelist)
+	}
+
+	rateLimit := existing.RateLimit
+	if input.RateLimit != nil {
+		rateLimit = *input.RateLimit
+	}
+
+	burst := existing.Burst
+	if input.Burst != nil {
+		burst = *input.Burst
+	}
+
+	corsAllowedOrigins := existing.CORSAllowedOrigins
+	if input.CORSAllowedOrigins != nil {
+		corsAllowedOrigins = normalizeCommaSeparated(*input.CORSAllowedOrigins)
+	}
+
+	corsAllowedMethods := existing.CORSAllowedMethods
+	if input.CORSAllowedMethods != nil {
+		corsAllowedMethods = normalizeCommaSeparated(*input.CORSAllowedMethods)
+	}
+
+	corsAllowedHeaders := existing.CORSAllowedHeaders
+	if input.CORSAllowedHeaders != nil {
+		corsAllowedHeaders = normalizeCommaSeparated(*input.CORSAllowedHeaders)
+	}
+
+	corsAllowCredentials := existing.CORSAllowCredentials
+	if input.CORSAllowCredentials != nil {
+		corsAllowCredentials = *input.CORSAllowCredentials
+	}
+
+	corsMaxAge := existing.CORSMaxAge
+	if input.CORSMaxAge != nil {
+		corsMaxAge = *input.CORSMaxAge
+	}
+
+	if ruleType == "gateway" && config.LoginMode == "" {
+		config.LoginMode = "form"
+	}
+	if err := validate(ruleType, config); err != nil {
+		return nil, err
+	}
+
+	return &store.AuthRule{
+		RouteID:              routeID,
+		Type:                 ruleType,
+		Config:               config,
+		Whitelist:            whitelist,
+		RateLimit:            rateLimit,
+		Burst:                burst,
+		CORSAllowedOrigins:   corsAllowedOrigins,
+		CORSAllowedMethods:   corsAllowedMethods,
+		CORSAllowedHeaders:   corsAllowedHeaders,
+		CORSAllowCredentials: corsAllowCredentials,
+		CORSMaxAge:           corsMaxAge,
 	}, nil
 }
 
@@ -209,7 +356,7 @@ func validate(ruleType string, config store.AuthConfig) error {
 		}
 		return nil
 	case "basic":
-		if config.Username == "" || config.Password == "" {
+		if config.Username == "" || strings.TrimSpace(config.Password) == "" {
 			return newError(ErrCodeMissingBasicCredentials, "basic username and password required", nil)
 		}
 		return nil
@@ -220,30 +367,47 @@ func validate(ruleType string, config store.AuthConfig) error {
 	}
 }
 
-func mergeProtectedAuthConfig(existing, incoming store.AuthConfig, ruleType string) store.AuthConfig {
-	merged := incoming
-
-	switch ruleType {
-	case "apikey", "bearer":
-		if merged.Secret == "" {
-			merged.Secret = existing.Secret
-		}
-	case "basic":
-		if merged.Password == "" {
-			merged.Password = existing.Password
-		}
-		if merged.Username == "" {
-			merged.Username = existing.Username
-		}
-	case "gateway":
-		if merged.LoginMode == "" {
-			merged.LoginMode = existing.LoginMode
-		}
-	}
-
-	return merged
-}
-
 func isUniqueViolation(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "unique")
+}
+
+func normalizeStoredAuthRule(rule store.AuthRule) store.AuthRule {
+	rule.Type = strings.ToLower(strings.TrimSpace(rule.Type))
+	rule.Whitelist = normalizeStringSlice(rule.Whitelist)
+	rule.CORSAllowedOrigins = normalizeCommaSeparated(rule.CORSAllowedOrigins)
+	rule.CORSAllowedMethods = normalizeCommaSeparated(rule.CORSAllowedMethods)
+	rule.CORSAllowedHeaders = normalizeCommaSeparated(rule.CORSAllowedHeaders)
+	return rule
+}
+
+func normalizeStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, trimmed)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func normalizeCommaSeparated(value string) string {
+	parts := strings.Split(value, ",")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, trimmed)
+	}
+	return strings.Join(normalized, ",")
 }

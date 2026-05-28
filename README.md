@@ -33,11 +33,14 @@ auth-gate/
 ### 开发模式
 
 ```bash
-# 方式一: 使用根目录 Makefile
-make dev
+# 方式一: 构建并启动打包产物
+make run
 
-# 方式二: 使用脚本
-./scripts/dev.sh
+# 方式二: 直接运行部署脚本
+./scripts/run.sh
+
+# 方式三: 仅启动后端开发服务
+cd packages/server && make dev
 ```
 
 ### 构建发布
@@ -47,7 +50,7 @@ make build
 # 产出: packages/server/bin/auth-gate
 ```
 
-服务启动后访问 http://localhost:8080
+服务启动后访问 http://localhost:8080/_authgate
 
 ## 配置
 
@@ -55,21 +58,21 @@ make build
 
 ```yaml
 server:
-  host: "0.0.0.0"
-  port: 8080
+  addr: ":8080"
 
 database:
   path: "./data/auth-gate.db"
 
 auth:
   jwt_secret: "your-secret-key"
-  token_expiry: 24h
+  bootstrap_admin_password: "change-this-password"
 ```
 
-## 默认账号
+## 首次登录
 
 - 用户名: `admin`
-- 密码: `admin`
+- 密码: 使用 `BOOTSTRAP_ADMIN_PASSWORD` 环境变量或 `auth.bootstrap_admin_password`
+- 未配置时，服务会生成一次性密码并在启动日志中打印
 
 ## 技术栈
 

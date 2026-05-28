@@ -9,14 +9,15 @@ import (
 )
 
 const (
-	ErrCodeUserNotFound    = "user_not_found"
-	ErrCodeInvalidRole     = "invalid_role"
-	ErrCodeDuplicateUser   = "duplicate_user"
+	ErrCodeUserNotFound         = "user_not_found"
+	ErrCodeInvalidUsername      = "invalid_username"
+	ErrCodeInvalidRole          = "invalid_role"
+	ErrCodeDuplicateUser        = "duplicate_user"
 	ErrCodeDuplicateRouteAccess = "duplicate_route_access"
-	ErrCodeRouteNotFound   = "route_not_found"
-	ErrCodePasswordHashing = "password_hash_failed"
-	ErrCodeMissingPassword = "missing_password"
-	ErrCodeUserStoreFailure = "user_store_failure"
+	ErrCodeRouteNotFound        = "route_not_found"
+	ErrCodePasswordHashing      = "password_hash_failed"
+	ErrCodeMissingPassword      = "missing_password"
+	ErrCodeUserStoreFailure     = "user_store_failure"
 )
 
 type Error struct {
@@ -58,11 +59,11 @@ type CreateInput struct {
 }
 
 type UpdateInput struct {
-	Username string
+	Username *string
 	Password string
-	Role     string
-	Enabled  bool
-	RouteIDs []string
+	Role     *string
+	Enabled  *bool
+	RouteIDs *[]string
 }
 
 type Service struct {
@@ -93,6 +94,10 @@ func (s *Service) Get(id string) (*store.User, error) {
 }
 
 func (s *Service) Create(input CreateInput) (*store.User, error) {
+	username, err := normalizeUsername(input.Username)
+	if err != nil {
+		return nil, err
+	}
 	role, ok := normalizeRole(input.Role)
 	if !ok {
 		return nil, newError(ErrCodeInvalidRole, "invalid role", nil)
@@ -111,7 +116,7 @@ func (s *Service) Create(input CreateInput) (*store.User, error) {
 	}
 
 	user := &store.User{
-		Username:     strings.TrimSpace(input.Username),
+		Username:     username,
 		PasswordHash: hash,
 		Role:         role,
 		Enabled:      input.Enabled,
@@ -132,18 +137,46 @@ func (s *Service) Update(id string, input UpdateInput) (*store.User, error) {
 		return nil, err
 	}
 
-	role, ok := normalizeRole(input.Role)
-	if !ok {
-		return nil, newError(ErrCodeInvalidRole, "invalid role", nil)
-	}
-	routeIDs, err := s.validateRouteAccess(role, input.RouteIDs)
-	if err != nil {
-		return nil, err
+	username := user.Username
+	if input.Username != nil {
+		normalizedUsername, err := normalizeUsername(*input.Username)
+		if err != nil {
+			return nil, err
+		}
+		username = normalizedUsername
 	}
 
-	user.Username = strings.TrimSpace(input.Username)
+	role := user.Role
+	if input.Role != nil {
+		normalizedRole, ok := normalizeRole(*input.Role)
+		if !ok {
+			return nil, newError(ErrCodeInvalidRole, "invalid role", nil)
+		}
+		role = normalizedRole
+	}
+
+	routeIDs := user.RouteIDs
+	if input.RouteIDs != nil {
+		normalizedRouteIDs, err := s.validateRouteAccess(role, *input.RouteIDs)
+		if err != nil {
+			return nil, err
+		}
+		routeIDs = normalizedRouteIDs
+	}
+
+	if input.Role != nil && input.RouteIDs == nil {
+		normalizedRouteIDs, err := s.validateRouteAccess(role, routeIDs)
+		if err != nil {
+			return nil, err
+		}
+		routeIDs = normalizedRouteIDs
+	}
+
+	user.Username = username
 	user.Role = role
-	user.Enabled = input.Enabled
+	if input.Enabled != nil {
+		user.Enabled = *input.Enabled
+	}
 	user.RouteIDs = routeIDs
 
 	if strings.TrimSpace(input.Password) != "" {
@@ -157,6 +190,9 @@ func (s *Service) Update(id string, input UpdateInput) (*store.User, error) {
 	if err := s.db.UpdateUser(user); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newError(ErrCodeUserNotFound, "user not found", err)
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, newError(ErrCodeDuplicateUser, "username already exists", err)
 		}
 		return nil, newError(ErrCodeUserStoreFailure, "failed to update user", err)
 	}
@@ -176,7 +212,7 @@ func (s *Service) Delete(id string) error {
 func normalizeRole(role string) (string, bool) {
 	role = strings.ToLower(strings.TrimSpace(role))
 	if role == "" {
-		role = store.RoleViewer
+		role = store.RoleMember
 	}
 	switch role {
 	case store.RoleAdmin, store.RoleEditor, store.RoleViewer, store.RoleMember:
@@ -184,6 +220,14 @@ func normalizeRole(role string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func normalizeUsername(username string) (string, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return "", newError(ErrCodeInvalidUsername, "username required", nil)
+	}
+	return username, nil
 }
 
 func (s *Service) validateRouteAccess(role string, routeIDs []string) ([]string, error) {

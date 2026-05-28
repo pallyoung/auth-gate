@@ -9,6 +9,15 @@ import { UsersPage } from './pages/UsersPage'
 import { CertificatesPage } from './pages/CertificatesPage'
 import { useSession } from './lib/session'
 
+const knownControlPlanePaths = new Set([
+  '/',
+  '/access-login',
+  '/auth',
+  '/certificates',
+  '/settings',
+  '/users',
+])
+
 function useRoute() {
   const [path, setPath] = React.useState(window.location.hash.slice(1) || '/')
 
@@ -22,12 +31,33 @@ function useRoute() {
 }
 
 export default function App() {
-  const { user, token, loading, login, logout } = useSession()
+  const { user, token, loading, bootstrapping, notice, login, logout, clearNotice } = useSession()
   const path = useRoute()
   const [pathname, search = ''] = path.split('?')
   const searchParams = React.useMemo(() => new URLSearchParams(search), [search])
+  const normalizedPathname = knownControlPlanePaths.has(pathname) ? pathname : '/'
+  const waitingForUsersPermissionBootstrap =
+    normalizedPathname === '/users' && bootstrapping && token && user
+  const effectivePathname =
+    !waitingForUsersPermissionBootstrap &&
+    normalizedPathname === '/users' &&
+    token &&
+    user &&
+    user.permissions?.can_manage_users !== true
+      ? '/'
+      : normalizedPathname
 
-  if (loading) {
+  React.useEffect(() => {
+    if (effectivePathname !== pathname) {
+      window.location.hash = effectivePathname
+    }
+  }, [effectivePathname, pathname])
+
+  if (pathname === '/access-login') {
+    return <AccessLoginPage searchParams={searchParams} />
+  }
+
+  if (loading || waitingForUsersPermissionBootstrap) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-page)]">
         <div className="animate-spin w-8 h-8 border-2 border-[var(--primary-500)] border-t-transparent rounded-full" />
@@ -35,16 +65,12 @@ export default function App() {
     )
   }
 
-  if (pathname === '/access-login') {
-    return <AccessLoginPage searchParams={searchParams} />
-  }
-
   if (!token || !user) {
-    return <LoginPage onLogin={login} />
+    return <LoginPage onLogin={login} sessionNotice={notice} onSessionNoticeShown={clearNotice} />
   }
 
   const renderPage = () => {
-    switch (pathname) {
+    switch (effectivePathname) {
       case '/auth': return <AuthRulesPage />
       case '/users': return <UsersPage />
       case '/certificates': return <CertificatesPage />
@@ -54,7 +80,7 @@ export default function App() {
   }
 
   return (
-    <Layout currentPath={pathname} user={user} onLogout={logout}>
+    <Layout currentPath={effectivePathname} user={user} onLogout={logout}>
       {renderPage()}
     </Layout>
   )

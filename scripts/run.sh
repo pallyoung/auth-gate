@@ -13,7 +13,7 @@ fi
 
 # Start service
 cd "$DIST_DIR"
-echo "Starting Auth Gate on http://localhost:8080"
+echo "Starting Auth Gate control plane on http://localhost:8080/_authgate"
 echo "Press Ctrl+C to stop"
 echo ""
 exec ./auth-gate

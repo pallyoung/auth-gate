@@ -50,15 +50,24 @@ func routeAccessClaims(c *gin.Context, db *store.SQLite) (*auth.Claims, bool) {
 }
 
 func SetRouteAccessCookie(c *gin.Context, token string) {
-	c.SetCookie(routeAccessCookieName, token, 86400, "/", "", false, true)
+	secure := forwardedProto(c.Request) == "https"
+	c.SetCookie(routeAccessCookieName, token, 86400, "/", "", secure, true)
 }
 
 func ClearRouteAccessCookie(c *gin.Context) {
-	c.SetCookie(routeAccessCookieName, "", -1, "/", "", false, true)
+	secure := forwardedProto(c.Request) == "https"
+	c.SetCookie(routeAccessCookieName, "", -1, "/", "", secure, true)
 }
 
 func SanitizeAccessRedirect(next string, fallback string) string {
-	if strings.TrimSpace(next) == "" {
+	next = strings.TrimSpace(next)
+	if next == "" {
+		return fallback
+	}
+	if strings.HasPrefix(next, "//") {
+		return fallback
+	}
+	if strings.Contains(next, `\`) {
 		return fallback
 	}
 

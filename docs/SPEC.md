@@ -9,16 +9,6 @@
 - 可视化配置路由和鉴权规则
 - 统一的访问控制和身份认证
 
-
-## 1. 项目概述
-
-**目标**: 自研 API 网关服务，替代 NGINX，提供路由转发、鉴权和可视化配置能力。
-
-**核心价值**:
-- 统一入口管理所有后端服务
-- 可视化配置路由和鉴权规则
-- 经一的访问控制和身份认证
-
 ---
 
 ## 2. 系统架构
@@ -218,17 +208,27 @@ auth-gate/
 ## 6. MVP 范围 (第一阶段)
 
 ### 必须有
-- [x] 路由配置 (Host + PathPrefix 匹配)
+- [x] 路由配置 (Host + PathPrefix / Exact / Regex 匹配)
 - [x] 反向代理转发
-- [x] API Key 鉴权
-- [x] 基础 Web UI (路由 CRUD)
-- [x] SQLite 持久化
+- [x] 多后端加权负载均衡
+- [x] API Key / Bearer (JWT) / Basic Auth 鉴权
+- [x] 基础 Web UI (路由 / 鉴权规则 / 用户 / 证书 CRUD)
+- [x] SQLite 持久化 + 自动迁移
+- [x] JWT 鉴权 (控制面板 + 路由级网关鉴权)
+- [x] 多用户管理 (admin / editor / viewer / member 角色)
+- [x] 请求日志与指标统计 (结构化 JSON 访问日志 + Prometheus 指标)
+- [x] 路由级超时 / 重试策略
+- [x] 后端级超时 / 连接池配置
+- [x] TLS 终止 + ACME 证书管理
+- [x] WebSocket 代理
+- [x] 速率限制 + 熔断器
+- [x] CORS 支持
+- [x] 路径重写 + 重定向
+- [x] 国际化 (中/英)
 
 ### 暂缓
-- [ ] JWT 鉴权
-- [ ] 请求监控统计
 - [ ] 配置版本控制
-- [ ] 多用户管理
+- [ ] gRPC 转发
 
 ---
 
@@ -236,8 +236,8 @@ auth-gate/
 
 | 阶段 | 功能 |
 ------|------|
-| V1.1 | JWT 鉴权、请求日志、指标统计 |
-| V1.2 | WebSocket 支持、gRPC 转发 |
+| V1.2 | gRPC 转发、配置版本控制 |
+| V1.3 | 插件系统、自定义中间件 |
 | V2.0 | 分布式部署、配置同步、服务发现 |
 
 ---
@@ -301,25 +301,26 @@ type User struct {
 
 - Token 有效期: 24小时
 - Header: `Authorization: Bearer <token>`
-- 登录端点: `POST /api/auth/login`
+- 登录端点: `POST /_authgate/api/auth/login`
 
 ### 13.3 API 端点
 
 ```
-POST   /api/auth/login          # 登录
-POST   /api/auth/logout         # 登出
-GET    /api/auth/me             # 当前用户信息
+POST   /_authgate/api/auth/login   # 登录
+POST   /_authgate/api/auth/logout  # 登出
+GET    /_authgate/api/auth/me      # 当前用户信息
 
-GET    /api/users              # 列表 (admin)
-POST   /api/users              # 创建 (admin)
-PUT    /api/users/:id          # 更新 (admin)
-DELETE /api/users/:id          # 删除 (admin)
+GET    /_authgate/api/users        # 列表 (admin)
+POST   /_authgate/api/users        # 创建 (admin)
+PUT    /_authgate/api/users/:id    # 更新 (admin)
+DELETE /_authgate/api/users/:id    # 删除 (admin)
 ```
 
-### 13.4 默认用户
+### 13.4 首次登录
 
 - 用户名: `admin`
-- 密码: `admin`
+- 密码: 使用 `BOOTSTRAP_ADMIN_PASSWORD` 环境变量或 `auth.bootstrap_admin_password`
+- 未配置时，服务会生成一次性密码并在启动日志中打印
 - 角色: `admin`
 
 ---
@@ -358,24 +359,25 @@ DELETE /api/users/:id          # 删除 (admin)
 
 - Token 有效期: 24小时
 - Header: `Authorization: Bearer <token>`
-- 登录端点: `POST /api/auth/login`
+- 登录端点: `POST /_authgate/api/auth/login`
 
 ### 13.3 API 端点
 
 ```
-POST   /api/auth/login          # 登录
-POST   /api/auth/logout         # 登出
-GET    /api/auth/me             # 当前用户信息
-GET    /api/users              # 列表 (admin)
-POST   /api/users              # 创建 (admin)
-PUT    /api/users/:id          # 更新 (admin)
-DELETE /api/users/:id          # 删除 (admin)
+POST   /_authgate/api/auth/login   # 登录
+POST   /_authgate/api/auth/logout  # 登出
+GET    /_authgate/api/auth/me      # 当前用户信息
+GET    /_authgate/api/users        # 列表 (admin)
+POST   /_authgate/api/users        # 创建 (admin)
+PUT    /_authgate/api/users/:id    # 更新 (admin)
+DELETE /_authgate/api/users/:id    # 删除 (admin)
 ```
 
-### 13.4 默认用户
+### 13.4 首次登录
 
 - 用户名: `admin`
-- 密码: `admin`
+- 密码: 使用 `BOOTSTRAP_ADMIN_PASSWORD` 环境变量或 `auth.bootstrap_admin_password`
+- 未配置时，服务会生成一次性密码并在启动日志中打印
 - 角色: `admin`
 
 ---

@@ -21,6 +21,7 @@ import (
 	adminhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/admin"
 	proxyhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/proxy"
 	statichttp "github.com/pallyoung/auth-gate/packages/server/internal/http/static"
+	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
@@ -34,21 +35,17 @@ const controlPlaneAPIBasePath = controlPlaneBasePath + "/api"
 
 // TLSHost groups routes that share the same TLS certificate (same host).
 type TLSHost struct {
-	Host        string // ":443" or "example.com:443"
-	CertPath    string
-	KeyPath     string
-	RouteCount  int
+	Host       string // ":443" or "example.com:443"
+	CertPath   string
+	KeyPath    string
+	RouteCount int
 	RouteNames []string
 }
 
 // tlsHostKey returns a unique key for grouping routes by TLS config.
 // Routes sharing the same (host, cert, key) tuple go into the same TLS server.
 func tlsHostKey(host, cert, key string) string {
-	listenHost := host
-	if !strings.Contains(host, ":") {
-		listenHost = host + ":443"
-	}
-	return fmt.Sprintf("%s|%s|%s", listenHost, cert, key)
+	return fmt.Sprintf("%s|%s|%s", routehost.TLSListenHost(host), cert, key)
 }
 
 func getWebRoot() string {
@@ -119,7 +116,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, ce
 	statichttp.RegisterRoutes(engine, webRoot, controlPlaneBasePath)
 
 	// Public routes
-	engine.POST(controlPlaneAPIBasePath+"/auth/login", adminhttp.LoginRoute(db))
+	engine.POST(controlPlaneAPIBasePath+"/auth/login", adminhttp.LoginRoute(db, certSvc))
 	engine.POST(controlPlaneAPIBasePath+"/access/login", proxyhttp.AccessLoginRoute(routerMgr, db))
 	engine.POST(controlPlaneAPIBasePath+"/access/logout", proxyhttp.AccessLogoutRoute())
 
@@ -150,15 +147,12 @@ func buildTLSHostGroups(routes []router.Route) []TLSHost {
 			g.RouteCount++
 			g.RouteNames = append(g.RouteNames, r.Name)
 		} else {
-			listenHost := r.Host
-			if !strings.Contains(r.Host, ":") {
-				listenHost = r.Host + ":443"
-			}
+			listenHost := routehost.TLSListenHost(r.Host)
 			groupMap[key] = &TLSHost{
-				Host:        listenHost,
-				CertPath:    r.TLSCert,
-				KeyPath:     r.TLSKey,
-				RouteCount:  1,
+				Host:       listenHost,
+				CertPath:   r.TLSCert,
+				KeyPath:    r.TLSKey,
+				RouteCount: 1,
 				RouteNames: []string{r.Name},
 			}
 		}
@@ -171,12 +165,12 @@ func buildTLSHostGroups(routes []router.Route) []TLSHost {
 	return result
 }
 
-func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router.Manager, cfg config.ServerConfig) []http.Server {
+func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router.Manager, cfg config.ServerConfig) []*http.Server {
 	// Collect routes and group by TLS config
 	allRoutes := routerMgr.GetRoutes()
 	tlsGroups := buildTLSHostGroups(allRoutes)
 
-	var servers []http.Server
+	var servers []*http.Server
 
 	// Start HTTP server (existing behavior)
 	httpAddr := cfg.Addr
@@ -193,7 +187,7 @@ func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()
-	servers = append(servers, *srv)
+	servers = append(servers, srv)
 
 	// Start per-route HTTPS servers
 	for _, g := range tlsGroups {
@@ -225,7 +219,7 @@ func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router
 				log.Printf("HTTPS server error on %s: %v", grp.Host, err)
 			}
 		}(httpsSrv, ln, g)
-		servers = append(servers, *httpsSrv)
+		servers = append(servers, httpsSrv)
 	}
 
 	return servers
@@ -369,6 +363,7 @@ func main() {
 	// Stop certificate service renewer
 	if certSvc != nil {
 		certSvc.StopRenewer()
+		certSvc.Wait()
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
