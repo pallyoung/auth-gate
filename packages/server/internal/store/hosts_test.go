@@ -86,6 +86,33 @@ func TestUpdateHostProfile(t *testing.T) {
 	}
 }
 
+func TestDeleteHostProfile_CascadesEntries(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+	e := &HostEntry{ProfileID: p.ID, Position: 0, IP: "127.0.0.1", Hostnames: "api.local"}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+
+	if err := db.DeleteHostProfile(p.ID); err != nil {
+		t.Fatalf("DeleteHostProfile() error = %v", err)
+	}
+
+	if _, err := db.GetHostProfile(p.ID); err == nil {
+		t.Fatal("GetHostProfile() after delete error = nil, want sql.ErrNoRows")
+	}
+	entries, err := db.ListHostEntries(p.ID)
+	if err != nil {
+		t.Fatalf("ListHostEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d, want 0 (cascade should have removed them)", len(entries))
+	}
+}
+
 func TestGetHostProfile_NotFound(t *testing.T) {
 	db := newTestSQLite(t)
 	_, err := db.GetHostProfile("missing")

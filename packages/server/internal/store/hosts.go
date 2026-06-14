@@ -61,6 +61,56 @@ func (s *SQLite) UpdateHostProfile(p *HostProfile) error {
 	return nil
 }
 
+func (s *SQLite) DeleteHostProfile(id string) error {
+	_, err := s.db.Exec(`DELETE FROM host_profiles WHERE id = ?`, id)
+	return err
+}
+
+func (s *SQLite) CreateHostEntry(e *HostEntry) error {
+	if e.ID == "" {
+		e.ID = uuid.New().String()
+	}
+	now := time.Now()
+	e.CreatedAt = now
+	e.UpdatedAt = now
+
+	enabled := 0
+	if e.Enabled {
+		enabled = 1
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO host_entries (id, profile_id, position, ip, hostnames, comment, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, e.ID, e.ProfileID, e.Position, e.IP, e.Hostnames, e.Comment, enabled, e.CreatedAt, e.UpdatedAt)
+	return err
+}
+
+func (s *SQLite) ListHostEntries(profileID string) ([]HostEntry, error) {
+	rows, err := s.db.Query(`
+		SELECT id, profile_id, position, ip, hostnames, comment, enabled, created_at, updated_at
+		FROM host_entries
+		WHERE profile_id = ?
+		ORDER BY position, id
+	`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]HostEntry, 0)
+	for rows.Next() {
+		var e HostEntry
+		var enabled int
+		if err := rows.Scan(&e.ID, &e.ProfileID, &e.Position, &e.IP, &e.Hostnames, &e.Comment, &enabled, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			return nil, err
+		}
+		e.Enabled = enabled == 1
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
 func (s *SQLite) GetHostProfile(id string) (*HostProfile, error) {
 	var p HostProfile
 	var isActive int
