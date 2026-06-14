@@ -54,7 +54,7 @@ func validateProfileName(in string) error {
 
 func validateComment(in string) error {
 	if len(in) > maxCommentLen {
-		return newError(ErrCodeInvalidHostname, "comment is too long (max 200)", nil)
+		return newError(ErrCodeInvalidComment, "comment is too long (max 200)", nil)
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ const (
 	ErrCodeInvalidProfileName   = "invalid_host_profile_name"
 	ErrCodeInvalidIP            = "invalid_host_ip"
 	ErrCodeInvalidHostname      = "invalid_host_hostname"
+	ErrCodeInvalidComment       = "invalid_host_comment"
 	ErrCodeDuplicateHostname    = "duplicate_host_hostname"
 	ErrCodeMarkerMissing        = "host_marker_missing"
 	ErrCodePermissionDenied     = "host_permission_denied"
