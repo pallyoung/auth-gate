@@ -11,6 +11,7 @@ type Permissions struct {
 	CanManageAuth   bool `json:"can_manage_auth"`
 	CanManageUsers  bool `json:"can_manage_users"`
 	CanViewLogs     bool `json:"can_view_logs"`
+	CanManageHosts  bool `json:"can_manage_hosts"`
 }
 
 type Features struct {
@@ -74,6 +75,7 @@ func PermissionsResponse(permissions store.Permissions) *Permissions {
 		CanManageAuth:   permissions.CanManageAuth,
 		CanManageUsers:  permissions.CanManageUsers,
 		CanViewLogs:     permissions.CanViewLogs,
+		CanManageHosts:  permissions.CanManageHosts,
 	}
 }
 

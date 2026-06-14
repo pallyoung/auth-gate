@@ -33,13 +33,14 @@ type Permissions struct {
 	CanManageAuth   bool
 	CanManageUsers  bool
 	CanViewLogs     bool
+	CanManageHosts  bool
 }
 
 func GetPermissions(role string) Permissions {
 	role = normalizeStoredUserRole(role)
 	switch role {
 	case RoleAdmin:
-		return Permissions{CanManageRoutes: true, CanManageAuth: true, CanManageUsers: true, CanViewLogs: true}
+		return Permissions{CanManageRoutes: true, CanManageAuth: true, CanManageUsers: true, CanViewLogs: true, CanManageHosts: true}
 	case RoleEditor:
 		return Permissions{CanManageRoutes: true, CanManageAuth: true, CanManageUsers: false, CanViewLogs: true}
 	default:
