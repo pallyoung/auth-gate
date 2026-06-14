@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,21 @@ func (s *SQLite) CreateHostProfile(p *HostProfile) error {
 		VALUES (?, ?, ?, 0, ?, ?)
 	`, p.ID, p.Name, p.Description, p.CreatedAt, p.UpdatedAt)
 	return err
+}
+
+func (s *SQLite) UpdateHostProfile(p *HostProfile) error {
+	p.UpdatedAt = time.Now()
+	result, err := s.db.Exec(`
+		UPDATE host_profiles SET name = ?, description = ?, updated_at = ? WHERE id = ?
+	`, p.Name, p.Description, p.UpdatedAt, p.ID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *SQLite) GetHostProfile(id string) (*HostProfile, error) {

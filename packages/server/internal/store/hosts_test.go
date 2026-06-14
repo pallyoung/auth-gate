@@ -58,6 +58,34 @@ func TestGetHostProfile(t *testing.T) {
 	}
 }
 
+func TestUpdateHostProfile(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+
+	p.Name = "staging"
+	p.Description = "staging cluster"
+	if err := db.UpdateHostProfile(p); err != nil {
+		t.Fatalf("UpdateHostProfile() error = %v", err)
+	}
+
+	got, err := db.GetHostProfile(p.ID)
+	if err != nil {
+		t.Fatalf("GetHostProfile() error = %v", err)
+	}
+	if got.Name != "staging" {
+		t.Fatalf("got.Name = %q, want %q", got.Name, "staging")
+	}
+	if got.Description != "staging cluster" {
+		t.Fatalf("got.Description = %q, want %q", got.Description, "staging cluster")
+	}
+	if !got.UpdatedAt.After(p.CreatedAt) {
+		t.Fatalf("got.UpdatedAt (%v) should be after CreatedAt (%v)", got.UpdatedAt, p.CreatedAt)
+	}
+}
+
 func TestGetHostProfile_NotFound(t *testing.T) {
 	db := newTestSQLite(t)
 	_, err := db.GetHostProfile("missing")
