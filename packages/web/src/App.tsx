@@ -7,6 +7,7 @@ import { AuthRulesPage } from './pages/AuthRulesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import { CertificatesPage } from './pages/CertificatesPage'
+import { HostsPage } from './pages/HostsPage'
 import { useSession } from './lib/session'
 
 const knownControlPlanePaths = new Set([
@@ -16,6 +17,7 @@ const knownControlPlanePaths = new Set([
   '/certificates',
   '/settings',
   '/users',
+  '/hosts',
 ])
 
 function useRoute() {
@@ -75,6 +77,7 @@ export default function App() {
       case '/users': return <UsersPage />
       case '/certificates': return <CertificatesPage />
       case '/settings': return <SettingsPage />
+      case '/hosts': return <HostsPage />
       default: return <RoutesPage />
     }
   }
