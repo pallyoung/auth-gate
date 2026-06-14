@@ -1,60 +1,33 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
-import { Alert, Button, Card, Input, Select } from './ui'
+import { Alert, Button, Card, Input } from './ui'
+import type { CertificateInput } from '../lib/api/types'
 
 interface CertificateFormProps {
-  onSubmit: (data: { name: string; domain: string; dns_provider: string; provider_config: Record<string, string> }) => Promise<void> | void
+  onSubmit: (data: CertificateInput) => Promise<void> | void
   onCancel: () => void
 }
 
+type FormMode = 'local_ca' | 'imported'
+
 export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
   const { t } = useTranslation('certificates')
-  const [form, setForm] = React.useState({
-    name: '',
-    domain: '',
-    dns_provider: 'cloudflare',
-  })
-  const [providerConfig, setProviderConfig] = React.useState<Record<string, string>>({})
+  const [mode, setMode] = React.useState<FormMode>('local_ca')
+  const [name, setName] = React.useState('')
+  const [domain, setDomain] = React.useState('')
+  const [certPem, setCertPem] = React.useState('')
+  const [keyPem, setKeyPem] = React.useState('')
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const activeSubmitRef = React.useRef<symbol | null>(null)
   const errorMessage = resolveLocalizedText(t, error)
 
-  const handleDnsProviderChange = (value: string) => {
-    setForm({ ...form, dns_provider: value })
-    setProviderConfig({})
-
-    if (value === 'route53') {
-      setProviderConfig({
-        access_key_id: '',
-        secret_access_key: '',
-        region: '',
-      })
-    }
-  }
-
-  const updateProviderConfig = (key: string, value: string) => {
-    setProviderConfig((current) => ({ ...current, [key]: value }))
-  }
-
-  const normalizeProviderConfig = React.useCallback((config: Record<string, string>) => {
-    const normalized = Object.fromEntries(
-      Object.entries(config).map(([key, value]) => [key, value.trim()])
-    )
-    return normalized
-  }, [])
-
-  const dnsProviderOptions = [
-    { value: 'cloudflare', label: t('providers.cloudflare') },
-    { value: 'route53', label: t('providers.route53') },
-  ]
+  const domainRegex = /^(\*\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (activeSubmitRef.current) {
-      return
-    }
+    if (activeSubmitRef.current) return
 
     const submitToken = Symbol('certificate-form-submit')
     activeSubmitRef.current = submitToken
@@ -62,35 +35,37 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     setSubmitting(true)
 
     try {
-      const normalizedDomain = form.domain.trim()
-      const normalizedProviderConfig = normalizeProviderConfig(providerConfig)
+      const trimmedName = name.trim()
+      const trimmedDomain = domain.trim()
 
-      // Validate domain
-      const domainRegex = /^(\*\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/
-      if (!domainRegex.test(normalizedDomain)) {
+      if (!domainRegex.test(trimmedDomain)) {
         setError({ translationKey: 'form.invalidDomain' })
         return
       }
 
-      // Validate provider config
-      if (form.dns_provider === 'cloudflare' && !normalizedProviderConfig.api_token) {
-        setError({ translationKey: 'form.cloudflareRequired' })
-        return
-      }
-      if (
-        form.dns_provider === 'route53' &&
-        (!normalizedProviderConfig.access_key_id || !normalizedProviderConfig.secret_access_key)
-      ) {
-        setError({ translationKey: 'form.route53Required' })
-        return
+      if (mode === 'imported') {
+        if (!certPem.trim()) {
+          setError({ translationKey: 'form.certPemRequired' })
+          return
+        }
+        if (!keyPem.trim()) {
+          setError({ translationKey: 'form.keyPemRequired' })
+          return
+        }
       }
 
-      await onSubmit({
-        name: form.name,
-        domain: normalizedDomain,
-        dns_provider: form.dns_provider,
-        provider_config: normalizedProviderConfig,
-      })
+      const input: CertificateInput = {
+        name: trimmedName,
+        domain: trimmedDomain,
+      }
+
+      if (mode === 'imported') {
+        input.source = 'imported'
+        input.cert_pem = certPem.trim()
+        input.key_pem = keyPem.trim()
+      }
+
+      await onSubmit(input)
     } catch (e) {
       setError(getLocalizedTextState(e))
     } finally {
@@ -105,6 +80,31 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
 
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMode('local_ca')}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            mode === 'local_ca'
+              ? 'bg-[var(--primary-500)] text-white'
+              : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          {t('form.localCaTab')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('imported')}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            mode === 'imported'
+              ? 'bg-[var(--primary-500)] text-white'
+              : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          {t('form.importTab')}
+        </button>
+      </div>
+
       <Card tone="soft" className="space-y-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -118,16 +118,16 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
             label={t('form.name')}
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
             placeholder={t('form.namePlaceholder')}
             required
             hint={t('form.nameHint')}
           />
           <Input
             label={t('form.domain')}
-            value={form.domain}
-            onChange={(event) => setForm({ ...form, domain: event.target.value })}
+            value={domain}
+            onChange={(event) => setDomain(event.target.value)}
             placeholder={t('form.domainPlaceholder')}
             required
             hint={t('form.domainHint')}
@@ -135,63 +135,38 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
         </div>
       </Card>
 
-      <Card tone="soft" className="space-y-5">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            {t('form.providerEyebrow')}
+      {mode === 'imported' && (
+        <Card tone="soft" className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="cert-pem" className="block text-xs font-semibold text-[var(--text-muted)]">
+              {t('form.certPem')}
+            </label>
+            <textarea
+              id="cert-pem"
+              value={certPem}
+              onChange={(event) => setCertPem(event.target.value)}
+              placeholder={t('form.certPemPlaceholder')}
+              rows={5}
+              className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:outline-none focus:ring-1 focus:ring-[var(--primary-500)]"
+            />
+            <p className="text-xs text-[var(--text-muted)]">{t('form.certPemHint')}</p>
           </div>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            {t('form.providerDescription')}
-          </p>
-        </div>
-
-        <Select
-          label={t('form.provider')}
-          value={form.dns_provider}
-          onChange={(event) => handleDnsProviderChange(event.target.value)}
-          options={dnsProviderOptions}
-          required
-        />
-
-        {form.dns_provider === 'cloudflare' && (
-          <Input
-            label={t('form.cloudflareToken')}
-            type="password"
-            value={providerConfig.api_token || ''}
-            onChange={(event) => updateProviderConfig('api_token', event.target.value)}
-            placeholder="cf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            required
-            hint={t('form.cloudflareTokenHint')}
-          />
-        )}
-
-        {form.dns_provider === 'route53' && (
-          <div className="space-y-4">
-            <Input
-              label={t('form.route53AccessKey')}
-              value={providerConfig.access_key_id || ''}
-              onChange={(event) => updateProviderConfig('access_key_id', event.target.value)}
-              placeholder="AKIAXXXXXXXXXXXXXXXX"
-              required
+          <div className="space-y-2">
+            <label htmlFor="key-pem" className="block text-xs font-semibold text-[var(--text-muted)]">
+              {t('form.keyPem')}
+            </label>
+            <textarea
+              id="key-pem"
+              value={keyPem}
+              onChange={(event) => setKeyPem(event.target.value)}
+              placeholder={t('form.keyPemPlaceholder')}
+              rows={5}
+              className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:outline-none focus:ring-1 focus:ring-[var(--primary-500)]"
             />
-            <Input
-              label={t('form.route53Secret')}
-              type="password"
-              value={providerConfig.secret_access_key || ''}
-              onChange={(event) => updateProviderConfig('secret_access_key', event.target.value)}
-              placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              required
-            />
-            <Input
-              label={t('form.route53Region')}
-              value={providerConfig.region || ''}
-              onChange={(event) => updateProviderConfig('region', event.target.value)}
-              placeholder="us-east-1"
-              hint={t('form.route53RegionHint')}
-            />
+            <p className="text-xs text-[var(--text-muted)]">{t('form.keyPemHint')}</p>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border-default)] pt-4 md:flex-row">
         <Button variant="ghost" onClick={onCancel} className="w-full md:w-auto">

@@ -155,8 +155,9 @@ export interface Certificate {
   domain: string
   cert_path: string
   key_path: string
-  dns_provider: string
-  status: 'pending' | 'active' | 'renewing' | 'failed'
+  source: string
+  ca_id?: string
+  status: 'active' | 'failed'
   not_before?: string
   not_after?: string
   renew_at?: string
@@ -167,8 +168,9 @@ export interface Certificate {
 export interface CertificateInput {
   name: string
   domain: string
-  dns_provider: string
-  provider_config: Record<string, string>
+  source?: string
+  cert_pem?: string
+  key_pem?: string
 }
 
 export interface HostProfile {

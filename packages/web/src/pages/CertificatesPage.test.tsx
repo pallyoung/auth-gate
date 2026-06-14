@@ -26,7 +26,8 @@ vi.mock('../lib/api/certificates', () => ({
     list: vi.fn(),
     create: vi.fn(),
     delete: vi.fn(),
-    renew: vi.fn(),
+    resign: vi.fn(),
+    getCA: vi.fn(),
   },
 }))
 
@@ -70,7 +71,19 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'manual',
+        source: 'local_ca',
+        status: 'active',
+        not_after: '2026-06-20T00:00:00Z',
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-01T00:00:00Z',
+      },
+      {
+        id: 'cert-imported',
+        name: 'Imported Cert',
+        domain: 'app.example.com',
+        cert_path: '/tmp/cert-2.pem',
+        key_path: '/tmp/key-2.pem',
+        source: 'imported',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
@@ -79,7 +92,7 @@ describe('CertificatesPage i18n', () => {
     ])
     vi.mocked(certificatesApi.create).mockReset()
     vi.mocked(certificatesApi.delete).mockReset()
-    vi.mocked(certificatesApi.renew).mockReset()
+    vi.mocked(certificatesApi.resign).mockReset()
   })
 
   afterEach(() => {
@@ -96,20 +109,24 @@ describe('CertificatesPage i18n', () => {
 
     expect(certificateRow).not.toBeNull()
     expect(within(certificateRow as HTMLTableRowElement).getByText('有效')).toBeInTheDocument()
-    expect(within(certificateRow as HTMLTableRowElement).getByText('手动（DIY）')).toBeInTheDocument()
+    expect(within(certificateRow as HTMLTableRowElement).getByText('本地 CA')).toBeInTheDocument()
+
+    const importedRow = within(table).getByText('Imported Cert').closest('tr')
+    expect(importedRow).not.toBeNull()
+    expect(within(importedRow as HTMLTableRowElement).getByText('导入')).toBeInTheDocument()
 
     expect(screen.getByRole('heading', { name: '证书' })).toBeInTheDocument()
     expect(within(certificateRow as HTMLTableRowElement).getByText('2026年6月20日')).toBeInTheDocument()
     expect(within(certificateRow as HTMLTableRowElement).getByText('剩余 19 天')).toBeInTheDocument()
   })
 
-  it('does not request certificates when certificate automation is unavailable', async () => {
+  it('does not request certificates when certificate management is unavailable', async () => {
     sessionUser.features.certificates = false
     vi.mocked(certificatesApi.list).mockClear()
 
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    expect(screen.getByText('Certificate automation is unavailable on this server.')).toBeInTheDocument()
+    expect(screen.getByText('Certificate management is unavailable on this server.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Provision Certificate' })).not.toBeInTheDocument()
     expect(vi.mocked(certificatesApi.list)).not.toHaveBeenCalled()
   })
@@ -124,13 +141,8 @@ describe('CertificatesPage i18n', () => {
 
     expect(await screen.findByText('No certificates provisioned')).toBeInTheDocument()
     expect(
-      screen.getByText('Your account can review certificates here, but only editors or administrators can provision or renew them.')
+      screen.getByText('Your account can review certificates here, but only editors or administrators can provision or manage them.')
     ).toBeInTheDocument()
-    expect(
-      screen.queryByText(
-        'Provision your first certificate to enable HTTPS for your routes. Wildcard certificates are supported via DNS-01 challenge.'
-      )
-    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Provision First Certificate' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Provision Certificate' })).not.toBeInTheDocument()
   })
@@ -145,7 +157,7 @@ describe('CertificatesPage i18n', () => {
 
     expect(await screen.findByText('No certificates provisioned')).toBeInTheDocument()
     expect(
-      screen.getByText('Your account can review certificates here, but only editors or administrators can provision or renew them.')
+      screen.getByText('Your account can review certificates here, but only editors or administrators can provision or manage them.')
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Provision First Certificate' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Provision Certificate' })).not.toBeInTheDocument()
@@ -188,7 +200,6 @@ describe('CertificatesPage i18n', () => {
 
     expect(screen.queryByText('0 certificates')).not.toBeInTheDocument()
     expect(screen.queryByText('Active Certificates')).not.toBeInTheDocument()
-    expect(screen.queryByText('In Progress')).not.toBeInTheDocument()
     expect(screen.queryByText('Failed')).not.toBeInTheDocument()
   })
 
@@ -237,7 +248,6 @@ describe('CertificatesPage i18n', () => {
 
     await user.type(within(dialog).getByLabelText('Certificate Name'), 'Wildcard')
     await user.type(within(dialog).getByLabelText('Domain'), '*.example.com')
-    await user.type(within(dialog).getByLabelText('CloudFlare API Token'), 'cf_test_token')
     await user.click(within(dialog).getByRole('button', { name: 'Provision Certificate' }))
 
     expect(
@@ -275,7 +285,6 @@ describe('CertificatesPage i18n', () => {
 
     await user.type(within(dialog).getByLabelText('Certificate Name'), '   ')
     await user.type(within(dialog).getByLabelText('Domain'), '*.example.com')
-    await user.type(within(dialog).getByLabelText('CloudFlare API Token'), 'cf_test_token')
     await user.click(within(dialog).getByRole('button', { name: 'Provision Certificate' }))
 
     expect(
@@ -285,7 +294,7 @@ describe('CertificatesPage i18n', () => {
     expect(screen.queryByText('certificate name required')).not.toBeInTheDocument()
   })
 
-  it('shows a refresh guidance message instead of the raw API error when renewal fails', async () => {
+  it('shows a refresh guidance message instead of the raw API error when resign fails', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -294,14 +303,14 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockRejectedValue(
+    vi.mocked(certificatesApi.resign).mockRejectedValue(
       new ApiError('certificate not found: cert-1', 404, 'cert_not_found')
     )
 
@@ -309,8 +318,8 @@ describe('CertificatesPage i18n', () => {
 
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    const [renewButton] = await screen.findAllByRole('button', { name: 'Renew' })
-    await user.click(renewButton)
+    const [resignButton] = await screen.findAllByRole('button', { name: 'Resign' })
+    await user.click(resignButton)
 
     expect(
       await screen.findByText('This certificate no longer exists. Refresh the page and try again.')
@@ -318,7 +327,7 @@ describe('CertificatesPage i18n', () => {
     expect(screen.queryByText('certificate not found: cert-1')).not.toBeInTheDocument()
   })
 
-  it('does not submit a parent form when the renew action is clicked', async () => {
+  it('does not submit a parent form when the resign action is clicked', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -327,14 +336,14 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockResolvedValue(undefined)
+    vi.mocked(certificatesApi.resign).mockResolvedValue(undefined)
 
     const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
@@ -348,16 +357,16 @@ describe('CertificatesPage i18n', () => {
       { locale: 'en' }
     )
 
-    const [renewButton] = await screen.findAllByRole('button', { name: 'Renew' })
-    await user.click(renewButton)
+    const [resignButton] = await screen.findAllByRole('button', { name: 'Resign' })
+    await user.click(resignButton)
 
-    expect(certificatesApi.renew).toHaveBeenCalledTimes(1)
+    expect(certificatesApi.resign).toHaveBeenCalledTimes(1)
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('prevents duplicate renewals while a certificate renewal is pending', async () => {
+  it('prevents duplicate resigns while a certificate resign is pending', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
-    let resolveRenew: (() => void) | undefined
+    let resolveResign: (() => void) | undefined
 
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -366,17 +375,17 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockImplementation(
+    vi.mocked(certificatesApi.resign).mockImplementation(
       () =>
         new Promise<void>((resolve) => {
-          resolveRenew = resolve
+          resolveResign = resolve
         })
     )
 
@@ -384,18 +393,18 @@ describe('CertificatesPage i18n', () => {
 
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    const [renewButton] = await screen.findAllByRole('button', { name: 'Renew' })
-    await user.click(renewButton)
-    await user.click(renewButton)
+    const [resignButton] = await screen.findAllByRole('button', { name: 'Resign' })
+    await user.click(resignButton)
+    await user.click(resignButton)
 
-    expect(certificatesApi.renew).toHaveBeenCalledTimes(1)
+    expect(certificatesApi.resign).toHaveBeenCalledTimes(1)
 
-    resolveRenew?.()
+    resolveResign?.()
   })
 
-  it('prevents back-to-back native renew clicks before the renewing state re-renders', async () => {
+  it('prevents back-to-back native resign clicks before the resigning state re-renders', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
-    let resolveRenew: (() => void) | undefined
+    let resolveResign: (() => void) | undefined
 
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -404,38 +413,38 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockImplementation(
+    vi.mocked(certificatesApi.resign).mockImplementation(
       () =>
         new Promise<void>((resolve) => {
-          resolveRenew = resolve
+          resolveResign = resolve
         })
     )
 
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    const [renewButton] = await screen.findAllByRole('button', { name: 'Renew' })
+    const [resignButton] = await screen.findAllByRole('button', { name: 'Resign' })
 
     await act(async () => {
-      renewButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-      renewButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      resignButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      resignButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
       await Promise.resolve()
     })
 
-    expect(certificatesApi.renew).toHaveBeenCalledTimes(1)
+    expect(certificatesApi.resign).toHaveBeenCalledTimes(1)
 
-    resolveRenew?.()
+    resolveResign?.()
   })
 
-  it('keeps each certificate renewal action disabled until its own request settles', async () => {
+  it('keeps each certificate resign action disabled until its own request settles', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
-    const renewResolvers = new Map<string, () => void>()
+    const resignResolvers = new Map<string, () => void>()
 
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -444,7 +453,7 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
@@ -456,17 +465,17 @@ describe('CertificatesPage i18n', () => {
         domain: 'api.example.com',
         cert_path: '/tmp/cert-2.pem',
         key_path: '/tmp/key-2.pem',
-        dns_provider: 'route53',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-21T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockImplementation(
+    vi.mocked(certificatesApi.resign).mockImplementation(
       (id: string) =>
         new Promise<void>((resolve) => {
-          renewResolvers.set(id, resolve)
+          resignResolvers.set(id, resolve)
         })
     )
 
@@ -483,21 +492,21 @@ describe('CertificatesPage i18n', () => {
     expect(within(table).getByText('Wildcard')).toBeInTheDocument()
     expect(within(table).getByText('API')).toBeInTheDocument()
 
-    await user.click(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Renew' }))
-    await user.click(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Renew' }))
+    await user.click(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Resign' }))
+    await user.click(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Resign' }))
 
-    expect(certificatesApi.renew).toHaveBeenCalledTimes(2)
-    expect(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Renewing...' })).toBeDisabled()
-    expect(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Renewing...' })).toBeDisabled()
+    expect(certificatesApi.resign).toHaveBeenCalledTimes(2)
+    expect(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Resigning...' })).toBeDisabled()
+    expect(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Resigning...' })).toBeDisabled()
 
-    renewResolvers.get('cert-1')?.()
-    renewResolvers.get('cert-2')?.()
+    resignResolvers.get('cert-1')?.()
+    resignResolvers.get('cert-2')?.()
   })
 
-  it('keeps the newest certificate refresh results when an older renewal refresh resolves later', async () => {
+  it('keeps the newest certificate refresh results when an older resign refresh resolves later', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
 
-    const renewResolvers = new Map<string, () => void>()
+    const resignResolvers = new Map<string, () => void>()
     const listResolvers: Array<(value: Awaited<ReturnType<typeof certificatesApi.list>>) => void> = []
 
     vi.mocked(certificatesApi.list).mockImplementation(
@@ -506,10 +515,10 @@ describe('CertificatesPage i18n', () => {
           listResolvers.push(resolve)
         })
     )
-    vi.mocked(certificatesApi.renew).mockImplementation(
+    vi.mocked(certificatesApi.resign).mockImplementation(
       (id: string) =>
         new Promise<void>((resolve) => {
-          renewResolvers.set(id, resolve)
+          resignResolvers.set(id, resolve)
         })
     )
 
@@ -525,7 +534,7 @@ describe('CertificatesPage i18n', () => {
           domain: '*.example.com',
           cert_path: '/tmp/cert.pem',
           key_path: '/tmp/key.pem',
-          dns_provider: 'cloudflare',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-06-20T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -537,7 +546,7 @@ describe('CertificatesPage i18n', () => {
           domain: 'api.example.com',
           cert_path: '/tmp/cert-2.pem',
           key_path: '/tmp/key-2.pem',
-          dns_provider: 'route53',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-06-21T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -554,11 +563,11 @@ describe('CertificatesPage i18n', () => {
     expect(wildcardRow).not.toBeNull()
     expect(apiRow).not.toBeNull()
 
-    await user.click(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Renew' }))
-    await user.click(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Renew' }))
+    await user.click(within(wildcardRow as HTMLTableRowElement).getByRole('button', { name: 'Resign' }))
+    await user.click(within(apiRow as HTMLTableRowElement).getByRole('button', { name: 'Resign' }))
 
     await act(async () => {
-      renewResolvers.get('cert-1')?.()
+      resignResolvers.get('cert-1')?.()
       await Promise.resolve()
     })
 
@@ -567,7 +576,7 @@ describe('CertificatesPage i18n', () => {
     })
 
     await act(async () => {
-      renewResolvers.get('cert-2')?.()
+      resignResolvers.get('cert-2')?.()
       await Promise.resolve()
     })
 
@@ -583,7 +592,7 @@ describe('CertificatesPage i18n', () => {
           domain: '*.example.com',
           cert_path: '/tmp/cert.pem',
           key_path: '/tmp/key.pem',
-          dns_provider: 'cloudflare',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-07-20T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -595,7 +604,7 @@ describe('CertificatesPage i18n', () => {
           domain: 'api.example.com',
           cert_path: '/tmp/cert-2.pem',
           key_path: '/tmp/key-2.pem',
-          dns_provider: 'route53',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-07-21T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -616,7 +625,7 @@ describe('CertificatesPage i18n', () => {
           domain: '*.example.com',
           cert_path: '/tmp/cert.pem',
           key_path: '/tmp/key.pem',
-          dns_provider: 'cloudflare',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-06-20T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -628,7 +637,7 @@ describe('CertificatesPage i18n', () => {
           domain: 'api.example.com',
           cert_path: '/tmp/cert-2.pem',
           key_path: '/tmp/key-2.pem',
-          dns_provider: 'route53',
+          source: 'local_ca',
           status: 'active',
           not_after: '2026-06-21T00:00:00Z',
           created_at: '2026-05-01T00:00:00Z',
@@ -644,7 +653,7 @@ describe('CertificatesPage i18n', () => {
     expect(within(table).queryByText('API')).not.toBeInTheDocument()
   })
 
-  it('shows permission guidance instead of the raw backend error when certificate renewal is rejected', async () => {
+  it('shows permission guidance instead of the raw backend error when certificate resign is rejected', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
     vi.mocked(certificatesApi.list).mockResolvedValue([
       {
@@ -653,14 +662,14 @@ describe('CertificatesPage i18n', () => {
         domain: '*.example.com',
         cert_path: '/tmp/cert.pem',
         key_path: '/tmp/key.pem',
-        dns_provider: 'cloudflare',
+        source: 'local_ca',
         status: 'active',
         not_after: '2026-06-20T00:00:00Z',
         created_at: '2026-05-01T00:00:00Z',
         updated_at: '2026-05-01T00:00:00Z',
       },
     ])
-    vi.mocked(certificatesApi.renew).mockRejectedValue(
+    vi.mocked(certificatesApi.resign).mockRejectedValue(
       new ApiError('insufficient permissions', 403, 'insufficient_permissions')
     )
 
@@ -668,8 +677,8 @@ describe('CertificatesPage i18n', () => {
 
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    const [renewButton] = await screen.findAllByRole('button', { name: 'Renew' })
-    await user.click(renewButton)
+    const [resignButton] = await screen.findAllByRole('button', { name: 'Resign' })
+    await user.click(resignButton)
 
     expect(
       await screen.findByText(
@@ -679,49 +688,17 @@ describe('CertificatesPage i18n', () => {
     expect(screen.queryByText('insufficient permissions')).not.toBeInTheDocument()
   })
 
-  it('does not offer renew actions for active certificates backed by unsupported legacy DNS providers', async () => {
-    vi.mocked(certificatesApi.list).mockResolvedValue([
-      {
-        id: 'cert-manual',
-        name: 'Legacy Manual',
-        domain: '*.legacy.example.com',
-        cert_path: '/tmp/cert.pem',
-        key_path: '/tmp/key.pem',
-        dns_provider: 'manual',
-        status: 'active',
-        not_after: '2026-06-20T00:00:00Z',
-        created_at: '2026-05-01T00:00:00Z',
-        updated_at: '2026-05-01T00:00:00Z',
-      },
-      {
-        id: 'cert-pdns',
-        name: 'Legacy PowerDNS',
-        domain: '*.pdns.example.com',
-        cert_path: '/tmp/cert-2.pem',
-        key_path: '/tmp/key-2.pem',
-        dns_provider: 'pdns',
-        status: 'active',
-        not_after: '2026-06-20T00:00:00Z',
-        created_at: '2026-05-01T00:00:00Z',
-        updated_at: '2026-05-01T00:00:00Z',
-      },
-      {
-        id: 'cert-cloudflare',
-        name: 'Supported',
-        domain: '*.supported.example.com',
-        cert_path: '/tmp/cert-3.pem',
-        key_path: '/tmp/key-3.pem',
-        dns_provider: 'cloudflare',
-        status: 'active',
-        not_after: '2026-06-20T00:00:00Z',
-        created_at: '2026-05-01T00:00:00Z',
-        updated_at: '2026-05-01T00:00:00Z',
-      },
-    ])
-
+  it('offers resign action for all active certificates', async () => {
     await renderWithI18n(<CertificatesPage />, { locale: 'en' })
 
-    expect(await screen.findAllByRole('button', { name: 'Renew' })).toHaveLength(2)
+    const table = await screen.findByRole('table')
+
+    await waitFor(() => {
+      expect(within(table).getByText('Wildcard')).toBeInTheDocument()
+    })
+
+    const resignButtons = within(table).getAllByRole('button', { name: 'Resign' })
+    expect(resignButtons.length).toBeGreaterThanOrEqual(1)
   })
 
   it('retranslates the current certificate list error when the language changes', async () => {
@@ -762,7 +739,6 @@ describe('CertificatesPage i18n', () => {
 
     await user.type(within(dialog).getByLabelText('Certificate Name'), 'Wildcard')
     await user.type(within(dialog).getByLabelText('Domain'), '*.example.com')
-    await user.type(within(dialog).getByLabelText('CloudFlare API Token'), 'cf_test_token')
     await user.click(within(dialog).getByRole('button', { name: 'Provision Certificate' }))
 
     expect(

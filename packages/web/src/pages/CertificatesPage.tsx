@@ -9,9 +9,7 @@ import { ApiError } from '../lib/api/client'
 import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { certificatesApi } from '../lib/api/certificates'
 import { getSessionUser } from '../lib/session-store'
-import type { Certificate as CertificateType } from '../lib/api/types'
-
-const renewableDNSProviders = new Set(['cloudflare', 'route53'])
+import type { Certificate as CertificateType, CertificateInput } from '../lib/api/types'
 
 export function CertificatesPage() {
   const { t, i18n } = useTranslation('certificates')
@@ -22,8 +20,8 @@ export function CertificatesPage() {
   const [certificateListUnavailable, setCertificateListUnavailable] = React.useState(false)
   const [certificateDirectoryUnavailable, setCertificateDirectoryUnavailable] = React.useState(false)
   const [showForm, setShowForm] = React.useState(false)
-  const [renewingIds, setRenewingIds] = React.useState<string[]>([])
-  const activeRenewIdsRef = React.useRef(new Set<string>())
+  const [resigningIds, setResigningIds] = React.useState<string[]>([])
+  const activeResignIdsRef = React.useRef(new Set<string>())
   const requestGenerationRef = React.useRef(0)
   const certificatesEnabled = sessionUser?.features?.certificates === true
   const canManageCertificates =
@@ -50,12 +48,16 @@ export function CertificatesPage() {
         return { translationKey: 'errors.invalidDomain' }
       case 'domain_exists':
         return { translationKey: 'errors.domainExists' }
-      case 'invalid_provider':
-        return { translationKey: 'errors.invalidProvider' }
-      case 'dns_provider_error':
-        return { translationKey: 'errors.dnsProvider' }
-      case 'acme_error':
-        return { translationKey: 'errors.acme' }
+      case 'invalid_pem':
+        return { translationKey: 'errors.invalidPem' }
+      case 'domain_mismatch':
+        return { translationKey: 'errors.domainMismatch' }
+      case 'imported_cannot_resign':
+        return { translationKey: 'errors.importedCannotResign' }
+      case 'local_ca_error':
+        return { translationKey: 'errors.localCa' }
+      case 'filesystem_error':
+        return { translationKey: 'errors.filesystem' }
       case 'cert_not_active':
         return { translationKey: 'errors.certNotActive' }
       case 'database_error':
@@ -110,7 +112,7 @@ export function CertificatesPage() {
     fetchData()
   }, [certificatesEnabled, fetchData])
 
-  const handleCreate = async (data: { name: string; domain: string; dns_provider: string; provider_config: Record<string, string> }) => {
+  const handleCreate = async (data: CertificateInput) => {
     try {
       await certificatesApi.create(data)
       setShowForm(false)
@@ -130,36 +132,33 @@ export function CertificatesPage() {
     }
   }
 
-  const handleRenew = async (cert: CertificateType) => {
-    if (activeRenewIdsRef.current.has(cert.id)) {
+  const handleResign = async (cert: CertificateType) => {
+    if (activeResignIdsRef.current.has(cert.id)) {
       return
     }
-    if (!confirm(t('page.renewConfirm', { domain: cert.domain }))) return
+    if (!confirm(t('page.resignConfirm', { domain: cert.domain }))) return
     try {
-      activeRenewIdsRef.current.add(cert.id)
-      setRenewingIds((current) => (
+      activeResignIdsRef.current.add(cert.id)
+      setResigningIds((current) => (
         current.includes(cert.id) ? current : [...current, cert.id]
       ))
-      await certificatesApi.renew(cert.id)
+      await certificatesApi.resign(cert.id)
       await fetchData()
     } catch (e) {
       setError(getErrorState(e))
     } finally {
-      activeRenewIdsRef.current.delete(cert.id)
-      setRenewingIds((current) => current.filter((id) => id !== cert.id))
+      activeResignIdsRef.current.delete(cert.id)
+      setResigningIds((current) => current.filter((id) => id !== cert.id))
     }
   }
 
   const activeCount = certificates.filter((c) => c.status === 'active').length
-  const pendingCount = certificates.filter((c) => c.status === 'pending' || c.status === 'renewing').length
   const failedCount = certificates.filter((c) => c.status === 'failed').length
 
   const statusVariant = (status: string) => {
     switch (status) {
       case 'active':
         return 'success'
-      case 'pending':
-      case 'renewing': return 'warning'
       case 'failed':
         return 'error'
       default:
@@ -177,13 +176,11 @@ export function CertificatesPage() {
   }
 
   const statusLabel = (status: string) => t(`status.${status}` as const)
-  const providerLabel = (provider?: string) => {
-    if (!provider) return t('page.noDate')
-    return t(`providers.${provider}` as any, { defaultValue: provider })
-  }
 
-  const canRenewCertificate = (certificate: CertificateType) =>
-    certificate.status === 'active' && renewableDNSProviders.has(certificate.dns_provider)
+  const sourceLabel = (source?: string) => {
+    if (source === 'imported') return t('page.imported')
+    return t('page.localCa')
+  }
 
   const columns = [
     {
@@ -222,10 +219,10 @@ export function CertificatesPage() {
       },
     },
     {
-      key: 'dns_provider',
-      header: t('page.dnsProvider'),
+      key: 'source',
+      header: t('page.source'),
       className: 'w-28',
-      render: (value: string) => <Badge variant="default" badgeSize="sm">{providerLabel(value)}</Badge>,
+      render: (value: string) => <Badge variant="default" badgeSize="sm">{sourceLabel(value)}</Badge>,
     },
     {
       key: 'created_at',
@@ -297,20 +294,13 @@ export function CertificatesPage() {
       )}
 
       {showDirectoryMetrics ? (
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
           <MetricCard
             label={t('page.activeCertificates')}
             value={activeCount}
             hint={t('page.activeCertificatesHint')}
             icon={<FileKey className="h-5 w-5" />}
             tone="primary"
-          />
-          <MetricCard
-            label={t('page.inProgress')}
-            value={pendingCount}
-            hint={t('page.inProgressHint')}
-            icon={<RefreshCw className="h-5 w-5" />}
-            tone="warning"
           />
           <MetricCard
             label={t('page.failed')}
@@ -366,15 +356,15 @@ export function CertificatesPage() {
             data={certificates}
             onDelete={canManageCertificates ? handleDelete : undefined}
             extraActions={(row: CertificateType) => (
-              canManageCertificates && canRenewCertificate(row) ? (
+              canManageCertificates && row.status === 'active' ? (
                 <button
                   type="button"
-                  onClick={() => handleRenew(row)}
-                  disabled={renewingIds.includes(row.id)}
+                  onClick={() => handleResign(row)}
+                  disabled={resigningIds.includes(row.id)}
                   className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[var(--primary-600)] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-50"
                 >
-                  <RefreshCw className={`h-4 w-4 ${renewingIds.includes(row.id) ? 'animate-spin' : ''}`} />
-                  {renewingIds.includes(row.id) ? t('page.renewing') : t('page.renew')}
+                  <RefreshCw className={`h-4 w-4 ${resigningIds.includes(row.id) ? 'animate-spin' : ''}`} />
+                  {resigningIds.includes(row.id) ? t('page.resigning') : t('page.resign')}
                 </button>
               ) : null
             )}

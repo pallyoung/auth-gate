@@ -5,7 +5,7 @@ import { CertificateForm } from './CertificateForm'
 import { renderWithI18n } from '../test/render'
 
 describe('CertificateForm', () => {
-  it('offers only supported DNS provider options', async () => {
+  it('renders in local CA mode by default with name and domain fields', async () => {
     await renderWithI18n(
       <CertificateForm
         onSubmit={vi.fn()}
@@ -13,15 +13,15 @@ describe('CertificateForm', () => {
       />
     )
 
-    const providerSelect = screen.getByLabelText('DNS Provider')
-
-    expect(screen.getByRole('option', { name: 'CloudFlare' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'AWS Route53' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Manual (DIY)' })).not.toBeInTheDocument()
-    expect(providerSelect).toHaveValue('cloudflare')
+    expect(screen.getByText('Local CA Generate')).toBeInTheDocument()
+    expect(screen.getByText('Import PEM')).toBeInTheDocument()
+    expect(screen.getByLabelText('Certificate Name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Domain')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Certificate PEM')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Private Key PEM')).not.toBeInTheDocument()
   })
 
-  it('does not render manual DNS guidance that points to an unsupported flow', async () => {
+  it('shows PEM fields when import mode is selected', async () => {
     const user = userEvent.setup()
 
     await renderWithI18n(
@@ -31,10 +31,28 @@ describe('CertificateForm', () => {
       />
     )
 
-    await user.selectOptions(screen.getByLabelText('DNS Provider'), 'route53')
+    await user.click(screen.getByText('Import PEM'))
 
-    expect(screen.queryByText('Manual Mode:')).not.toBeInTheDocument()
-    expect(screen.queryByText('Manual (DIY)')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Certificate PEM')).toBeInTheDocument()
+    expect(screen.getByLabelText('Private Key PEM')).toBeInTheDocument()
+  })
+
+  it('hides PEM fields when switching back to local CA mode', async () => {
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByText('Import PEM'))
+    expect(screen.getByLabelText('Certificate PEM')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Local CA Generate'))
+    expect(screen.queryByLabelText('Certificate PEM')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Private Key PEM')).not.toBeInTheDocument()
   })
 
   it('prevents duplicate submissions while certificate provisioning is pending', async () => {
@@ -56,7 +74,6 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), 'billing.example.com')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), 'cf_test_token')
 
     const submitButton = screen.getByRole('button', { name: 'Provision Certificate' })
     await user.click(submitButton)
@@ -85,7 +102,6 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), 'billing.example.com')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), 'cf_test_token')
 
     const form = container.querySelector('form')
     expect(form).not.toBeNull()
@@ -101,7 +117,7 @@ describe('CertificateForm', () => {
     resolveSubmit?.()
   })
 
-  it('rejects whitespace-only CloudFlare tokens before submit', async () => {
+  it('submits local CA mode without source field', async () => {
     const onSubmit = vi.fn()
     const user = userEvent.setup()
 
@@ -114,14 +130,63 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), 'billing.example.com')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), '   ')
     await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
 
-    expect(await screen.findByText('CloudFlare API token is required')).toBeInTheDocument()
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'Billing Certificate',
+      domain: 'billing.example.com',
+    })
+  })
+
+  it('submits import mode with source, cert_pem, and key_pem', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByText('Import PEM'))
+    await user.type(screen.getByLabelText('Certificate Name'), 'Imported Cert')
+    await user.type(screen.getByLabelText('Domain'), 'example.com')
+    await user.type(screen.getByLabelText('Certificate PEM'), '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----')
+    await user.type(screen.getByLabelText('Private Key PEM'), '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----')
+    await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'Imported Cert',
+      domain: 'example.com',
+      source: 'imported',
+      cert_pem: '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----',
+      key_pem: '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
+    })
+  })
+
+  it('rejects empty cert PEM in import mode before submit', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByText('Import PEM'))
+    await user.type(screen.getByLabelText('Certificate Name'), 'Test')
+    await user.type(screen.getByLabelText('Domain'), 'example.com')
+    await user.type(screen.getByLabelText('Private Key PEM'), 'some-key')
+    await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
+
+    expect(await screen.findByText('Certificate PEM content is required')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('rejects whitespace-only Route53 keys before submit', async () => {
+  it('rejects empty key PEM in import mode before submit', async () => {
     const onSubmit = vi.fn()
     const user = userEvent.setup()
 
@@ -132,16 +197,13 @@ describe('CertificateForm', () => {
       />
     )
 
-    await user.selectOptions(screen.getByLabelText('DNS Provider'), 'route53')
-    await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
-    await user.type(screen.getByLabelText('Domain'), 'billing.example.com')
-    await user.type(screen.getByLabelText('AWS Access Key ID'), '   ')
-    await user.type(screen.getByLabelText('AWS Secret Access Key'), '\t')
+    await user.click(screen.getByText('Import PEM'))
+    await user.type(screen.getByLabelText('Certificate Name'), 'Test')
+    await user.type(screen.getByLabelText('Domain'), 'example.com')
+    await user.type(screen.getByLabelText('Certificate PEM'), 'some-cert')
     await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
 
-    expect(
-      await screen.findByText('AWS Access Key ID and Secret Access Key are required for Route53')
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Private key PEM content is required')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
@@ -158,7 +220,6 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), 'billing.example.com')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), 'cf_test_token')
 
     const submitButton = screen.getByRole('button', { name: 'Provision Certificate' })
     await user.click(submitButton)
@@ -180,18 +241,13 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), ' billing.example.com ')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), 'cf_test_token')
     await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
 
     expect(onSubmit).toHaveBeenCalledWith({
       name: 'Billing Certificate',
       domain: 'billing.example.com',
-      dns_provider: 'cloudflare',
-      provider_config: {
-        api_token: 'cf_test_token',
-      },
     })
-    expect(screen.queryByText('Invalid domain format. Use something like "example.com" or "*.example.com".')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invalid domain format')).not.toBeInTheDocument()
   })
 
   it('retranslates the current validation error when the language changes', async () => {
@@ -206,7 +262,6 @@ describe('CertificateForm', () => {
 
     await user.type(screen.getByLabelText('Certificate Name'), 'Billing Certificate')
     await user.type(screen.getByLabelText('Domain'), 'not-a-domain')
-    await user.type(screen.getByLabelText('CloudFlare API Token'), 'cf_test_token')
     await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
 
     expect(
