@@ -12,6 +12,7 @@ import (
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/api/dto"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
@@ -22,7 +23,36 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite, certSvc *certservice.Service) {
+// CertService is the subset of *certservice.Service that the admin HTTP layer
+// consumes. Defined here (rather than reusing the concrete type) so handler
+// tests can use stubs.
+type CertService interface {
+	List() ([]store.Certificate, error)
+	Get(id string) (*store.Certificate, error)
+	ProvisionLocal(ctx context.Context, name, domain string) (*store.Certificate, error)
+	Import(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
+	Resign(id string) (*store.Certificate, error)
+	Delete(id string) error
+	GetCAExport() (certPEM, name string, notAfter time.Time, err error)
+}
+
+// HostService is the subset of *hostservice.Service that the admin HTTP layer
+// consumes. Mirrors the CertService pattern.
+type HostService interface {
+	ListProfiles() ([]store.HostProfile, error)
+	GetProfile(id string) (*store.HostProfile, error)
+	CreateProfile(in hostservice.ProfileInput) (*store.HostProfile, error)
+	UpdateProfile(id string, in hostservice.ProfileInput) (*store.HostProfile, error)
+	DeleteProfile(id string) error
+	ActivateProfile(id string) (*store.HostProfile, error)
+	ListEntries(profileID string) ([]store.HostEntry, error)
+	CreateEntry(profileID string, in hostservice.EntryInput) (*store.HostEntry, error)
+	UpdateEntry(profileID, entryID string, in hostservice.EntryInput) (*store.HostEntry, error)
+	ReorderEntries(profileID string, orderedIDs []string) error
+	DeleteEntry(profileID, entryID string) error
+}
+
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite, certSvc CertService, hostSvc HostService) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
@@ -42,13 +72,14 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 	if certSvc != nil {
 		group.GET("/certificates", listCertificates(certSvc))
 		group.GET("/certificates/:id", getCertificate(certSvc))
+		group.GET("/ca", caExportHandler(certSvc))
 
 		editor := group.Group("")
 		editor.Use(auth.RequireRole(store.RoleAdmin, store.RoleEditor))
 		{
 			editor.POST("/certificates", createCertificate(certSvc))
 			editor.DELETE("/certificates/:id", deleteCertificate(certSvc))
-			editor.POST("/certificates/:id/renew", renewCertificate(certSvc))
+			editor.POST("/certificates/:id/resign", resignCertificate(certSvc))
 		}
 	}
 
@@ -74,12 +105,30 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
 		adminOnly.DELETE("/users/:id", deleteUser(userSvc))
 		adminOnly.GET("/metrics", metricsHandler())
+
+		if hostSvc != nil {
+			adminOnly.POST("/host-profiles", createHostProfile(hostSvc))
+			adminOnly.PUT("/host-profiles/:id", updateHostProfile(hostSvc))
+			adminOnly.DELETE("/host-profiles/:id", deleteHostProfile(hostSvc))
+			adminOnly.POST("/host-profiles/:id/activate", activateHostProfile(hostSvc))
+			adminOnly.POST("/host-profiles/:id/entries", createHostEntry(hostSvc))
+			adminOnly.PUT("/host-profiles/:id/entries/reorder", reorderHostEntries(hostSvc))
+			adminOnly.PUT("/host-profiles/:id/entries/:eid", updateHostEntry(hostSvc))
+			adminOnly.DELETE("/host-profiles/:id/entries/:eid", deleteHostEntry(hostSvc))
+		}
+	}
+
+	// Host profile read endpoints — available to any authenticated user.
+	if hostSvc != nil {
+		group.GET("/host-profiles", listHostProfiles(hostSvc))
+		group.GET("/host-profiles/:id", getHostProfile(hostSvc))
+		group.GET("/host-profiles/:id/entries", listHostEntries(hostSvc))
 	}
 
 	_ = sessionSvc
 }
 
-func LoginRoute(db *store.SQLite, certSvc *certservice.Service) gin.HandlerFunc {
+func LoginRoute(db *store.SQLite, certSvc CertService) gin.HandlerFunc {
 	sessionSvc := sessionservice.NewService(db)
 	certificatesEnabled := certSvc != nil
 
@@ -106,7 +155,7 @@ func logoutHandler() gin.HandlerFunc {
 	}
 }
 
-func meHandler(db *store.SQLite, certSvc *certservice.Service) gin.HandlerFunc {
+func meHandler(db *store.SQLite, certSvc CertService) gin.HandlerFunc {
 	certificatesEnabled := certSvc != nil
 
 	return func(c *gin.Context) {
@@ -403,7 +452,7 @@ func metricsHandler() gin.HandlerFunc {
 
 // Certificate handlers
 
-func listCertificates(certSvc *certservice.Service) gin.HandlerFunc {
+func listCertificates(certSvc CertService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		certs, err := certSvc.List()
 		if err != nil {
@@ -414,7 +463,7 @@ func listCertificates(certSvc *certservice.Service) gin.HandlerFunc {
 	}
 }
 
-func getCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+func getCertificate(certSvc CertService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cert, err := certSvc.Get(c.Param("id"))
 		if err != nil {
@@ -429,7 +478,7 @@ func getCertificate(certSvc *certservice.Service) gin.HandlerFunc {
 	}
 }
 
-func createCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+func createCertificate(certSvc CertService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req dto.CertificateWriteRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -437,18 +486,17 @@ func createCertificate(certSvc *certservice.Service) gin.HandlerFunc {
 			return
 		}
 
-		// Parse DNS provider config
-		dnsConfig, err := certservice.ParseDNSProviderConfig(req.DNSProvider, req.ProviderConfig)
-		if err != nil {
-			writeError(c, http.StatusBadRequest, "invalid_provider", err.Error())
+		var cert *store.Certificate
+		var err error
+		switch req.Source {
+		case "", dto.CertificateSourceLocalCA:
+			cert, err = certSvc.ProvisionLocal(context.Background(), req.Name, req.Domain)
+		case dto.CertificateSourceImported:
+			cert, err = certSvc.Import(context.Background(), req.Name, req.Domain, req.CertPEM, req.KeyPEM)
+		default:
+			writeError(c, http.StatusBadRequest, "invalid_source", "unknown certificate source: "+req.Source)
 			return
 		}
-
-		cert, err := certSvc.Provision(context.Background(), certservice.ProvisionInput{
-			Name:        req.Name,
-			Domain:      req.Domain,
-			DNSProvider: dnsConfig,
-		})
 		if err != nil {
 			writeServiceError(c, err)
 			return
@@ -457,7 +505,7 @@ func createCertificate(certSvc *certservice.Service) gin.HandlerFunc {
 	}
 }
 
-func deleteCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+func deleteCertificate(certSvc CertService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := certSvc.Delete(c.Param("id")); err != nil {
 			writeServiceError(c, err)
@@ -467,13 +515,28 @@ func deleteCertificate(certSvc *certservice.Service) gin.HandlerFunc {
 	}
 }
 
-func renewCertificate(certSvc *certservice.Service) gin.HandlerFunc {
+func resignCertificate(certSvc CertService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := certSvc.Renew(c.Param("id")); err != nil {
+		if _, err := certSvc.Resign(c.Param("id")); err != nil {
 			writeServiceError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, httpresponse.Message{Message: "renewal started"})
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "resigned"})
+	}
+}
+
+func caExportHandler(certSvc CertService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		certPEM, name, notAfter, err := certSvc.GetCAExport()
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.CAExportResponse{
+			CertPEM: certPEM,
+			Name:    name,
+			NotAfter: notAfter.Format(time.RFC3339),
+		})
 	}
 }
 
@@ -489,10 +552,11 @@ func certServiceError(c *gin.Context, err error) bool {
 	case certservice.ErrCodeCertNotFound:
 		writeError(c, http.StatusNotFound, targetCode, message)
 	case certservice.ErrCodeInvalidName, certservice.ErrCodeInvalidDomain, certservice.ErrCodeDomainExists,
-		certservice.ErrCodeInvalidProvider, certservice.ErrCodeCertNotActive:
+		certservice.ErrCodeInvalidPEM, certservice.ErrCodeDomainMismatch,
+		certservice.ErrCodeImportedCannotResign:
 		writeError(c, http.StatusBadRequest, targetCode, message)
-	case certservice.ErrCodeDNSProvider:
-		writeError(c, http.StatusBadRequest, targetCode, message)
+	case certservice.ErrCodeLocalCA, certservice.ErrCodeFilesystem:
+		writeError(c, http.StatusInternalServerError, targetCode, message)
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, message)
 	}
@@ -506,6 +570,7 @@ func writeServiceError(c *gin.Context, err error) {
 	case userServiceError(c, err):
 	case sessionServiceError(c, err):
 	case certServiceError(c, err):
+	case hostServiceError(c, err):
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
@@ -581,6 +646,31 @@ func sessionServiceError(c *gin.Context, err error) bool {
 		writeError(c, http.StatusForbidden, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+	}
+	return true
+}
+
+func hostServiceError(c *gin.Context, err error) bool {
+	var target *hostservice.Error
+	if !errors.As(err, &target) {
+		return false
+	}
+
+	switch code := hostservice.Code(err); code {
+	case hostservice.ErrCodeProfileNotFound, hostservice.ErrCodeEntryNotFound:
+		writeError(c, http.StatusNotFound, code, target.Error())
+	case hostservice.ErrCodeInvalidProfileName, hostservice.ErrCodeInvalidIP, hostservice.ErrCodeInvalidHostname,
+		hostservice.ErrCodeInvalidComment, hostservice.ErrCodeDuplicateProfileName,
+		hostservice.ErrCodeDuplicateHostname:
+		writeError(c, http.StatusBadRequest, code, target.Error())
+	case hostservice.ErrCodeMarkerMissing:
+		writeError(c, http.StatusConflict, code, target.Error())
+	case hostservice.ErrCodePermissionDenied:
+		writeError(c, http.StatusForbidden, code, target.Error())
+	case hostservice.ErrCodeRenderFailure, hostservice.ErrCodeStoreFailure:
+		writeError(c, http.StatusInternalServerError, code, target.Error())
+	default:
+		writeError(c, http.StatusInternalServerError, code, target.Error())
 	}
 	return true
 }
