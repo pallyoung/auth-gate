@@ -14,7 +14,7 @@ describe('HostEntryForm', () => {
     await user.type(screen.getByLabelText('IP address'), '127.0.0.1')
     await user.type(screen.getByLabelText('Hostnames (space-separated)'), '  api.local db.local  ')
     await user.type(screen.getByLabelText('Comment (optional)'), 'dev box')
-    await user.click(screen.getByRole('button', { name: 'Add Entry' }))
+    await user.click(screen.getByRole('button', { name: 'Save Entry' }))
 
     expect(onSubmit).toHaveBeenCalledWith({
       ip: '127.0.0.1',
@@ -32,7 +32,7 @@ describe('HostEntryForm', () => {
 
     await user.type(screen.getByLabelText('IP address'), 'not-an-ip')
     await user.type(screen.getByLabelText('Hostnames (space-separated)'), 'api.local')
-    await user.click(screen.getByRole('button', { name: 'Add Entry' }))
+    await user.click(screen.getByRole('button', { name: 'Save Entry' }))
 
     expect(await screen.findByText('IP address is not valid. Use a valid IPv4 or IPv6 address.')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
@@ -45,7 +45,7 @@ describe('HostEntryForm', () => {
     await renderWithI18n(<HostEntryForm onSubmit={onSubmit} onCancel={vi.fn()} />, { locale: 'en' })
 
     await user.type(screen.getByLabelText('IP address'), '127.0.0.1')
-    await user.click(screen.getByRole('button', { name: 'Add Entry' }))
+    await user.click(screen.getByRole('button', { name: 'Save Entry' }))
 
     expect(await screen.findByText('One or more hostnames are invalid. Use letters, numbers, dots, and dashes only.')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
@@ -59,10 +59,10 @@ describe('HostEntryForm', () => {
 
     await user.type(screen.getByLabelText('IP address'), '127.0.0.1')
     await user.type(screen.getByLabelText('Hostnames (space-separated)'), 'api.local')
-    await user.click(screen.getByRole('button', { name: 'Add Entry' }))
+    await user.click(screen.getByRole('button', { name: 'Save Entry' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Entry' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Save Entry' })).not.toBeDisabled()
     })
   })
 })

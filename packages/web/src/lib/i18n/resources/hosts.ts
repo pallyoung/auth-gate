@@ -12,6 +12,11 @@ export const hostsEn = {
     description: 'Create a profile to start managing /etc/hosts entries.',
   },
   entriesEmpty: 'No entries in this profile yet.',
+  activated: 'Profile activated',
+  deleteProfileConfirm: 'Delete profile "{{name}}" and all its entries?',
+  markerBanner: 'AUTH-GATE MANAGED BLOCK marker is missing from /etc/hosts. Append the markers manually and try again.',
+  manage: 'Manage',
+  view: 'View',
   form: {
     name: 'Profile name',
     description: 'Description',
@@ -21,7 +26,7 @@ export const hostsEn = {
     enabled: 'Enabled',
     cancel: 'Cancel',
     save: 'Save',
-    saveEntry: 'Add Entry',
+    saveEntry: 'Save Entry',
     saveProfile: 'Save Profile',
   },
   errors: {
@@ -52,6 +57,11 @@ export const hostsZhCN = {
     description: '创建一个 profile 以开始管理 /etc/hosts。',
   },
   entriesEmpty: '该 profile 下还没有条目。',
+  activated: 'Profile 已激活',
+  deleteProfileConfirm: '确认删除 profile"{{name}}"及其所有条目？',
+  markerBanner: '/etc/hosts 中找不到 AUTH-GATE MANAGED BLOCK 标记。请手工把标记追加到 /etc/hosts 后再试。',
+  manage: '管理',
+  view: '查看',
   form: {
     name: 'Profile 名称',
     description: '描述',
@@ -61,7 +71,7 @@ export const hostsZhCN = {
     enabled: '启用',
     cancel: '取消',
     save: '保存',
-    saveEntry: '新增条目',
+    saveEntry: '保存条目',
     saveProfile: '保存 Profile',
   },
   errors: {
