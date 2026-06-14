@@ -4,6 +4,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Network,
   Route as RouteIcon,
   Settings,
   Shield,
@@ -26,6 +27,7 @@ interface LayoutProps {
       can_manage_auth: boolean
       can_manage_users: boolean
       can_view_logs: boolean
+      can_manage_hosts: boolean
     }
     features?: {
       certificates: boolean
@@ -56,6 +58,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         label: t('sections.certificates.label'),
         description: t('sections.certificates.description'),
         visible: user?.features?.certificates === true,
+      },
+      {
+        path: '/hosts',
+        icon: Network,
+        label: t('sections.hosts.label'),
+        description: t('sections.hosts.description'),
+        visible: user?.permissions?.can_manage_hosts === true,
       },
       {
         path: '/auth',
