@@ -24,7 +24,9 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
+	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 
 	"github.com/gin-gonic/gin"
 )
@@ -109,7 +111,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc *certservice.Service) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc *certservice.Service, hostSvc *hostservice.Service) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -123,7 +125,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, ce
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc)
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr)
@@ -339,6 +341,13 @@ func main() {
 		}
 	}
 
+	hostDataDir := os.Getenv("AUTH_GATE_DATA_DIR")
+	if hostDataDir == "" {
+		hostDataDir = "data"
+	}
+	hostsRenderer := syshosts.NewRenderer(hostDataDir)
+	hostSvc := hostservice.NewService(db, hostsRenderer)
+
 	gin.SetMode(gin.ReleaseMode)
 	if os.Getenv("DEBUG") == "true" {
 		gin.SetMode(gin.DebugMode)
@@ -348,7 +357,7 @@ func main() {
 	log.Printf("Serving web from: %s", webRoot)
 	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-	engine := buildEngine(routerMgr, webRoot, db, certSvc)
+	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

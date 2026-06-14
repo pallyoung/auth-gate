@@ -47,7 +47,7 @@ func TestBuildEngine_ServesIndexWithoutSwallowingProxyPaths(t *testing.T) {
 		t.Fatalf("WriteFile(favicon.ico) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil)
 
 	controlPlaneReq := httptest.NewRequest(http.MethodGet, controlPlaneBasePath, nil)
 	controlPlaneResp := httptest.NewRecorder()
@@ -107,7 +107,7 @@ func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
 		t.Fatalf("WriteFile(index.html) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil)
 
 	token, err := auth.GenerateToken("admin-1", "admin", store.RoleAdmin)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestBuildEngine_LoginResponseReportsCertificateFeatureAvailability(t *testi
 				t.Fatalf("WriteFile(index.html) error = %v", err)
 			}
 
-			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc)
+			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc, nil)
 
 			req := httptest.NewRequest(http.MethodPost, controlPlaneAPIBasePath+"/auth/login", strings.NewReader(`{"username":"admin","password":"password123"}`))
 			req.Header.Set("Content-Type", "application/json")
