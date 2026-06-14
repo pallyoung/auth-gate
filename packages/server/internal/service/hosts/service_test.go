@@ -236,7 +236,7 @@ func TestService_ActivateProfile_WritesFileAndSetsActive(t *testing.T) {
 	}
 }
 
-func TestService_ActivateProfile_RollsBackOnMarkerMissing(t *testing.T) {
+func TestService_ActivateProfile_AppendsMarkersWhenMissing(t *testing.T) {
 	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
 	if err != nil {
 		t.Fatalf("NewSQLite() error = %v", err)
@@ -257,17 +257,24 @@ func TestService_ActivateProfile_RollsBackOnMarkerMissing(t *testing.T) {
 	}
 
 	_, err = svc.ActivateProfile(p.ID)
-	if Code(err) != ErrCodeMarkerMissing {
-		t.Fatalf("Code(err) = %q, want %q", Code(err), ErrCodeMarkerMissing)
+	if err != nil {
+		t.Fatalf("ActivateProfile() error = %v", err)
 	}
 
 	got, _ := db.GetHostProfile(p.ID)
-	if got.IsActive {
-		t.Fatal("profile was activated despite renderer failure")
+	if !got.IsActive {
+		t.Fatal("profile was not activated")
 	}
 	raw, _ := os.ReadFile(hosts)
-	if strings.Contains(string(raw), "api.local") {
-		t.Fatalf("file was modified despite ErrMarkerMissing: %q", string(raw))
+	s := string(raw)
+	if !strings.Contains(s, "api.local") {
+		t.Fatalf("entry not written: %q", s)
+	}
+	if !strings.Contains(s, "127.0.0.1 localhost") {
+		t.Fatalf("original content lost: %q", s)
+	}
+	if !strings.Contains(s, syshosts.BeginMarker) {
+		t.Fatalf("begin marker missing: %q", s)
 	}
 }
 

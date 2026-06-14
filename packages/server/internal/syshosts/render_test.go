@@ -40,7 +40,7 @@ func TestApply_FreshEmptyFile_WritesMarkerBlockWithContent(t *testing.T) {
 	}
 }
 
-func TestApply_NonEmptyFileWithoutMarkers_ReturnsMarkerMissing(t *testing.T) {
+func TestApply_NonEmptyFileWithoutMarkers_AppendsMarkerBlock(t *testing.T) {
 	dir := t.TempDir()
 	hosts := filepath.Join(dir, "hosts")
 	original := "127.0.0.1 localhost\n# my hand-written comment\n"
@@ -52,19 +52,25 @@ func TestApply_NonEmptyFileWithoutMarkers_ReturnsMarkerMissing(t *testing.T) {
 		HostsPath:   hosts,
 		BackupDir:   filepath.Join(dir, "backup"),
 		KeepBackups: 5,
+		Now:         func() time.Time { return time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC) },
 	}
-	err := r.Apply("10.0.0.1 api.local\n")
-	if !errors.Is(err, ErrMarkerMissing) {
-		t.Fatalf("Apply() error = %v, want ErrMarkerMissing", err)
+	if err := r.Apply("10.0.0.1 api.local\n"); err != nil {
+		t.Fatalf("Apply() error = %v", err)
 	}
 
-	// File must be untouched on error.
-	got, readErr := os.ReadFile(hosts)
-	if readErr != nil {
-		t.Fatalf("ReadFile() error = %v", readErr)
+	got, err := os.ReadFile(hosts)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if string(got) != original {
-		t.Fatalf("file content changed despite error: got %q, want %q", string(got), original)
+	s := string(got)
+	if !strings.Contains(s, "127.0.0.1 localhost") || !strings.Contains(s, "# my hand-written comment") {
+		t.Fatalf("original content lost: %q", s)
+	}
+	if !strings.Contains(s, BeginMarker) || !strings.Contains(s, EndMarker) {
+		t.Fatalf("markers missing: %q", s)
+	}
+	if !strings.Contains(s, "10.0.0.1 api.local") {
+		t.Fatalf("new entry not written: %q", s)
 	}
 }
 

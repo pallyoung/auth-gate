@@ -112,9 +112,10 @@ func (r *Renderer) Apply(content string) error {
 //
 // If both markers are missing and the file is empty (or whitespace only),
 // it returns (nil, nil, nil) so a fresh write is allowed. If both markers
-// are missing on a non-empty file, only one marker is present, or the
-// end marker appears before the begin marker, ErrMarkerMissing is returned
-// to refuse corrupting hand-written content.
+// are missing on a non-empty file, the entire file is returned as prefix
+// so the markers are appended at the end without disturbing existing
+// content. If only one marker is present, or the end marker appears before
+// the begin marker, ErrMarkerMissing is returned.
 func splitAroundMarkers(existing []byte) (prefix, suffix []byte, err error) {
 	beginIdx := bytes.Index(existing, []byte(BeginMarker))
 	endIdx := bytes.Index(existing, []byte(EndMarker))
@@ -123,7 +124,9 @@ func splitAroundMarkers(existing []byte) (prefix, suffix []byte, err error) {
 		if len(bytes.TrimSpace(existing)) == 0 {
 			return nil, nil, nil
 		}
-		return nil, nil, ErrMarkerMissing
+		// No markers on a non-empty file: treat the entire content as
+		// prefix so the managed block is appended at the end.
+		return existing, nil, nil
 	}
 
 	if beginIdx < 0 || endIdx < 0 {

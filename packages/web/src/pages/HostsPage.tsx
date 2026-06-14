@@ -89,6 +89,9 @@ export function HostsPage() {
     setShowProfileForm(false)
     const result = await hostsApi.list()
     setProfiles(result.profiles)
+    if (!activeProfileIdRef.current && result.profiles.length > 0) {
+      setActiveProfileId(result.profiles[0].id)
+    }
   }
 
   const handleCreateEntry = async (data: HostEntryInput) => {
