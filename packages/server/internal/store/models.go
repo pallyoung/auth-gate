@@ -93,26 +93,53 @@ func ParseAuthConfig(s string) AuthConfig {
 	return cfg
 }
 
-// Certificate represents an SSL certificate provisioned via ACME
+// Certificate represents an SSL certificate in the registry. Certificates may
+// be issued by the bundled local CA (Source = "local_ca") or imported from
+// external PEM files (Source = "imported").
 type Certificate struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	Domain            string    `json:"domain"` // e.g., "*.example.com" or "example.com"
-	CertPath          string    `json:"cert_path"`
-	KeyPath           string    `json:"key_path"`
-	DNSProvider       string    `json:"dns_provider"`        // "cloudflare", "route53", "pdns"
-	DNSProviderConfig string    `json:"dns_provider_config"` // encrypted JSON
-	Status            string    `json:"status"`              // "pending", "active", "renewing", "failed"
-	NotBefore         time.Time `json:"not_before"`
-	NotAfter          time.Time `json:"not_after"`
-	RenewAt           time.Time `json:"renew_at"` // NotAfter - 30 days
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Domain    string    `json:"domain"` // e.g., "*.example.com" or "example.com"
+	CertPath  string    `json:"cert_path"`
+	KeyPath   string    `json:"key_path"`
+	Source    string    `json:"source"`   // "local_ca" or "imported"
+	CAID      string    `json:"ca_id"`    // empty when Source = "imported"
+	Status    string    `json:"status"`   // "active" or "failed"
+	NotBefore time.Time `json:"not_before"`
+	NotAfter  time.Time `json:"not_after"`
+	RenewAt   time.Time `json:"renew_at"` // NotAfter - 30 days; zero for imported
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 const (
-	CertStatusPending  = "pending"
-	CertStatusActive   = "active"
-	CertStatusRenewing = "renewing"
-	CertStatusFailed   = "failed"
+	SourceLocalCA = "local_ca"
+	SourceImported = "imported"
+
+	CertStatusActive = "active"
+	CertStatusFailed = "failed"
 )
+
+// HostProfile is a named collection of /etc/hosts entries. At most one profile
+// may be active at a time; the mutex is enforced at the service layer.
+type HostProfile struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// HostEntry is a single IP/hostnames line belonging to a HostProfile.
+type HostEntry struct {
+	ID        string    `json:"id"`
+	ProfileID string    `json:"profile_id"`
+	Position  int       `json:"position"`
+	IP        string    `json:"ip"`
+	Hostnames string    `json:"hostnames"` // space-separated
+	Comment   string    `json:"comment"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

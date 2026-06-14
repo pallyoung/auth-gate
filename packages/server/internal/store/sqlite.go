@@ -94,7 +94,9 @@ func NewSQLite(path string) (*SQLite, error) {
 		key_path TEXT NOT NULL DEFAULT '',
 		dns_provider TEXT NOT NULL DEFAULT '',
 		dns_provider_config TEXT NOT NULL DEFAULT '',
-		status TEXT NOT NULL DEFAULT 'pending',
+		source TEXT NOT NULL DEFAULT 'local_ca',
+		ca_id TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'active',
 		not_before DATETIME DEFAULT '',
 		not_after DATETIME DEFAULT '',
 		renew_at DATETIME DEFAULT '',
@@ -102,8 +104,43 @@ func NewSQLite(path string) (*SQLite, error) {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS ca_certificates (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		cert_pem TEXT NOT NULL,
+		key_pem TEXT NOT NULL,
+		not_before DATETIME DEFAULT '',
+		not_after DATETIME DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_certificates_domain ON certificates(domain);
 	CREATE INDEX IF NOT EXISTS idx_certificates_status ON certificates(status);
+	CREATE INDEX IF NOT EXISTS idx_certificates_source ON certificates(source);
+
+	CREATE TABLE IF NOT EXISTS host_profiles (
+		id          TEXT PRIMARY KEY,
+		name        TEXT UNIQUE NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		is_active   INTEGER NOT NULL DEFAULT 0,
+		created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS host_entries (
+		id          TEXT PRIMARY KEY,
+		profile_id  TEXT NOT NULL,
+		position    INTEGER NOT NULL,
+		ip          TEXT NOT NULL,
+		hostnames   TEXT NOT NULL,
+		comment     TEXT NOT NULL DEFAULT '',
+		enabled     INTEGER NOT NULL DEFAULT 1,
+		created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (profile_id) REFERENCES host_profiles(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_host_entries_profile_position ON host_entries(profile_id, position);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
@@ -129,6 +166,11 @@ func NewSQLite(path string) (*SQLite, error) {
 		`ALTER TABLE auth_rules ADD COLUMN cors_max_age INTEGER DEFAULT 0`,
 		// Certificate table migrations (add columns if upgrading from older version)
 		`ALTER TABLE certificates ADD COLUMN name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE certificates ADD COLUMN source TEXT NOT NULL DEFAULT 'local_ca'`,
+		`ALTER TABLE certificates ADD COLUMN ca_id TEXT NOT NULL DEFAULT ''`,
+		// Host profile/entry table migrations (defensive no-ops for older DBs)
+		`ALTER TABLE host_profiles ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE host_entries ADD COLUMN comment TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors - column may already exist in older DBs
