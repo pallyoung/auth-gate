@@ -4,6 +4,7 @@ export { routesApi } from './routes'
 export { authRulesApi } from './auth-rules'
 export { usersApi } from './users'
 export { configApi } from './config'
+export { hostsApi } from './hosts'
 export type {
   Permissions,
   SessionUser,
@@ -15,4 +16,10 @@ export type {
   AuthRuleConfig,
   AuthRuleSecretConfig,
   LoginResponse,
+  HostProfile,
+  HostEntry,
+  HostProfileInput,
+  HostEntryInput,
+  HostEntryReorderInput,
+  HostProfileListResponse,
 } from './types'
