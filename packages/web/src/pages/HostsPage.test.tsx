@@ -100,6 +100,23 @@ describe('HostsPage', () => {
     expect(await screen.findByText(/AUTH-GATE MANAGED BLOCK/)).toBeInTheDocument()
   })
 
+  it('calls activate API and refreshes profiles on success', async () => {
+    vi.mocked(hostsApi.activate).mockResolvedValue({ ...profiles[0], is_active: true })
+    const updatedProfiles = profiles.map((p) => ({ ...p, is_active: p.id === 'p1' }))
+    vi.mocked(hostsApi.list).mockResolvedValueOnce({ profiles, active_id: 'p1' })
+    vi.mocked(hostsApi.list).mockResolvedValueOnce({ profiles: updatedProfiles, active_id: 'p1' })
+
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+
+    await screen.findByRole('button', { name: 'Dev' })
+    await user.click(screen.getByRole('button', { name: 'Activate this profile' }))
+
+    await waitFor(() => {
+      expect(hostsApi.activate).toHaveBeenCalledWith('p1')
+    })
+  })
+
   it('opens Add Profile modal and submits to API', async () => {
     vi.mocked(hostsApi.create).mockResolvedValue({
       id: 'p3', name: 'New Profile', description: '', is_active: false, created_at: '', updated_at: '',
@@ -117,6 +134,88 @@ describe('HostsPage', () => {
 
     await waitFor(() => {
       expect(hostsApi.create).toHaveBeenCalledWith({ name: 'New Profile', description: '' })
+    })
+  })
+
+  it('toggles entry enabled state via Switch', async () => {
+    vi.mocked(hostsApi.updateEntry).mockResolvedValue({
+      ...entries[0], enabled: false,
+    })
+
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+
+    await screen.findByRole('button', { name: 'Dev' })
+    const toggle = screen.getAllByRole('checkbox', { name: 'Enabled' })[0]
+    await user.click(toggle)
+
+    await waitFor(() => {
+      expect(hostsApi.updateEntry).toHaveBeenCalledWith('p1', 'e1', {
+        ip: '127.0.0.1',
+        hostnames: ['api.local'],
+        comment: '',
+        enabled: false,
+      })
+    })
+  })
+
+  it('deletes an entry after confirm', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(hostsApi.deleteEntry).mockResolvedValue({ status: 'ok' })
+
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+
+    await screen.findByRole('button', { name: 'Dev' })
+    const deleteBtn = screen.getAllByRole('button', { name: 'Delete' })[0]
+    await user.click(deleteBtn)
+
+    await waitFor(() => {
+      expect(hostsApi.deleteEntry).toHaveBeenCalledWith('p1', 'e1')
+    })
+
+    vi.restoreAllMocks()
+  })
+
+  it('switches profile when ProfileSwitcher button is clicked', async () => {
+    const stagingEntries = [
+      { id: 'e3', profile_id: 'p2', position: 0, ip: '192.168.1.1', hostnames: 'staging.local', comment: '', enabled: true, created_at: '', updated_at: '' },
+    ]
+    vi.mocked(hostsApi.listEntries).mockResolvedValue(entries)
+    vi.mocked(hostsApi.listEntries).mockResolvedValueOnce(entries)
+
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+
+    await screen.findByText('api.local')
+
+    vi.mocked(hostsApi.listEntries).mockResolvedValue(stagingEntries)
+    await user.click(screen.getByRole('button', { name: 'Staging' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('staging.local')).toBeInTheDocument()
+    })
+  })
+
+  it('opens edit entry modal and submits update', async () => {
+    vi.mocked(hostsApi.updateEntry).mockResolvedValue({
+      ...entries[0], ip: '10.0.0.1',
+    })
+
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+
+    await screen.findByText('api.local')
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' })
+    await user.click(editButtons[0])
+
+    const ipInput = screen.getByLabelText('IP address')
+    await user.clear(ipInput)
+    await user.type(ipInput, '10.0.0.1')
+    await user.click(screen.getByRole('button', { name: 'Save Entry' }))
+
+    await waitFor(() => {
+      expect(hostsApi.updateEntry).toHaveBeenCalled()
     })
   })
 })
