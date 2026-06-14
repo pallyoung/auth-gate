@@ -2,7 +2,8 @@ package certificate
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"os"
@@ -11,395 +12,366 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-acme/lego/v4/challenge"
 	"github.com/google/uuid"
-	"github.com/pallyoung/auth-gate/packages/server/internal/acme"
+	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
 	"github.com/pallyoung/auth-gate/packages/server/internal/service/runtime"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-// Service handles certificate provisioning and renewal
+// Default durations for locally issued certificates.
+const (
+	defaultLeafDays = 90
+	renewOffsetDays = 30
+)
+
+// Service handles certificate provisioning, import, and re-signing.
+//
+// Two sources are supported:
+//   - SourceLocalCA: signed by the bundled local CA. Auto-renewed in the
+//     background 30 days before NotAfter.
+//   - SourceImported: pasted/uploaded PEM. Never auto-renewed; Resign
+//     returns an error instructing the user to re-import.
 type Service struct {
-	db        *store.SQLite
-	reloader  runtime.Reloader
-	acmeDir   string
-	acmeEmail string
-	acme      *acme.Client
-	mu        sync.RWMutex
-	tasks     sync.WaitGroup
+	db       *store.SQLite
+	reloader runtime.Reloader
 
-	// Renewal
-	renewer *Renewer
-	stopCh  chan struct{}
+	ca       *localca.CA
+	certDir  string
+	renewer  *Renewer
+	mu       sync.Mutex
 }
 
-// Config holds service configuration
 type Config struct {
-	DataDir    string // Base directory for ACME data and certificates
-	ACMEEmail  string // Email for ACME account
-	UseStaging bool   // Use Let's Encrypt staging (for testing)
+	DataDir string
+	CA      *localca.CA
 }
 
-// NewService creates a new certificate service
 func NewService(db *store.SQLite, cfg Config, reloader runtime.Reloader) (*Service, error) {
-	acmeDir := filepath.Join(cfg.DataDir, "acme")
-
-	svc := &Service{
-		db:        db,
-		reloader:  reloader,
-		acmeDir:   acmeDir,
-		acmeEmail: cfg.ACMEEmail,
-		stopCh:    make(chan struct{}),
+	if cfg.CA == nil {
+		return nil, fmt.Errorf("certificate service: local CA is required")
 	}
-
-	// Initialize ACME client
-	client, err := acme.NewClient(acme.Config{
-		Email:       cfg.ACMEEmail,
-		DataDir:     acmeDir,
-		AcceptTerms: true,
-		UseStaging:  cfg.UseStaging,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ACME client: %w", err)
+	certDir := filepath.Join(cfg.DataDir, "certs")
+	if err := os.MkdirAll(certDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create cert dir: %w", err)
 	}
-	svc.acme = client
-
-	return svc, nil
+	return &Service{
+		db:       db,
+		reloader: reloader,
+		ca:       cfg.CA,
+		certDir:  certDir,
+	}, nil
 }
 
-// ProvisionInput holds input for certificate provisioning
-type ProvisionInput struct {
-	Name        string
-	Domain      string // e.g., "*.example.com" or "example.com"
-	DNSProvider acme.DNSProviderConfig
-}
-
-// Provision creates a new certificate for the given domain
-func (s *Service) Provision(_ context.Context, input ProvisionInput) (*store.Certificate, error) {
-	name, err := normalizeCertificateName(input.Name)
+// ProvisionLocal signs a new certificate with the local CA. Synchronous.
+func (s *Service) ProvisionLocal(_ context.Context, name, domain string) (*store.Certificate, error) {
+	var err error
+	name, err = normalizeCertificateName(name)
 	if err != nil {
 		return nil, err
 	}
-	domain, err := normalizeCertificateDomain(input.Domain)
+	domain, err = normalizeCertificateDomain(domain)
 	if err != nil {
 		return nil, newError(ErrCodeInvalidDomain, err.Error(), nil)
 	}
 
-	// Check if certificate already exists for this domain
-	existing, err := s.db.GetCertificateByDomain(domain)
-	if err != nil {
-		return nil, newError(ErrCodeDatabase, "failed to check existing certificate", err)
-	}
-	if existing != nil {
+	if existing, err := s.db.GetCertificateByDomain(domain); err != nil {
+		return nil, newError(ErrCodeDatabase, "check existing certificate", err)
+	} else if existing != nil {
 		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+domain, nil)
 	}
 
-	// Create certificate record
+	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(domain, defaultLeafDays)
+	if err != nil {
+		return nil, newError(ErrCodeLocalCA, "sign certificate: "+err.Error(), err)
+	}
+
+	certPath, keyPath, err := s.writeCertFiles(domain, certPEM, keyPEM)
+	if err != nil {
+		return nil, err
+	}
+
 	cert := &store.Certificate{
-		ID:                uuid.New().String(),
-		Name:              name,
-		Domain:            domain,
-		Status:            store.CertStatusPending,
-		DNSProvider:       input.DNSProvider.ProviderType,
-		DNSProviderConfig: encryptProviderConfig(input.DNSProvider),
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
+		ID:        uuid.New().String(),
+		Name:      name,
+		Domain:    domain,
+		CertPath:  certPath,
+		KeyPath:   keyPath,
+		Source:    store.SourceLocalCA,
+		CAID:      s.caID(),
+		Status:    store.CertStatusActive,
+		NotBefore: nb,
+		NotAfter:  na,
+		RenewAt:   na.AddDate(0, 0, -renewOffsetDays),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-
-	// Save to database
 	if err := s.db.CreateCertificate(cert); err != nil {
-		return nil, newError(ErrCodeDatabase, "failed to create certificate record", err)
+		s.removeCertFiles(certPath, keyPath)
+		return nil, newError(ErrCodeDatabase, "save certificate", err)
 	}
-
-	// Provision in background
-	input.Domain = domain
-	s.runAsync(func() {
-		s.provisionCertificate(cert.ID, input)
-	})
-
+	s.triggerReload()
 	return cert, nil
 }
 
-// provisionCertificate does the actual certificate provisioning
-func (s *Service) provisionCertificate(certID string, input ProvisionInput) {
-	cert, err := s.db.GetCertificate(certID)
-	if err != nil || cert == nil {
-		log.Printf("[cert] failed to get certificate %s: %v", certID, err)
-		return
-	}
-
-	// Create DNS provider
-	provider, err := acme.NewDNSProvider(input.DNSProvider)
+// Import stores a user-supplied certificate and key after validating them.
+func (s *Service) Import(_ context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error) {
+	var err error
+	name, err = normalizeCertificateName(name)
 	if err != nil {
-		log.Printf("[cert] failed to create DNS provider for %s: %v", input.Domain, err)
-		s.updateStatus(certID, store.CertStatusFailed, "DNS provider error: "+err.Error())
-		return
+		return nil, err
 	}
-
-	// Request certificate
-	domains := parseDomain(input.Domain)
-	certPEM, keyPEM, err := s.acme.RequestCertificate(domains, provider)
+	domain, err = normalizeCertificateDomain(domain)
 	if err != nil {
-		log.Printf("[cert] failed to request certificate for %s: %v", input.Domain, err)
-		s.updateStatus(certID, store.CertStatusFailed, "ACME error: "+err.Error())
-		return
+		return nil, newError(ErrCodeInvalidDomain, err.Error(), nil)
 	}
 
-	// Save certificate to filesystem
-	certPath, keyPath, err := s.acme.SaveCertificate(normalizeDomain(input.Domain), certPEM, keyPEM)
+	leaf, err := parseLeafCertificate([]byte(certPEM))
 	if err != nil {
-		log.Printf("[cert] failed to save certificate for %s: %v", input.Domain, err)
-		s.updateStatus(certID, store.CertStatusFailed, "Failed to save certificate: "+err.Error())
-		return
+		return nil, newError(ErrCodeInvalidPEM, "parse certificate: "+err.Error(), err)
+	}
+	if err := validateKeyMatchesCertificate([]byte(certPEM), []byte(keyPEM)); err != nil {
+		return nil, newError(ErrCodeInvalidPEM, "key does not match certificate: "+err.Error(), err)
+	}
+	if err := validateDomainMatchesCertificate(domain, leaf); err != nil {
+		return nil, newError(ErrCodeDomainMismatch, err.Error(), err)
 	}
 
-	// Update certificate record
-	cert.CertPath = certPath
-	cert.KeyPath = keyPath
-	cert.Status = store.CertStatusActive
-
-	// Parse certificate to get expiration dates
-	if x509Cert, err := parseCertPEM(certPEM); err == nil {
-		cert.NotBefore = x509Cert.NotBefore
-		cert.NotAfter = x509Cert.NotAfter
-		cert.RenewAt = cert.NotAfter.AddDate(0, 0, -30) // Renew 30 days before expiry
-	} else {
-		cert.NotAfter = time.Now().AddDate(0, 0, 90) // Default 90 days
-		cert.RenewAt = cert.NotAfter.AddDate(0, 0, -30)
+	if existing, err := s.db.GetCertificateByDomain(domain); err != nil {
+		return nil, newError(ErrCodeDatabase, "check existing certificate", err)
+	} else if existing != nil {
+		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+domain, nil)
 	}
 
-	if err := s.db.UpdateCertificate(cert); err != nil {
-		log.Printf("[cert] failed to update certificate record %s: %v", certID, err)
-		return
+	certPath, keyPath, err := s.writeCertFiles(domain, []byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return nil, err
 	}
 
-	// Trigger route reload
-	if s.reloader != nil {
-		s.reloader.Reload()
+	cert := &store.Certificate{
+		ID:        uuid.New().String(),
+		Name:      name,
+		Domain:    domain,
+		CertPath:  certPath,
+		KeyPath:   keyPath,
+		Source:    store.SourceImported,
+		Status:    store.CertStatusActive,
+		NotBefore: leaf.NotBefore,
+		NotAfter:  leaf.NotAfter,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-
-	log.Printf("[cert] successfully provisioned certificate for %s, expires at %s", input.Domain, cert.NotAfter.Format(time.RFC3339))
+	if err := s.db.CreateCertificate(cert); err != nil {
+		s.removeCertFiles(certPath, keyPath)
+		return nil, newError(ErrCodeDatabase, "save certificate", err)
+	}
+	s.triggerReload()
+	return cert, nil
 }
 
-// Renew renews an existing certificate
-func (s *Service) Renew(id string) error {
+// Resign re-issues a local-CA certificate with the same domain. Imported
+// certificates must be re-imported by the user instead.
+func (s *Service) Resign(id string) (*store.Certificate, error) {
 	cert, err := s.db.GetCertificate(id)
 	if err != nil {
-		return newError(ErrCodeDatabase, "failed to get certificate", err)
+		return nil, newError(ErrCodeDatabase, "get certificate", err)
 	}
 	if cert == nil {
-		return newError(ErrCodeCertNotFound, "certificate not found: "+id, nil)
+		return nil, newError(ErrCodeCertNotFound, "certificate not found: "+id, nil)
+	}
+	if cert.Source != store.SourceLocalCA {
+		return nil, newError(ErrCodeImportedCannotResign,
+			"imported certificates cannot be auto-renewed; re-import the certificate instead", nil)
 	}
 
-	// Create DNS provider from stored config
-	providerConfig := decryptProviderConfig(cert.DNSProviderConfig)
-	provider, err := acme.NewDNSProvider(providerConfig)
+	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(cert.Domain, defaultLeafDays)
 	if err != nil {
-		return newError(ErrCodeDNSProvider, "failed to create DNS provider", err)
+		return nil, newError(ErrCodeLocalCA, "re-sign certificate: "+err.Error(), err)
 	}
-
-	// Update status
-	cert.Status = store.CertStatusRenewing
-	if err := s.db.UpdateCertificate(cert); err != nil {
-		return newError(ErrCodeDatabase, "failed to update certificate status", err)
+	if _, _, err := s.writeCertFiles(cert.Domain, certPEM, keyPEM); err != nil {
+		return nil, err
 	}
-
-	// Renew in background
-	s.runAsync(func() {
-		s.renewCertificate(cert, provider)
-	})
-
-	return nil
-}
-
-// renewCertificate performs the actual renewal
-func (s *Service) renewCertificate(cert *store.Certificate, provider challenge.Provider) {
-	domains := parseDomain(cert.Domain)
-
-	certPEM, keyPEM, err := s.acme.RequestCertificate(domains, provider)
-	if err != nil {
-		log.Printf("[cert] failed to renew certificate for %s: %v", cert.Domain, err)
-		s.updateStatus(cert.ID, store.CertStatusFailed, "Renewal error: "+err.Error())
-		return
-	}
-
-	// Save certificate to filesystem
-	certPath, keyPath, err := s.acme.SaveCertificate(normalizeDomain(cert.Domain), certPEM, keyPEM)
-	if err != nil {
-		log.Printf("[cert] failed to save renewed certificate for %s: %v", cert.Domain, err)
-		s.updateStatus(cert.ID, store.CertStatusFailed, "Failed to save certificate: "+err.Error())
-		return
-	}
-
-	// Update certificate record
-	cert.CertPath = certPath
-	cert.KeyPath = keyPath
+	cert.NotBefore = nb
+	cert.NotAfter = na
+	cert.RenewAt = na.AddDate(0, 0, -renewOffsetDays)
 	cert.Status = store.CertStatusActive
-
-	// Parse certificate to get expiration dates
-	if x509Cert, err := parseCertPEM(certPEM); err == nil {
-		cert.NotBefore = x509Cert.NotBefore
-		cert.NotAfter = x509Cert.NotAfter
-		cert.RenewAt = cert.NotAfter.AddDate(0, 0, -30)
-	}
-
 	if err := s.db.UpdateCertificate(cert); err != nil {
-		log.Printf("[cert] failed to update certificate record %s: %v", cert.ID, err)
-		return
+		return nil, newError(ErrCodeDatabase, "update certificate", err)
 	}
-
-	// Trigger route reload
-	if s.reloader != nil {
-		s.reloader.Reload()
-	}
-
-	log.Printf("[cert] successfully renewed certificate for %s, expires at %s", cert.Domain, cert.NotAfter.Format(time.RFC3339))
+	s.triggerReload()
+	return cert, nil
 }
 
-// StartRenewer starts the background renewal checker
-func (s *Service) StartRenewer(interval time.Duration) {
-	s.renewer = &Renewer{svc: s, interval: interval}
-	go s.renewer.Start()
-}
-
-// StopRenewer stops the background renewal checker
-func (s *Service) StopRenewer() {
-	if s.renewer != nil {
-		s.renewer.Stop()
-	}
-}
-
-// Wait blocks until all in-flight background provisioning and renewal jobs exit.
-func (s *Service) Wait() {
-	if s == nil {
-		return
-	}
-	s.tasks.Wait()
-}
-
-// List returns all certificates
+// List returns all certificates.
 func (s *Service) List() ([]store.Certificate, error) {
 	certs, err := s.db.ListCertificates()
 	if err != nil {
-		return nil, newError(ErrCodeDatabase, "failed to list certificates", err)
+		return nil, newError(ErrCodeDatabase, "list certificates", err)
 	}
 	return certs, nil
 }
 
-// Get returns a certificate by ID
+// Get returns a single certificate by ID.
 func (s *Service) Get(id string) (*store.Certificate, error) {
 	cert, err := s.db.GetCertificate(id)
 	if err != nil {
-		return nil, newError(ErrCodeDatabase, "failed to get certificate", err)
+		return nil, newError(ErrCodeDatabase, "get certificate", err)
 	}
 	return cert, nil
 }
 
-// Delete removes a certificate
+// GetCAExport returns the CA cert PEM plus identifying metadata for the
+// /api/ca endpoint.
+func (s *Service) GetCAExport() (certPEM string, name string, notAfter time.Time, err error) {
+	if s.ca == nil {
+		return "", "", time.Time{}, newError(ErrCodeLocalCA, "no local CA loaded", nil)
+	}
+	return string(s.ca.CertPEM), s.ca.Cert.Subject.CommonName, s.ca.Cert.NotAfter, nil
+}
+
+// Delete removes a certificate and its files.
 func (s *Service) Delete(id string) error {
 	cert, err := s.db.GetCertificate(id)
 	if err != nil {
-		return newError(ErrCodeDatabase, "failed to get certificate", err)
+		return newError(ErrCodeDatabase, "get certificate", err)
 	}
 	if cert == nil {
 		return newError(ErrCodeCertNotFound, "certificate not found: "+id, nil)
 	}
-
-	// Delete certificate files
 	if cert.CertPath != "" {
-		os.Remove(cert.CertPath)
+		_ = os.Remove(cert.CertPath)
 	}
 	if cert.KeyPath != "" {
-		os.Remove(cert.KeyPath)
+		_ = os.Remove(cert.KeyPath)
 	}
-
-	// Delete from database
 	if err := s.db.DeleteCertificate(id); err != nil {
-		return newError(ErrCodeDatabase, "failed to delete certificate", err)
+		return newError(ErrCodeDatabase, "delete certificate", err)
 	}
-
+	s.triggerReload()
 	return nil
 }
 
-// Helper functions
-
-func (s *Service) updateStatus(id string, status string, message string) {
-	cert, err := s.db.GetCertificate(id)
-	if err != nil || cert == nil {
+// StartRenewer begins the background re-signer that handles local-CA
+// certificates approaching expiration.
+func (s *Service) StartRenewer(interval time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.renewer != nil {
 		return
 	}
-	cert.Status = status
-	s.db.UpdateCertificate(cert)
-	if message != "" {
-		log.Printf("[cert] %s: %s", status, message)
+	s.renewer = &Renewer{svc: s, interval: interval}
+	go s.renewer.run()
+}
+
+// StopRenewer stops the background re-signer. Safe to call multiple times.
+func (s *Service) StopRenewer() {
+	s.mu.Lock()
+	r := s.renewer
+	s.renewer = nil
+	s.mu.Unlock()
+	if r != nil {
+		r.stop()
 	}
 }
 
-func validateDomain(domain string) error {
-	if domain == "" {
-		return fmt.Errorf("domain is required")
+// Internal: file handling and reloader plumbing
+
+func (s *Service) writeCertFiles(domain string, certPEM, keyPEM []byte) (certPath, keyPath string, err error) {
+	dir := filepath.Join(s.certDir, normalizeDomainForPath(domain))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", "", newError(ErrCodeFilesystem, "create cert dir: "+err.Error(), err)
 	}
-
-	// Basic validation: must be a valid domain format
-	domain = strings.TrimPrefix(domain, "*.")
-
-	// Check for basic format (at least one dot for multi-level domain)
-	if len(domain) < 4 || strings.Count(domain, ".") < 1 {
-		return fmt.Errorf("invalid domain format: %s", domain)
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		return "", "", newError(ErrCodeFilesystem, "write cert: "+err.Error(), err)
 	}
-
-	return nil
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		_ = os.Remove(certPath)
+		return "", "", newError(ErrCodeFilesystem, "write key: "+err.Error(), err)
+	}
+	return certPath, keyPath, nil
 }
 
-func parseDomain(domain string) []string {
-	domains := []string{domain}
-
-	// For wildcard, also include the base domain for validation
-	if strings.HasPrefix(domain, "*.") {
-		baseDomain := strings.TrimPrefix(domain, "*.")
-		domains = append(domains, baseDomain)
+func (s *Service) removeCertFiles(certPath, keyPath string) {
+	if certPath != "" {
+		_ = os.Remove(certPath)
 	}
-
-	return domains
+	if keyPath != "" {
+		_ = os.Remove(keyPath)
+	}
 }
 
-func normalizeDomain(domain string) string {
-	return strings.ReplaceAll(domain, "*", "wildcard")
-}
-
-func (s *Service) runAsync(fn func()) {
-	s.tasks.Add(1)
+func (s *Service) triggerReload() {
+	if s.reloader == nil {
+		return
+	}
 	go func() {
-		defer s.tasks.Done()
-		fn()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[cert] reloader panic: %v", r)
+			}
+		}()
+		s.reloader.Reload()
 	}()
+}
+
+func (s *Service) caID() string {
+	ca, err := s.db.GetFirstCACertificate()
+	if err != nil || ca == nil {
+		return ""
+	}
+	return ca.ID
+}
+
+// Helpers used by tests and other internal packages.
+
+func parseLeafCertificate(pemBytes []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("invalid PEM block")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse x509: %w", err)
+	}
+	if cert.IsCA {
+		return nil, fmt.Errorf("certificate is a CA, not a leaf")
+	}
+	return cert, nil
 }
 
 func normalizeCertificateName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", newError(ErrCodeInvalidName, "certificate name required", nil)
+		return "", newError(ErrCodeInvalidName, "certificate name is required", nil)
 	}
 	return name, nil
 }
 
 func normalizeCertificateDomain(domain string) (string, error) {
 	domain = strings.TrimSpace(domain)
-	if err := validateDomain(domain); err != nil {
-		return "", err
+	if domain == "" {
+		return "", fmt.Errorf("domain is required")
+	}
+	if !looksLikeDomain(domain) {
+		return "", fmt.Errorf("invalid domain format: %s", domain)
 	}
 	return domain, nil
 }
 
-func encryptProviderConfig(config acme.DNSProviderConfig) string {
-	// Simple encryption - in production, use proper encryption
-	// For now, just JSON encode (not secure for sensitive data)
-	data, _ := json.Marshal(config)
-	return string(data)
-}
-
-func decryptProviderConfig(encoded string) acme.DNSProviderConfig {
-	var config acme.DNSProviderConfig
-	json.Unmarshal([]byte(encoded), &config)
-	return config
+func looksLikeDomain(domain string) bool {
+	if len(domain) < 4 {
+		return false
+	}
+	stripped := strings.TrimPrefix(domain, "*.")
+	if !strings.Contains(stripped, ".") {
+		return false
+	}
+	for _, r := range stripped {
+		if r == '.' || r == '-' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			continue
+		}
+		return false
+	}
+	return true
 }

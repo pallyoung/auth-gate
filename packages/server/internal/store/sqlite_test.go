@@ -288,14 +288,14 @@ func TestSQLite_GetCertificateWaitsForExclusiveLockRelease(t *testing.T) {
 	})
 
 	cert := &Certificate{
-		ID:                "cert-1",
-		Name:              "Example",
-		Domain:            "*.example.com",
-		DNSProvider:       "cloudflare",
-		DNSProviderConfig: "{}",
-		Status:            CertStatusPending,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
+		ID:        "cert-1",
+		Name:      "Example",
+		Domain:    "*.example.com",
+		Source:    SourceLocalCA,
+		CAID:      "ca-1",
+		Status:    CertStatusActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 	if err := db.CreateCertificate(cert); err != nil {
 		t.Fatalf("CreateCertificate() error = %v", err)

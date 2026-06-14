@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	adminhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/admin"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
@@ -136,7 +137,7 @@ func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
 func TestBuildEngine_LoginResponseReportsCertificateFeatureAvailability(t *testing.T) {
 	testCases := []struct {
 		name        string
-		certSvc     *certservice.Service
+		certSvc     adminhttp.CertService
 		wantEnabled bool
 	}{
 		{

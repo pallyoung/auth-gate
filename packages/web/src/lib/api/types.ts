@@ -3,6 +3,7 @@ export interface Permissions {
   can_manage_auth: boolean
   can_manage_users: boolean
   can_view_logs: boolean
+  can_manage_hosts: boolean
 }
 
 export interface Features {
@@ -168,4 +169,46 @@ export interface CertificateInput {
   domain: string
   dns_provider: string
   provider_config: Record<string, string>
+}
+
+export interface HostProfile {
+  id: string
+  name: string
+  description: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface HostEntry {
+  id: string
+  profile_id: string
+  position: number
+  ip: string
+  hostnames: string
+  comment: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface HostProfileListResponse {
+  profiles: HostProfile[]
+  active_id: string
+}
+
+export interface HostProfileInput {
+  name: string
+  description: string
+}
+
+export interface HostEntryInput {
+  ip: string
+  comment: string
+  hostnames: string[]
+  enabled: boolean
+}
+
+export interface HostEntryReorderInput {
+  entry_ids: string[]
 }

@@ -32,7 +32,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -50,7 +50,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -73,7 +73,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -102,7 +102,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -131,7 +131,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -165,7 +165,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -201,7 +201,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -229,7 +229,7 @@ describe('SettingsPage i18n', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 

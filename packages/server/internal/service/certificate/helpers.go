@@ -1,99 +1,108 @@
 package certificate
 
 import (
+	"crypto"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/pallyoung/auth-gate/packages/server/internal/acme"
 	"github.com/pallyoung/auth-gate/packages/server/internal/service/runtime"
 )
 
-// parseCertPEM parses a certificate from PEM format
-func parseCertPEM(certPEM []byte) (*x509.Certificate, error) {
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return nil, fmt.Errorf("failed to parse PEM block")
-	}
-	return x509.ParseCertificate(block.Bytes)
-}
-
-// getDomainDir returns the directory path for a domain's certificates
-func getDomainDir(acmeDir string, domain string) string {
-	return filepath.Join(acmeDir, "certs", normalizeDomainForPath(domain))
-}
-
-// normalizeDomainForPath normalizes a domain for use in file paths
+// normalizeDomainForPath turns a domain (which may start with "*.") into a
+// filesystem-safe directory name.
 func normalizeDomainForPath(domain string) string {
 	return "_wildcard_" + strings.ReplaceAll(domain, "*.", "")
 }
 
-// ServiceConfig holds configuration for creating the service
-type ServiceConfig struct {
-	DataDir    string
-	ACMEEmail  string
-	UseStaging bool
+// parsePrivateKey decodes a PEM RSA private key.
+func parsePrivateKey(pemBytes []byte) (crypto.PrivateKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("invalid PEM block")
+	}
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		if rsaKey, ok := key.(*rsa.PrivateKey); ok {
+			return rsaKey, nil
+		}
+		return nil, fmt.Errorf("PKCS8 key is not RSA")
+	}
+	return nil, fmt.Errorf("could not parse private key (tried PKCS1 and PKCS8)")
 }
 
-// ValidateDNSProviderConfig validates DNS provider configuration
-func ValidateDNSProviderConfig(provider string, config map[string]string) error {
-	switch normalizeProviderName(provider) {
-	case "cloudflare":
-		if trimmedConfigValue(config, "api_token") == "" {
-			return fmt.Errorf("cloudflare: api_token is required")
-		}
-	case "route53":
-		if trimmedConfigValue(config, "access_key_id") == "" || trimmedConfigValue(config, "secret_access_key") == "" {
-			return fmt.Errorf("route53: access_key_id and secret_access_key are required")
-		}
-	default:
-		return fmt.Errorf("unsupported DNS provider: %s", strings.TrimSpace(provider))
+// validateKeyMatchesCertificate checks that the private key and certificate
+// form a matching pair by comparing their public key modulus.
+func validateKeyMatchesCertificate(certPEM, keyPEM []byte) error {
+	cb, _ := pem.Decode(certPEM)
+	if cb == nil {
+		return fmt.Errorf("invalid certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(cb.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+	key, err := parsePrivateKey(keyPEM)
+	if err != nil {
+		return err
+	}
+	rsaKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return fmt.Errorf("private key is not RSA")
+	}
+	certPub, ok := cert.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("certificate public key is not RSA")
+	}
+	if certPub.N.Cmp(rsaKey.N) != 0 {
+		return fmt.Errorf("certificate and private key do not match")
 	}
 	return nil
 }
 
-// ParseDNSProviderConfig parses DNS provider configuration from a map
-func ParseDNSProviderConfig(provider string, config map[string]string) (acme.DNSProviderConfig, error) {
-	provider = normalizeProviderName(provider)
-
-	if err := ValidateDNSProviderConfig(provider, config); err != nil {
-		return acme.DNSProviderConfig{}, err
+// validateDomainMatchesCertificate ensures the requested domain is the
+// certificate's CN or appears in its SANs (with wildcard matching).
+func validateDomainMatchesCertificate(domain string, cert *x509.Certificate) error {
+	if cert.Subject.CommonName == domain {
+		return nil
 	}
-
-	cfg := acme.DNSProviderConfig{
-		ProviderType: provider,
+	for _, san := range cert.DNSNames {
+		if matchDomain(san, domain) {
+			return nil
+		}
 	}
+	return fmt.Errorf("domain %q is not covered by certificate (CN=%q, SANs=%v)",
+		domain, cert.Subject.CommonName, cert.DNSNames)
+}
 
-	switch provider {
-	case "cloudflare":
-		cfg.CloudFlareAPIToken = trimmedConfigValue(config, "api_token")
-	case "route53":
-		cfg.Route53AccessKeyID = trimmedConfigValue(config, "access_key_id")
-		cfg.Route53SecretAccessKey = trimmedConfigValue(config, "secret_access_key")
-		cfg.Route53Region = trimmedConfigValue(config, "region")
-	case "pdns":
-		cfg.PowerDNSHost = trimmedConfigValue(config, "host")
-		cfg.PowerDNSAPIKey = trimmedConfigValue(config, "api_key")
-		cfg.PowerDNSZone = trimmedConfigValue(config, "zone")
+// matchDomain handles wildcard SAN matching per RFC 6125: a certificate with
+// "*.example.com" matches "foo.example.com" but not "example.com" or
+// "a.b.example.com".
+func matchDomain(certName, requested string) bool {
+	if certName == requested {
+		return true
 	}
-
-	return cfg, nil
+	if !strings.HasPrefix(certName, "*.") {
+		return false
+	}
+	base := strings.TrimPrefix(certName, "*.")
+	if !strings.HasSuffix(requested, "."+base) {
+		return false
+	}
+	prefix := strings.TrimSuffix(requested, "."+base)
+	if prefix == "" {
+		return false
+	}
+	if strings.Contains(prefix, ".") {
+		return false
+	}
+	return true
 }
 
-func normalizeProviderName(provider string) string {
-	return strings.ToLower(strings.TrimSpace(provider))
-}
-
-func trimmedConfigValue(config map[string]string, key string) string {
-	return strings.TrimSpace(config[key])
-}
-
-// IsCertificateExpiringSoon returns true if the certificate expires within the given duration
-func IsCertificateExpiringSoon(cert interface{}, within time.Duration) bool {
-	return false
-}
-
-var _ = runtime.Reloader(nil) // ensure runtime package is imported
+var _ = runtime.Reloader(nil)
+var _ = errors.New

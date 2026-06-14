@@ -6,84 +6,78 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pallyoung/auth-gate/packages/server/internal/acme"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-// Renewer handles background certificate renewal
+// Renewer periodically checks for local-CA certificates that are within
+// renewOffsetDays of expiration and re-signs them.
 type Renewer struct {
 	svc      *Service
 	interval time.Duration
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
+
+	mu     sync.Mutex
+	stopCh chan struct{}
+	wg     sync.WaitGroup
 }
 
-// Start begins the renewal background loop
-func (r *Renewer) Start() {
+func (r *Renewer) run() {
+	r.mu.Lock()
+	if r.stopCh != nil {
+		r.mu.Unlock()
+		return
+	}
 	r.stopCh = make(chan struct{})
+	stopCh := r.stopCh
 	r.wg.Add(1)
+	r.mu.Unlock()
 
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
+	defer r.wg.Done()
 
-	log.Printf("[cert] renewal checker started, interval: %v", r.interval)
-
-	// Run immediately on start
-	r.checkAndRenew()
+	log.Printf("[cert] renewer started, interval=%s", r.interval)
+	r.scan()
 
 	for {
 		select {
 		case <-ticker.C:
-			r.checkAndRenew()
-		case <-r.stopCh:
-			log.Printf("[cert] renewal checker stopped")
-			r.wg.Done()
+			r.scan()
+		case <-stopCh:
+			log.Printf("[cert] renewer stopped")
 			return
 		}
 	}
 }
 
-// Stop stops the renewal background loop
-func (r *Renewer) Stop() {
-	close(r.stopCh)
+func (r *Renewer) stop() {
+	r.mu.Lock()
+	if r.stopCh != nil {
+		close(r.stopCh)
+		r.stopCh = nil
+	}
+	r.mu.Unlock()
 	r.wg.Wait()
 }
 
-// checkAndRenew checks for expiring certificates and renews them
-func (r *Renewer) checkAndRenew() {
-	ctx := context.Background()
-
-	certs, err := r.svc.db.ListExpiringCertificates(time.Now())
+func (r *Renewer) scan() {
+	certs, err := r.svc.db.ListExpiringLocalCertificates(time.Now())
 	if err != nil {
-		log.Printf("[cert] failed to list expiring certificates: %v", err)
+		log.Printf("[cert] list expiring: %v", err)
 		return
 	}
-
-	if len(certs) == 0 {
-		return
-	}
-
-	log.Printf("[cert] found %d certificates needing renewal", len(certs))
-
-	for _, cert := range certs {
-		r.renewCert(ctx, &cert)
+	for i := range certs {
+		c := certs[i]
+		if _, err := r.svc.Resign(c.ID); err != nil {
+			log.Printf("[cert] re-sign %s (%s) failed: %v", c.Domain, c.ID, err)
+			continue
+		}
+		updated, _ := r.svc.db.GetCertificate(c.ID)
+		if updated != nil {
+			_ = context.Background()
+			log.Printf("[cert] re-signed %s, new NotAfter=%s", c.Domain, updated.NotAfter.Format(time.RFC3339))
+		}
 	}
 }
 
-// renewCert renews a single certificate
-func (r *Renewer) renewCert(ctx context.Context, cert *store.Certificate) {
-	log.Printf("[cert] renewing certificate %s for domain %s", cert.ID, cert.Domain)
-
-	// Create DNS provider from stored config
-	providerConfig := decryptProviderConfig(cert.DNSProviderConfig)
-	provider, err := acme.NewDNSProvider(providerConfig)
-	if err != nil {
-		log.Printf("[cert] failed to create DNS provider for %s: %v", cert.Domain, err)
-		cert.Status = store.CertStatusFailed
-		r.svc.db.UpdateCertificate(cert)
-		return
-	}
-
-	// Renew the certificate
-	r.svc.renewCertificate(cert, provider)
-}
+// Helper that keeps the unused import set stable for build tags.
+var _ = store.CertStatusActive

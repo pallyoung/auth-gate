@@ -67,7 +67,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -87,7 +87,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
   })
@@ -140,7 +140,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -157,7 +157,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -184,7 +184,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
   })
@@ -245,7 +245,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -262,7 +262,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -274,7 +274,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     }), {
       status: 200,
@@ -289,7 +289,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -302,7 +302,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: true,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
   })
@@ -324,7 +324,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 
@@ -336,7 +336,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
       features: {
         certificates: false,
@@ -368,7 +368,7 @@ describe('session integration', () => {
         can_manage_routes: true,
         can_manage_auth: true,
         can_manage_users: false,
-        can_view_logs: true,
+        can_view_logs: true, can_manage_hosts: true,
       },
     })
 

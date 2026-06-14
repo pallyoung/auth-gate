@@ -21,12 +21,11 @@ import (
 	adminhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/admin"
 	proxyhttp "github.com/pallyoung/auth-gate/packages/server/internal/http/proxy"
 	statichttp "github.com/pallyoung/auth-gate/packages/server/internal/http/static"
+	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
 	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
-	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
-	"github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 
 	"github.com/gin-gonic/gin"
 )
@@ -111,7 +110,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc *certservice.Service, hostSvc *hostservice.Service) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc adminhttp.CertService) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -125,7 +124,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, ce
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc)
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr)
@@ -318,35 +317,29 @@ func main() {
 
 	routerMgr := router.NewManager(db)
 
-	// Initialize certificate service
+	// Initialize certificate service: local CA + sign-on-demand
 	var certSvc *certservice.Service
 	certDataDir := os.Getenv("CERT_DATA_DIR")
 	if certDataDir == "" {
 		certDataDir = "data"
 	}
-	acmeEmail := os.Getenv("ACME_EMAIL")
-	useStaging := os.Getenv("ACME_STAGING") == "true"
-
-	if acmeEmail != "" {
-		certSvc, err = certservice.NewService(db, certservice.Config{
-			DataDir:    certDataDir,
-			ACMEEmail:  acmeEmail,
-			UseStaging: useStaging,
-		}, routerMgr)
-		if err != nil {
-			log.Printf("Warning: failed to initialize certificate service: %v", err)
-		} else {
-			certSvc.StartRenewer(time.Hour) // Check for renewals every hour
-			log.Printf("Certificate service initialized (email=%s, staging=%v)", acmeEmail, useStaging)
-		}
+	ca, err := localca.LoadOrCreate(certDataDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize local CA: %v", err)
 	}
-
-	hostDataDir := os.Getenv("AUTH_GATE_DATA_DIR")
-	if hostDataDir == "" {
-		hostDataDir = "data"
+	// Persist the CA so the cert service can stamp ca_id on each leaf.
+	if err := persistLocalCA(db, ca); err != nil {
+		log.Fatalf("Failed to persist local CA: %v", err)
 	}
-	hostsRenderer := syshosts.NewRenderer(hostDataDir)
-	hostSvc := hostservice.NewService(db, hostsRenderer)
+	certSvc, err = certservice.NewService(db, certservice.Config{
+		DataDir: certDataDir,
+		CA:      ca,
+	}, routerMgr)
+	if err != nil {
+		log.Fatalf("Failed to initialize certificate service: %v", err)
+	}
+	certSvc.StartRenewer(time.Hour)
+	log.Printf("Certificate service initialized (local CA, auto re-sign 30 days before expiry)")
 
 	gin.SetMode(gin.ReleaseMode)
 	if os.Getenv("DEBUG") == "true" {
@@ -357,7 +350,7 @@ func main() {
 	log.Printf("Serving web from: %s", webRoot)
 	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc)
+	engine := buildEngine(routerMgr, webRoot, db, certSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -370,10 +363,7 @@ func main() {
 	log.Printf("Shutdown signal received, stopping servers...")
 
 	// Stop certificate service renewer
-	if certSvc != nil {
-		certSvc.StopRenewer()
-		certSvc.Wait()
-	}
+	certSvc.StopRenewer()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 	defer cancel()
@@ -389,6 +379,25 @@ func main() {
 
 func ensureDataDir() {
 	os.MkdirAll("data", 0755)
+}
+
+// persistLocalCA stores the CA cert/key in the database on first run. Existing
+// CA rows are left untouched, so re-running the service is a no-op.
+func persistLocalCA(db *store.SQLite, ca *localca.CA) error {
+	if existing, err := db.GetFirstCACertificate(); err != nil {
+		return err
+	} else if existing != nil {
+		return nil
+	}
+	return db.CreateCACertificate(&store.CACertificate{
+		ID:        "ca-default",
+		Name:      ca.Cert.Subject.CommonName,
+		CertPEM:   string(ca.CertPEM),
+		KeyPEM:    string(ca.KeyPEM),
+		NotBefore: ca.Cert.NotBefore,
+		NotAfter:  ca.Cert.NotAfter,
+		CreatedAt: time.Now(),
+	})
 }
 
 const gracefulShutdownTimeout = 10 // seconds
