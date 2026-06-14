@@ -10,6 +10,10 @@
 
 # Output of the go coverage tool
 *.out
+coverage/
+
+# Server binary
+packages/server/server
 
 # Dependency directories
 vendor/
