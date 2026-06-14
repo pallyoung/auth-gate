@@ -2,6 +2,7 @@ import { accessLoginEn, accessLoginZhCN } from './accessLogin'
 import { authRulesEn, authRulesZhCN } from './authRules'
 import { certificatesEn, certificatesZhCN } from './certificates'
 import { commonEn, commonZhCN } from './common'
+import { hostsEn, hostsZhCN } from './hosts'
 import { layoutEn, layoutZhCN } from './layout'
 import { loginEn, loginZhCN } from './login'
 import { routesEn, routesZhCN } from './routes'
@@ -19,6 +20,7 @@ export const resources = {
     users: usersEn,
     certificates: certificatesEn,
     settings: settingsEn,
+    hosts: hostsEn,
   },
   'zh-CN': {
     common: commonZhCN,
@@ -30,5 +32,6 @@ export const resources = {
     users: usersZhCN,
     certificates: certificatesZhCN,
     settings: settingsZhCN,
+    hosts: hostsZhCN,
   },
 } as const

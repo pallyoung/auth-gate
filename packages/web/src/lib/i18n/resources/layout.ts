@@ -34,6 +34,10 @@ export const layoutEn = {
       label: 'Settings',
       description: 'Runtime operations',
     },
+    hosts: {
+      label: 'Hosts',
+      description: 'Local DNS overrides',
+    },
   },
 } as const
 
@@ -72,6 +76,10 @@ export const layoutZhCN = {
     settings: {
       label: '设置',
       description: '运行时操作',
+    },
+    hosts: {
+      label: 'Hosts',
+      description: '本机 DNS 覆盖',
     },
   },
 } as const
