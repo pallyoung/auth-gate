@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"database/sql"
+	"errors"
+	"testing"
+)
 
 func TestCreateAndListHostProfiles(t *testing.T) {
 	db := newTestSQLite(t)
@@ -118,5 +122,257 @@ func TestGetHostProfile_NotFound(t *testing.T) {
 	_, err := db.GetHostProfile("missing")
 	if err == nil {
 		t.Fatal("GetHostProfile() error = nil, want sql.ErrNoRows")
+	}
+}
+
+func TestCreateHostEntry_AssignsIDAndPosition(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+
+	e := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "api.local"}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+	if e.ID == "" {
+		t.Fatal("CreateHostEntry() did not assign ID")
+	}
+	if e.Position == 0 {
+		t.Fatal("CreateHostEntry() did not assign Position (still 0)")
+	}
+	if e.CreatedAt.IsZero() || e.UpdatedAt.IsZero() {
+		t.Fatal("CreateHostEntry() did not assign timestamps")
+	}
+}
+
+func TestCreateHostEntry_StoresFields(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+
+	e := &HostEntry{
+		ProfileID: p.ID,
+		IP:        "10.0.0.1",
+		Hostnames: "a.local b.local",
+		Comment:   "cluster gateway",
+		Enabled:   true,
+	}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+
+	gotList, err := db.ListHostEntries(p.ID)
+	if err != nil {
+		t.Fatalf("ListHostEntries() error = %v", err)
+	}
+	if len(gotList) != 1 {
+		t.Fatalf("len(gotList) = %d, want 1", len(gotList))
+	}
+	got := &gotList[0]
+	if got.IP != "10.0.0.1" {
+		t.Fatalf("got.IP = %q, want %q", got.IP, "10.0.0.1")
+	}
+	if got.Hostnames != "a.local b.local" {
+		t.Fatalf("got.Hostnames = %q, want %q", got.Hostnames, "a.local b.local")
+	}
+	if got.Comment != "cluster gateway" {
+		t.Fatalf("got.Comment = %q, want %q", got.Comment, "cluster gateway")
+	}
+	if !got.Enabled {
+		t.Fatal("got.Enabled = false, want true")
+	}
+}
+
+func TestCreateHostEntry_PositionMonotonicallyIncreases(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+
+	e1 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "first.local"}
+	if err := db.CreateHostEntry(e1); err != nil {
+		t.Fatalf("CreateHostEntry(e1) error = %v", err)
+	}
+	e2 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "second.local"}
+	if err := db.CreateHostEntry(e2); err != nil {
+		t.Fatalf("CreateHostEntry(e2) error = %v", err)
+	}
+	e3 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "third.local"}
+	if err := db.CreateHostEntry(e3); err != nil {
+		t.Fatalf("CreateHostEntry(e3) error = %v", err)
+	}
+
+	if e1.Position == 0 || e2.Position == 0 || e3.Position == 0 {
+		t.Fatalf("positions not assigned: e1=%d e2=%d e3=%d", e1.Position, e2.Position, e3.Position)
+	}
+	if !(e1.Position < e2.Position && e2.Position < e3.Position) {
+		t.Fatalf("positions not monotonically increasing: e1=%d e2=%d e3=%d", e1.Position, e2.Position, e3.Position)
+	}
+}
+
+func TestListHostEntries_OrdersByPosition(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+
+	e1 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "first.local"}
+	if err := db.CreateHostEntry(e1); err != nil {
+		t.Fatalf("CreateHostEntry(e1) error = %v", err)
+	}
+	e2 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "second.local"}
+	if err := db.CreateHostEntry(e2); err != nil {
+		t.Fatalf("CreateHostEntry(e2) error = %v", err)
+	}
+
+	entries, err := db.ListHostEntries(p.ID)
+	if err != nil {
+		t.Fatalf("ListHostEntries() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2", len(entries))
+	}
+	if entries[0].ID != e1.ID || entries[1].ID != e2.ID {
+		t.Fatalf("order = [%s, %s], want [%s, %s]", entries[0].ID, entries[1].ID, e1.ID, e2.ID)
+	}
+}
+
+func TestListHostEntries_UnknownProfileReturnsEmpty(t *testing.T) {
+	db := newTestSQLite(t)
+	entries, err := db.ListHostEntries("missing-profile")
+	if err != nil {
+		t.Fatalf("ListHostEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d, want 0", len(entries))
+	}
+}
+
+func TestGetHostEntry(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+	e := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "api.local"}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+
+	got, err := db.GetHostEntry(e.ID)
+	if err != nil {
+		t.Fatalf("GetHostEntry() error = %v", err)
+	}
+	if got.ID != e.ID {
+		t.Fatalf("got.ID = %q, want %q", got.ID, e.ID)
+	}
+	if got.IP != "127.0.0.1" {
+		t.Fatalf("got.IP = %q, want %q", got.IP, "127.0.0.1")
+	}
+	if got.Hostnames != "api.local" {
+		t.Fatalf("got.Hostnames = %q, want %q", got.Hostnames, "api.local")
+	}
+}
+
+func TestGetHostEntry_NotFound(t *testing.T) {
+	db := newTestSQLite(t)
+	_, err := db.GetHostEntry("missing")
+	if err == nil {
+		t.Fatal("GetHostEntry() error = nil, want sql.ErrNoRows")
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetHostEntry() error = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestUpdateHostEntry(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+	e := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "api.local"}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+
+	e.IP = "10.0.0.1"
+	e.Hostnames = "api.local db.local"
+	e.Comment = "gateway"
+	e.Enabled = false
+	if err := db.UpdateHostEntry(e); err != nil {
+		t.Fatalf("UpdateHostEntry() error = %v", err)
+	}
+
+	got, err := db.GetHostEntry(e.ID)
+	if err != nil {
+		t.Fatalf("GetHostEntry() error = %v", err)
+	}
+	if got.IP != "10.0.0.1" {
+		t.Fatalf("got.IP = %q, want %q", got.IP, "10.0.0.1")
+	}
+	if got.Hostnames != "api.local db.local" {
+		t.Fatalf("got.Hostnames = %q, want %q", got.Hostnames, "api.local db.local")
+	}
+	if got.Comment != "gateway" {
+		t.Fatalf("got.Comment = %q, want %q", got.Comment, "gateway")
+	}
+	if got.Enabled {
+		t.Fatal("got.Enabled = true, want false")
+	}
+	if !got.UpdatedAt.After(e.CreatedAt) {
+		t.Fatalf("got.UpdatedAt (%v) should be after CreatedAt (%v)", got.UpdatedAt, e.CreatedAt)
+	}
+}
+
+func TestUpdateHostEntry_NotFound(t *testing.T) {
+	db := newTestSQLite(t)
+	e := &HostEntry{ID: "missing", IP: "127.0.0.1", Hostnames: "api.local"}
+	err := db.UpdateHostEntry(e)
+	if err == nil {
+		t.Fatal("UpdateHostEntry() error = nil, want sql.ErrNoRows")
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("UpdateHostEntry() error = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestDeleteHostEntry(t *testing.T) {
+	db := newTestSQLite(t)
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatalf("CreateHostProfile() error = %v", err)
+	}
+	e := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "api.local"}
+	if err := db.CreateHostEntry(e); err != nil {
+		t.Fatalf("CreateHostEntry() error = %v", err)
+	}
+
+	if err := db.DeleteHostEntry(e.ID); err != nil {
+		t.Fatalf("DeleteHostEntry() error = %v", err)
+	}
+
+	if _, err := db.GetHostEntry(e.ID); err == nil {
+		t.Fatal("GetHostEntry() after delete error = nil, want sql.ErrNoRows")
+	}
+	entries, err := db.ListHostEntries(p.ID)
+	if err != nil {
+		t.Fatalf("ListHostEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("len(entries) = %d, want 0", len(entries))
+	}
+}
+
+func TestDeleteHostEntry_NotFoundIsNoOp(t *testing.T) {
+	db := newTestSQLite(t)
+	if err := db.DeleteHostEntry("missing"); err != nil {
+		t.Fatalf("DeleteHostEntry() error = %v, want nil (idempotent)", err)
 	}
 }

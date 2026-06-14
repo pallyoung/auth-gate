@@ -70,6 +70,19 @@ func (s *SQLite) CreateHostEntry(e *HostEntry) error {
 	if e.ID == "" {
 		e.ID = uuid.New().String()
 	}
+
+	// Auto-assign position = max(position) + 1 for the profile, unless the
+	// caller already supplied a positive position (used by ReorderHostEntries).
+	if e.Position <= 0 {
+		var maxPos sql.NullInt64
+		if err := s.db.QueryRow(`
+			SELECT MAX(position) FROM host_entries WHERE profile_id = ?
+		`, e.ProfileID).Scan(&maxPos); err != nil {
+			return err
+		}
+		e.Position = int(maxPos.Int64) + 1
+	}
+
 	now := time.Now()
 	e.CreatedAt = now
 	e.UpdatedAt = now
@@ -123,4 +136,43 @@ func (s *SQLite) GetHostProfile(id string) (*HostProfile, error) {
 	}
 	p.IsActive = isActive == 1
 	return &p, nil
+}
+
+func (s *SQLite) GetHostEntry(id string) (*HostEntry, error) {
+	var e HostEntry
+	var enabled int
+	err := s.db.QueryRow(`
+		SELECT id, profile_id, position, ip, hostnames, comment, enabled, created_at, updated_at
+		FROM host_entries WHERE id = ?
+	`, id).Scan(&e.ID, &e.ProfileID, &e.Position, &e.IP, &e.Hostnames, &e.Comment, &enabled, &e.CreatedAt, &e.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	e.Enabled = enabled == 1
+	return &e, nil
+}
+
+func (s *SQLite) UpdateHostEntry(e *HostEntry) error {
+	e.UpdatedAt = time.Now()
+	enabled := 0
+	if e.Enabled {
+		enabled = 1
+	}
+	result, err := s.db.Exec(`
+		UPDATE host_entries SET position = ?, ip = ?, hostnames = ?, comment = ?, enabled = ?, updated_at = ?
+		WHERE id = ?
+	`, e.Position, e.IP, e.Hostnames, e.Comment, enabled, e.UpdatedAt, e.ID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *SQLite) DeleteHostEntry(id string) error {
+	_, err := s.db.Exec(`DELETE FROM host_entries WHERE id = ?`, id)
+	return err
 }
