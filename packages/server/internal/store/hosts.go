@@ -44,3 +44,17 @@ func (s *SQLite) CreateHostProfile(p *HostProfile) error {
 	`, p.ID, p.Name, p.Description, p.CreatedAt, p.UpdatedAt)
 	return err
 }
+
+func (s *SQLite) GetHostProfile(id string) (*HostProfile, error) {
+	var p HostProfile
+	var isActive int
+	err := s.db.QueryRow(`
+		SELECT id, name, description, is_active, created_at, updated_at
+		FROM host_profiles WHERE id = ?
+	`, id).Scan(&p.ID, &p.Name, &p.Description, &isActive, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	p.IsActive = isActive == 1
+	return &p, nil
+}
