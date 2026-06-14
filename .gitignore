@@ -47,6 +47,8 @@ dist/
 output
 
 # Local tooling artifacts
+.claude/
+.playwright-mcp/
 .playwright-cli/
 
 # Temporary server run artifacts
