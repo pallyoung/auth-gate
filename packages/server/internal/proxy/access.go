@@ -17,7 +17,7 @@ const (
 	routeLoginHashPath    = "/access-login"
 )
 
-func routeAccessClaims(c *gin.Context, db *store.SQLite) (*auth.Claims, bool) {
+func routeAccessClaims(c *gin.Context, db store.Store) (*auth.Claims, bool) {
 	token, err := c.Cookie(routeAccessCookieName)
 	if err != nil || strings.TrimSpace(token) == "" {
 		return nil, false

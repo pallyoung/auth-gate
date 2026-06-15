@@ -52,7 +52,7 @@ type HostService interface {
 	DeleteEntry(profileID, entryID string) error
 }
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store.SQLite, certSvc CertService, hostSvc HostService) {
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
@@ -128,7 +128,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db *store
 	_ = sessionSvc
 }
 
-func LoginRoute(db *store.SQLite, certSvc CertService) gin.HandlerFunc {
+func LoginRoute(db store.Store, certSvc CertService) gin.HandlerFunc {
 	sessionSvc := sessionservice.NewService(db)
 	certificatesEnabled := certSvc != nil
 
@@ -155,7 +155,7 @@ func logoutHandler() gin.HandlerFunc {
 	}
 }
 
-func meHandler(db *store.SQLite, certSvc CertService) gin.HandlerFunc {
+func meHandler(db store.Store, certSvc CertService) gin.HandlerFunc {
 	certificatesEnabled := certSvc != nil
 
 	return func(c *gin.Context) {

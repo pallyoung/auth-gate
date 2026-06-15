@@ -10,11 +10,11 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func newTestService(t *testing.T) (*Service, *store.SQLite) {
+func newTestService(t *testing.T) (*Service, store.Store) {
 	t.Helper()
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return NewService(db, nil), db
@@ -193,9 +193,9 @@ func TestService_EntriesLifecycle(t *testing.T) {
 }
 
 func TestService_ActivateProfile_WritesFileAndSetsActive(t *testing.T) {
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -237,9 +237,9 @@ func TestService_ActivateProfile_WritesFileAndSetsActive(t *testing.T) {
 }
 
 func TestService_ActivateProfile_AppendsMarkersWhenMissing(t *testing.T) {
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -279,9 +279,9 @@ func TestService_ActivateProfile_AppendsMarkersWhenMissing(t *testing.T) {
 }
 
 func TestService_ActivateProfile_SkipsDisabledEntries(t *testing.T) {
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 

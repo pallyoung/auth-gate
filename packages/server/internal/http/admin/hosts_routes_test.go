@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -15,12 +14,12 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func newTestHostRouter(t *testing.T) (*gin.Engine, *store.SQLite) {
+func newTestHostRouter(t *testing.T) (*gin.Engine, store.Store) {
 	t.Helper()
 
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() {
 		_ = db.Close()
@@ -36,7 +35,7 @@ func newTestHostRouter(t *testing.T) (*gin.Engine, *store.SQLite) {
 	return r, db
 }
 
-func hostToken(t *testing.T, db *store.SQLite, role string) string {
+func hostToken(t *testing.T, db store.Store, role string) string {
 	t.Helper()
 
 	username := "host-test-user"

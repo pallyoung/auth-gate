@@ -48,7 +48,7 @@ func DefaultConfig() *Config {
 			Addr: ":8080",
 		},
 		Database: DatabaseConfig{
-			Path: "data/auth-gate.db",
+			Path: "data",
 		},
 		Auth: AuthConfig{},
 	}

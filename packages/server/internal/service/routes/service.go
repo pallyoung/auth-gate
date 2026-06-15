@@ -60,7 +60,7 @@ func newError(code, message string, cause error) error {
 }
 
 type Service struct {
-	db       *store.SQLite
+	db       store.Store
 	reloader runtime.Reloader
 }
 
@@ -102,7 +102,7 @@ type UpdateInput struct {
 	RedirectCode  *int
 }
 
-func NewService(db *store.SQLite, reloader runtime.Reloader) *Service {
+func NewService(db store.Store, reloader runtime.Reloader) *Service {
 	return &Service{
 		db:       db,
 		reloader: reloader,

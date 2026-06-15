@@ -67,10 +67,10 @@ type UpdateInput struct {
 }
 
 type Service struct {
-	db *store.SQLite
+	db store.Store
 }
 
-func NewService(db *store.SQLite) *Service {
+func NewService(db store.Store) *Service {
 	return &Service{db: db}
 }
 

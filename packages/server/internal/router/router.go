@@ -64,18 +64,18 @@ func (r *Route) EffectiveBackends() []store.Backend {
 }
 
 type Manager struct {
-	db     *store.SQLite
+	db     store.Store
 	routes []Route
 	mu     sync.RWMutex
 }
 
-func NewManager(db *store.SQLite) *Manager {
+func NewManager(db store.Store) *Manager {
 	m := &Manager{db: db}
 	m.loadRoutes()
 	return m
 }
 
-func (m *Manager) DB() *store.SQLite {
+func (m *Manager) DB() store.Store {
 	return m.db
 }
 

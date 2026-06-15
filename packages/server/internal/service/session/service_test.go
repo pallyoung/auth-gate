@@ -1,19 +1,18 @@
 package session
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func newTestDB(t *testing.T) *store.SQLite {
+func newTestDB(t *testing.T) store.Store {
 	t.Helper()
 
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() {
 		_ = db.Close()
@@ -21,7 +20,7 @@ func newTestDB(t *testing.T) *store.SQLite {
 	return db
 }
 
-func createUser(t *testing.T, db *store.SQLite, username, password, role string, enabled bool) {
+func createUser(t *testing.T, db store.Store, username, password, role string, enabled bool) {
 	t.Helper()
 
 	hash, err := store.HashPassword(password)

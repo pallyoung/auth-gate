@@ -1,29 +1,23 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-func newTestSQLite(t *testing.T) *SQLite {
+func newTestStore(t *testing.T) Store {
 	t.Helper()
 
-	db, err := NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	s, err := NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
-	t.Cleanup(func() {
-		_ = db.Close()
-	})
-
-	return db
+	return s
 }
 
-func createTestRoute(t *testing.T, db *SQLite, id string) *Route {
+func createTestRoute(t *testing.T, db Store, id string) *Route {
 	t.Helper()
 
 	route := &Route{
@@ -39,68 +33,8 @@ func createTestRoute(t *testing.T, db *SQLite, id string) *Route {
 	return route
 }
 
-func TestCreateAuthRule_RejectsMissingRoute(t *testing.T) {
-	db := newTestSQLite(t)
-
-	err := db.CreateAuthRule(&AuthRule{
-		RouteID: "missing-route",
-		Type:    "apikey",
-		Config:  AuthConfig{Secret: "secret"},
-	})
-	if err == nil {
-		t.Fatal("CreateAuthRule() error = nil, want foreign key failure")
-	}
-}
-
-func TestDeleteRoute_CascadesAuthRules(t *testing.T) {
-	db := newTestSQLite(t)
-	route := createTestRoute(t, db, "route-1")
-
-	if err := db.CreateAuthRule(&AuthRule{
-		ID:      "rule-1",
-		RouteID: route.ID,
-		Type:    "apikey",
-		Config:  AuthConfig{Secret: "secret"},
-	}); err != nil {
-		t.Fatalf("CreateAuthRule() error = %v", err)
-	}
-
-	if err := db.DeleteRoute(route.ID); err != nil {
-		t.Fatalf("DeleteRoute() error = %v", err)
-	}
-
-	_, err := db.GetAuthRule("rule-1")
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("GetAuthRule() error = %v, want %v", err, sql.ErrNoRows)
-	}
-}
-
-func TestCreateAuthRule_RejectsDuplicateRouteRule(t *testing.T) {
-	db := newTestSQLite(t)
-	route := createTestRoute(t, db, "route-1")
-
-	if err := db.CreateAuthRule(&AuthRule{
-		ID:      "rule-1",
-		RouteID: route.ID,
-		Type:    "apikey",
-		Config:  AuthConfig{Secret: "secret-1"},
-	}); err != nil {
-		t.Fatalf("CreateAuthRule(first) error = %v", err)
-	}
-
-	err := db.CreateAuthRule(&AuthRule{
-		ID:      "rule-2",
-		RouteID: route.ID,
-		Type:    "bearer",
-		Config:  AuthConfig{Secret: "secret-2"},
-	})
-	if err == nil {
-		t.Fatal("CreateAuthRule(second) error = nil, want duplicate-route rejection")
-	}
-}
-
 func TestGetAuthRule_NormalizesLegacyStoredConfigWhitespace(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	route := createTestRoute(t, db, "route-1")
 
 	if err := db.CreateAuthRule(&AuthRule{
@@ -140,7 +74,7 @@ func TestGetAuthRule_NormalizesLegacyStoredConfigWhitespace(t *testing.T) {
 }
 
 func TestAuthRule_PersistsRuntimePolicyFields(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	route := createTestRoute(t, db, "route-1")
 
 	if err := db.CreateAuthRule(&AuthRule{
@@ -192,7 +126,7 @@ func TestAuthRule_PersistsRuntimePolicyFields(t *testing.T) {
 }
 
 func TestRoute_PersistsRuntimePolicyFields(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 
 	if err := db.CreateRoute(&Route{
 		ID:            "route-runtime-policy",
@@ -221,7 +155,7 @@ func TestRoute_PersistsRuntimePolicyFields(t *testing.T) {
 }
 
 func TestEnsureAdmin_CreatesBootstrapUser(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 
 	created, err := db.EnsureAdmin("admin", "bootstrap-secret")
 	if err != nil {
@@ -241,7 +175,7 @@ func TestEnsureAdmin_CreatesBootstrapUser(t *testing.T) {
 }
 
 func TestEnsureAdmin_UsesProvidedUsername(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 
 	created, err := db.EnsureAdmin("bootstrap-admin", "bootstrap-secret")
 	if err != nil {
@@ -264,7 +198,7 @@ func TestEnsureAdmin_UsesProvidedUsername(t *testing.T) {
 }
 
 func TestEnsureAdmin_RequiresPassword(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 
 	created, err := db.EnsureAdmin("admin", "")
 	if err == nil {
@@ -275,85 +209,126 @@ func TestEnsureAdmin_RequiresPassword(t *testing.T) {
 	}
 }
 
-func TestSQLite_GetCertificateWaitsForExclusiveLockRelease(t *testing.T) {
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "auth-gate.db")
+func TestDeleteRoute_RemovesFromStore(t *testing.T) {
+	db := newTestStore(t)
+	createTestRoute(t, db, "route-1")
 
-	db, err := NewSQLite(dbPath)
-	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+	if err := db.DeleteRoute("route-1"); err != nil {
+		t.Fatalf("DeleteRoute() error = %v", err)
 	}
-	t.Cleanup(func() {
-		_ = db.Close()
+
+	_, err := db.GetRoute("route-1")
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetRoute() error = %v, want %v", err, sql.ErrNoRows)
+	}
+}
+
+func TestCreateAuthRule_RejectsMissingRoute(t *testing.T) {
+	db := newTestStore(t)
+
+	err := db.CreateAuthRule(&AuthRule{
+		RouteID: "missing-route",
+		Type:    "apikey",
+		Config:  AuthConfig{Secret: "secret"},
 	})
-
-	cert := &Certificate{
-		ID:        "cert-1",
-		Name:      "Example",
-		Domain:    "*.example.com",
-		Source:    SourceLocalCA,
-		CAID:      "ca-1",
-		Status:    CertStatusActive,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	if err == nil {
+		t.Fatal("CreateAuthRule() error = nil, want foreign key failure")
 	}
-	if err := db.CreateCertificate(cert); err != nil {
+}
+
+func TestCreateAuthRule_RejectsDuplicateRouteRule(t *testing.T) {
+	db := newTestStore(t)
+	route := createTestRoute(t, db, "route-1")
+
+	if err := db.CreateAuthRule(&AuthRule{
+		ID:      "rule-1",
+		RouteID: route.ID,
+		Type:    "apikey",
+		Config:  AuthConfig{Secret: "secret-1"},
+	}); err != nil {
+		t.Fatalf("CreateAuthRule(first) error = %v", err)
+	}
+
+	err := db.CreateAuthRule(&AuthRule{
+		ID:      "rule-2",
+		RouteID: route.ID,
+		Type:    "bearer",
+		Config:  AuthConfig{Secret: "secret-2"},
+	})
+	if err == nil {
+		t.Fatal("CreateAuthRule(second) error = nil, want duplicate-route rejection")
+	}
+}
+
+func TestSetActiveHostProfile(t *testing.T) {
+	db := newTestStore(t)
+
+	p1 := &HostProfile{Name: "profile-1"}
+	p2 := &HostProfile{Name: "profile-2"}
+	if err := db.CreateHostProfile(p1); err != nil {
+		t.Fatalf("CreateHostProfile(p1) error = %v", err)
+	}
+	if err := db.CreateHostProfile(p2); err != nil {
+		t.Fatalf("CreateHostProfile(p2) error = %v", err)
+	}
+
+	if err := db.SetActiveHostProfile(p1.ID); err != nil {
+		t.Fatalf("SetActiveHostProfile(p1) error = %v", err)
+	}
+
+	got1, _ := db.GetHostProfile(p1.ID)
+	got2, _ := db.GetHostProfile(p2.ID)
+	if !got1.IsActive {
+		t.Fatal("profile-1 IsActive = false, want true")
+	}
+	if got2.IsActive {
+		t.Fatal("profile-2 IsActive = true, want false")
+	}
+
+	if err := db.SetActiveHostProfile(p2.ID); err != nil {
+		t.Fatalf("SetActiveHostProfile(p2) error = %v", err)
+	}
+
+	got1, _ = db.GetHostProfile(p1.ID)
+	got2, _ = db.GetHostProfile(p2.ID)
+	if got1.IsActive {
+		t.Fatal("profile-1 IsActive = true, want false")
+	}
+	if !got2.IsActive {
+		t.Fatal("profile-2 IsActive = false, want true")
+	}
+}
+
+func TestListExpiringLocalCertificates(t *testing.T) {
+	db := newTestStore(t)
+
+	now := time.Now()
+	if err := db.CreateCertificate(&Certificate{
+		ID:       "cert-expiring",
+		Name:     "Expiring",
+		Domain:   "*.example.com",
+		Source:   SourceLocalCA,
+		Status:   CertStatusActive,
+		RenewAt:  now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("CreateCertificate() error = %v", err)
+	}
+	if err := db.CreateCertificate(&Certificate{
+		ID:       "cert-valid",
+		Name:     "Valid",
+		Domain:   "*.other.com",
+		Source:   SourceLocalCA,
+		Status:   CertStatusActive,
+		RenewAt:  now.Add(30 * 24 * time.Hour),
+	}); err != nil {
 		t.Fatalf("CreateCertificate() error = %v", err)
 	}
 
-	locker, err := sql.Open("sqlite", dbPath)
+	certs, err := db.ListExpiringLocalCertificates(now)
 	if err != nil {
-		t.Fatalf("sql.Open() error = %v", err)
+		t.Fatalf("ListExpiringLocalCertificates() error = %v", err)
 	}
-	t.Cleanup(func() {
-		_ = locker.Close()
-	})
-
-	lockConn, err := locker.Conn(ctx)
-	if err != nil {
-		t.Fatalf("locker.Conn() error = %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = lockConn.ExecContext(ctx, "ROLLBACK")
-		_ = lockConn.Close()
-	})
-
-	if _, err := lockConn.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
-		t.Fatalf("BEGIN EXCLUSIVE error = %v", err)
-	}
-	if _, err := lockConn.ExecContext(ctx, "UPDATE certificates SET status = status WHERE id = ?", cert.ID); err != nil {
-		t.Fatalf("UPDATE certificates error = %v", err)
-	}
-
-	releaseErrCh := make(chan error, 1)
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		_, err := lockConn.ExecContext(ctx, "COMMIT")
-		releaseErrCh <- err
-	}()
-
-	got, err := db.GetCertificate(cert.ID)
-
-	select {
-	case releaseErr := <-releaseErrCh:
-		if releaseErr != nil {
-			t.Fatalf("COMMIT error = %v", releaseErr)
-		}
-	default:
-		releaseErr := <-releaseErrCh
-		if releaseErr != nil {
-			t.Fatalf("COMMIT error = %v", releaseErr)
-		}
-		t.Fatalf("GetCertificate() returned before exclusive lock release: cert=%v err=%v", got, err)
-	}
-
-	if err != nil {
-		t.Fatalf("GetCertificate() error = %v", err)
-	}
-	if got == nil {
-		t.Fatal("GetCertificate() = nil, want certificate")
-	}
-	if got.ID != cert.ID {
-		t.Fatalf("GetCertificate().ID = %q, want %q", got.ID, cert.ID)
+	if len(certs) != 1 || certs[0].ID != "cert-expiring" {
+		t.Fatalf("expected 1 expiring cert, got %d", len(certs))
 	}
 }

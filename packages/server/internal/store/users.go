@@ -1,19 +1,16 @@
 package store
 
 import (
-	"database/sql"
-	"errors"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
-	PasswordHash string    `json:"-"`
+	PasswordHash string    `json:"password_hash"`
 	Role         string    `json:"role"`
 	Enabled      bool      `json:"enabled"`
 	RouteIDs     []string  `json:"route_ids,omitempty"`
@@ -70,227 +67,11 @@ func UserHasRouteAccess(user *User, routeID string) bool {
 	return false
 }
 
-func (s *SQLite) ListUsers() ([]User, error) {
-	rows, err := s.db.Query(`SELECT id, username, password_hash, role, enabled, created_at, updated_at FROM users ORDER BY created_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	users := make([]User, 0)
-	for rows.Next() {
-		var u User
-		var enabled int
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &enabled, &u.CreatedAt, &u.UpdatedAt); err != nil {
-			return nil, err
-		}
-		u.Role = normalizeStoredUserRole(u.Role)
-		u.Enabled = enabled == 1
-		routeIDs, err := s.listUserRouteIDs(u.ID)
-		if err != nil {
-			return nil, err
-		}
-		u.RouteIDs = routeIDs
-		users = append(users, u)
-	}
-	return users, nil
-}
-
-func (s *SQLite) GetUserByUsername(username string) (*User, error) {
-	var u User
-	var enabled int
-	err := s.db.QueryRow(`SELECT id, username, password_hash, role, enabled, created_at, updated_at FROM users WHERE username = ?`, username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &enabled, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	u.Role = normalizeStoredUserRole(u.Role)
-	u.Enabled = enabled == 1
-	routeIDs, err := s.listUserRouteIDs(u.ID)
-	if err != nil {
-		return nil, err
-	}
-	u.RouteIDs = routeIDs
-	return &u, nil
-}
-
-func (s *SQLite) GetUserByID(id string) (*User, error) {
-	var u User
-	var enabled int
-	err := s.db.QueryRow(`SELECT id, username, password_hash, role, enabled, created_at, updated_at FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &enabled, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	u.Role = normalizeStoredUserRole(u.Role)
-	u.Enabled = enabled == 1
-	routeIDs, err := s.listUserRouteIDs(u.ID)
-	if err != nil {
-		return nil, err
-	}
-	u.RouteIDs = routeIDs
-	return &u, nil
-}
-
-func (s *SQLite) CreateUser(u *User) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if err := s.createUserTx(tx, u); err != nil {
-		return err
-	}
-	if err := replaceUserRouteAccessTx(tx, u.ID, u.RouteIDs); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *SQLite) createUserTx(tx *sql.Tx, u *User) error {
-	if u.ID == "" {
-		u.ID = uuid.New().String()
-	}
-	now := time.Now()
-	u.CreatedAt = now
-	u.UpdatedAt = now
-	enabled := 0
-	if u.Enabled {
-		enabled = 1
-	}
-	_, err := tx.Exec(`INSERT INTO users (id, username, password_hash, role, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		u.ID, u.Username, u.PasswordHash, u.Role, enabled, u.CreatedAt, u.UpdatedAt)
-	return err
-}
-
-func (s *SQLite) UpdateUser(u *User) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if err := s.updateUserTx(tx, u); err != nil {
-		return err
-	}
-	if err := replaceUserRouteAccessTx(tx, u.ID, u.RouteIDs); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *SQLite) updateUserTx(tx *sql.Tx, u *User) error {
-	u.UpdatedAt = time.Now()
-	enabled := 0
-	if u.Enabled {
-		enabled = 1
-	}
-	result, err := tx.Exec(`UPDATE users SET username = ?, password_hash = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?`,
-		u.Username, u.PasswordHash, u.Role, enabled, u.UpdatedAt, u.ID)
-	if err != nil {
-		return err
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *SQLite) DeleteUser(id string) error {
-	_, err := s.db.Exec("DELETE FROM users WHERE id = ?", id)
-	return err
-}
-
-func (s *SQLite) listUserRouteIDs(userID string) ([]string, error) {
-	rows, err := s.db.Query(`SELECT route_id FROM user_route_access WHERE user_id = ? ORDER BY route_id ASC`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	routeIDs := make([]string, 0)
-	for rows.Next() {
-		var routeID string
-		if err := rows.Scan(&routeID); err != nil {
-			return nil, err
-		}
-		routeIDs = append(routeIDs, routeID)
-	}
-	return routeIDs, nil
-}
-
-func replaceUserRouteAccessTx(tx *sql.Tx, userID string, routeIDs []string) error {
-	if _, err := tx.Exec(`DELETE FROM user_route_access WHERE user_id = ?`, userID); err != nil {
-		return err
-	}
-	for _, routeID := range normalizeRouteIDs(routeIDs) {
-		if _, err := tx.Exec(`INSERT INTO user_route_access (user_id, route_id) VALUES (?, ?)`, userID, routeID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func normalizeRouteIDs(routeIDs []string) []string {
-	seen := make(map[string]struct{}, len(routeIDs))
-	result := make([]string, 0, len(routeIDs))
-	for _, routeID := range routeIDs {
-		routeID = strings.TrimSpace(routeID)
-		if routeID == "" {
-			continue
-		}
-		if _, exists := seen[routeID]; exists {
-			continue
-		}
-		seen[routeID] = struct{}{}
-		result = append(result, routeID)
-	}
-	return result
-}
-
-func normalizeStoredUserRole(role string) string {
-	return strings.ToLower(strings.TrimSpace(role))
-}
-
-func (s *SQLite) VerifyPassword(user *User, password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
-	return err == nil
-}
-
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
-func (s *SQLite) EnsureAdmin(username, password string) (bool, error) {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		username = "admin"
-	}
-	if password == "" {
-		return false, errors.New("bootstrap admin password required")
-	}
-
-	users, err := s.ListUsers()
-	if err != nil {
-		return false, err
-	}
-	if len(users) == 0 {
-		hash, err := HashPassword(password)
-		if err != nil {
-			return false, err
-		}
-		if err := s.CreateUser(&User{
-			Username:     username,
-			PasswordHash: hash,
-			Role:         RoleAdmin,
-			Enabled:      true,
-		}); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-	return false, nil
+func normalizeStoredUserRole(role string) string {
+	return strings.ToLower(strings.TrimSpace(role))
 }

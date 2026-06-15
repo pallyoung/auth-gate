@@ -112,7 +112,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db *store.SQLite, certSvc adminhttp.CertService, hostSvc adminhttp.HostService) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -248,7 +248,7 @@ func configureJWTSecret(cfg config.AuthConfig) {
 	}
 }
 
-func ensureBootstrapAdmin(db *store.SQLite, cfg config.AuthConfig) error {
+func ensureBootstrapAdmin(db store.Store, cfg config.AuthConfig) error {
 	password := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
 	configuredPassword := true
 
@@ -307,7 +307,7 @@ func main() {
 	}
 	configureJWTSecret(cfg.Auth)
 
-	db, err := store.NewSQLite(cfg.Database.Path)
+	db, err := store.NewJSONStore(cfg.Database.Path)
 	if err != nil {
 		log.Fatalf("Failed to init database: %v", err)
 	}
@@ -389,7 +389,7 @@ func ensureDataDir() {
 
 // persistLocalCA stores the CA cert/key in the database on first run. Existing
 // CA rows are left untouched, so re-running the service is a no-op.
-func persistLocalCA(db *store.SQLite, ca *localca.CA) error {
+func persistLocalCA(db store.Store, ca *localca.CA) error {
 	if existing, err := db.GetFirstCACertificate(); err != nil {
 		return err
 	} else if existing != nil {

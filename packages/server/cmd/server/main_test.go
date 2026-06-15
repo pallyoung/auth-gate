@@ -19,13 +19,13 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func newTestSQLite(t *testing.T) (*store.SQLite, func()) {
+func newTestSQLite(t *testing.T) (store.Store, func()) {
 	t.Helper()
 
-	dbPath := filepath.Join(t.TempDir(), "auth-gate.db")
-	db, err := store.NewSQLite(dbPath)
+	dbPath := t.TempDir()
+	db, err := store.NewJSONStore(dbPath)
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 
 	return db, func() {

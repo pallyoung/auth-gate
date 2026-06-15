@@ -20,8 +20,8 @@ func newTestCert(domain string) *Certificate {
 	}
 }
 
-func TestSQLite_GetCertificateHandlesUnsetValidityDates(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_GetCertificateHandlesUnsetValidityDates(t *testing.T) {
+	db := newTestStore(t)
 	cert := newTestCert("*.example.com")
 
 	if err := db.CreateCertificate(cert); err != nil {
@@ -46,8 +46,8 @@ func TestSQLite_GetCertificateHandlesUnsetValidityDates(t *testing.T) {
 	}
 }
 
-func TestSQLite_ListCertificatesHandlesUnsetValidityDates(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_ListCertificatesHandlesUnsetValidityDates(t *testing.T) {
+	db := newTestStore(t)
 	cert := newTestCert("*.example.com")
 
 	if err := db.CreateCertificate(cert); err != nil {
@@ -72,8 +72,8 @@ func TestSQLite_ListCertificatesHandlesUnsetValidityDates(t *testing.T) {
 	}
 }
 
-func TestSQLite_GetCertificateHandlesUnsetValidityDatesAfterUpdate(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_GetCertificateHandlesUnsetValidityDatesAfterUpdate(t *testing.T) {
+	db := newTestStore(t)
 	cert := newTestCert("*.example.com")
 
 	if err := db.CreateCertificate(cert); err != nil {
@@ -103,8 +103,8 @@ func TestSQLite_GetCertificateHandlesUnsetValidityDatesAfterUpdate(t *testing.T)
 	}
 }
 
-func TestSQLite_CertificateCRUDRoundTrip(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_CertificateCRUDRoundTrip(t *testing.T) {
+	db := newTestStore(t)
 	cert := newTestCert("foo.example.com")
 	cert.NotBefore = time.Now().Add(-time.Hour)
 	cert.NotAfter = time.Now().Add(24 * time.Hour)
@@ -146,8 +146,8 @@ func TestSQLite_CertificateCRUDRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSQLite_ListExpiringLocalCertificates(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_ListExpiringLocalCertificates(t *testing.T) {
+	db := newTestStore(t)
 
 	active := newTestCert("active.example.com")
 	active.NotAfter = time.Now().Add(24 * time.Hour)
@@ -184,8 +184,8 @@ func TestSQLite_ListExpiringLocalCertificates(t *testing.T) {
 	}
 }
 
-func TestSQLite_CACertificateRoundTrip(t *testing.T) {
-	db := newTestSQLite(t)
+func TestJSON_CACertificateRoundTrip(t *testing.T) {
+	db := newTestStore(t)
 
 	first, err := db.GetFirstCACertificate()
 	if err != nil {

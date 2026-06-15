@@ -59,11 +59,11 @@ type EntryInput struct {
 }
 
 type Service struct {
-	db       *store.SQLite
+	db       store.Store
 	renderer *syshosts.Renderer
 }
 
-func NewService(db *store.SQLite, renderer *syshosts.Renderer) *Service {
+func NewService(db store.Store, renderer *syshosts.Renderer) *Service {
 	return &Service{db: db, renderer: renderer}
 }
 
@@ -327,38 +327,23 @@ func (s *Service) ActivateProfile(id string) (*store.HostProfile, error) {
 	}
 	content := renderEntries(entries)
 
-	tx, err := s.db.DB().Begin()
-	if err != nil {
-		return nil, newError(ErrCodeStoreFailure, "failed to begin transaction", err)
+	if s.renderer == nil {
+		return nil, newError(ErrCodeRenderFailure, "renderer not configured", nil)
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
 
-	if err := s.db.SetActiveHostProfile(tx, id); err != nil {
+	if err := s.db.SetActiveHostProfile(id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newError(ErrCodeProfileNotFound, "host profile not found", err)
 		}
 		return nil, newError(ErrCodeStoreFailure, "failed to set active host profile", err)
 	}
 
-	if s.renderer == nil {
-		return nil, newError(ErrCodeRenderFailure, "renderer not configured", nil)
-	}
 	if err := s.renderer.Apply(content); err != nil {
 		if errors.Is(err, syshosts.ErrMarkerMissing) {
 			return nil, newError(ErrCodeMarkerMissing, "managed marker block is missing in /etc/hosts; append the markers manually before activating", err)
 		}
 		return nil, newError(ErrCodeRenderFailure, "failed to apply hosts file change", err)
 	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, newError(ErrCodeStoreFailure, "failed to commit transaction", err)
-	}
-	committed = true
 
 	p, err := s.GetProfile(id)
 	if err != nil {

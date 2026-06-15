@@ -1,27 +1,19 @@
 package router
 
 import (
-	"os"
 	"testing"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-// newTestManager creates a Manager backed by an in-memory SQLite DB.
+// newTestManager creates a Manager backed by a JSON store.
 func newTestManager(t *testing.T) (*Manager, func()) {
-	f, err := os.CreateTemp("", "auth-gate-test-*.db")
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("CreateTemp: %v", err)
-	}
-	f.Close()
-	db, err := store.NewSQLite(f.Name())
-	if err != nil {
-		os.Remove(f.Name())
-		t.Fatalf("NewSQLite: %v", err)
+		t.Fatalf("NewJSONStore: %v", err)
 	}
 	return &Manager{db: db}, func() {
 		db.Close()
-		os.Remove(f.Name())
 	}
 }
 

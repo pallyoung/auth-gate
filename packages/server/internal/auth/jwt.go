@@ -150,7 +150,7 @@ func GetTokenFromRequest(c *gin.Context) string {
 	return parts[1]
 }
 
-func AuthMiddleware(db *store.SQLite) gin.HandlerFunc {
+func AuthMiddleware(db store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := GetTokenFromRequest(c)
 		if tokenString == "" {

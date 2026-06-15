@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,12 +22,12 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func newProxyTestDB(t *testing.T) *store.SQLite {
+func newProxyTestDB(t *testing.T) store.Store {
 	t.Helper()
 
-	db, err := store.NewSQLite(filepath.Join(t.TempDir(), "auth-gate.db"))
+	db, err := store.NewJSONStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewSQLite() error = %v", err)
+		t.Fatalf("NewJSONStore() error = %v", err)
 	}
 	t.Cleanup(func() {
 		_ = db.Close()

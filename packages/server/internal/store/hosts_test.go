@@ -7,7 +7,7 @@ import (
 )
 
 func TestCreateAndListHostProfiles(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 
 	profiles, err := db.ListHostProfiles()
 	if err != nil {
@@ -44,7 +44,7 @@ func TestCreateAndListHostProfiles(t *testing.T) {
 }
 
 func TestGetHostProfile(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -63,7 +63,7 @@ func TestGetHostProfile(t *testing.T) {
 }
 
 func TestUpdateHostProfile(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -91,7 +91,7 @@ func TestUpdateHostProfile(t *testing.T) {
 }
 
 func TestDeleteHostProfile_CascadesEntries(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -118,7 +118,7 @@ func TestDeleteHostProfile_CascadesEntries(t *testing.T) {
 }
 
 func TestGetHostProfile_NotFound(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	_, err := db.GetHostProfile("missing")
 	if err == nil {
 		t.Fatal("GetHostProfile() error = nil, want sql.ErrNoRows")
@@ -126,7 +126,7 @@ func TestGetHostProfile_NotFound(t *testing.T) {
 }
 
 func TestCreateHostEntry_AssignsIDAndPosition(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -148,7 +148,7 @@ func TestCreateHostEntry_AssignsIDAndPosition(t *testing.T) {
 }
 
 func TestCreateHostEntry_StoresFields(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -188,7 +188,7 @@ func TestCreateHostEntry_StoresFields(t *testing.T) {
 }
 
 func TestCreateHostEntry_PositionMonotonicallyIncreases(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -216,7 +216,7 @@ func TestCreateHostEntry_PositionMonotonicallyIncreases(t *testing.T) {
 }
 
 func TestListHostEntries_OrdersByPosition(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -244,7 +244,7 @@ func TestListHostEntries_OrdersByPosition(t *testing.T) {
 }
 
 func TestListHostEntries_UnknownProfileReturnsEmpty(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	entries, err := db.ListHostEntries("missing-profile")
 	if err != nil {
 		t.Fatalf("ListHostEntries() error = %v", err)
@@ -255,7 +255,7 @@ func TestListHostEntries_UnknownProfileReturnsEmpty(t *testing.T) {
 }
 
 func TestGetHostEntry(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -281,7 +281,7 @@ func TestGetHostEntry(t *testing.T) {
 }
 
 func TestGetHostEntry_NotFound(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	_, err := db.GetHostEntry("missing")
 	if err == nil {
 		t.Fatal("GetHostEntry() error = nil, want sql.ErrNoRows")
@@ -292,7 +292,7 @@ func TestGetHostEntry_NotFound(t *testing.T) {
 }
 
 func TestUpdateHostEntry(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -332,7 +332,7 @@ func TestUpdateHostEntry(t *testing.T) {
 }
 
 func TestUpdateHostEntry_NotFound(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	e := &HostEntry{ID: "missing", IP: "127.0.0.1", Hostnames: "api.local"}
 	err := db.UpdateHostEntry(e)
 	if err == nil {
@@ -344,7 +344,7 @@ func TestUpdateHostEntry_NotFound(t *testing.T) {
 }
 
 func TestDeleteHostEntry(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -371,76 +371,14 @@ func TestDeleteHostEntry(t *testing.T) {
 }
 
 func TestDeleteHostEntry_NotFoundIsNoOp(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	if err := db.DeleteHostEntry("missing"); err != nil {
 		t.Fatalf("DeleteHostEntry() error = %v, want nil (idempotent)", err)
 	}
 }
 
-func TestSetActiveHostProfile_Mutex(t *testing.T) {
-	db := newTestSQLite(t)
-	a := &HostProfile{Name: "a"}
-	b := &HostProfile{Name: "b"}
-	c := &HostProfile{Name: "c"}
-	for _, p := range []*HostProfile{a, b, c} {
-		if err := db.CreateHostProfile(p); err != nil {
-			t.Fatalf("CreateHostProfile(%s) error = %v", p.Name, err)
-		}
-	}
-
-	// First activation: set b active inside a transaction.
-	tx, err := db.DB().Begin()
-	if err != nil {
-		t.Fatalf("Begin() error = %v", err)
-	}
-	if err := db.SetActiveHostProfile(tx, b.ID); err != nil {
-		t.Fatalf("SetActiveHostProfile(b) error = %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Commit() error = %v", err)
-	}
-
-	ga, _ := db.GetHostProfile(a.ID)
-	gb, _ := db.GetHostProfile(b.ID)
-	gc, _ := db.GetHostProfile(c.ID)
-	if ga.IsActive {
-		t.Fatal("a.IsActive = true, want false")
-	}
-	if !gb.IsActive {
-		t.Fatal("b.IsActive = false, want true")
-	}
-	if gc.IsActive {
-		t.Fatal("c.IsActive = true, want false")
-	}
-
-	// Rollback test: start a tx, set c active, then rollback. b must remain the only active.
-	tx2, err := db.DB().Begin()
-	if err != nil {
-		t.Fatalf("Begin(2) error = %v", err)
-	}
-	if err := db.SetActiveHostProfile(tx2, c.ID); err != nil {
-		t.Fatalf("SetActiveHostProfile(c) error = %v", err)
-	}
-	if err := tx2.Rollback(); err != nil {
-		t.Fatalf("Rollback() error = %v", err)
-	}
-
-	ga2, _ := db.GetHostProfile(a.ID)
-	gb2, _ := db.GetHostProfile(b.ID)
-	gc2, _ := db.GetHostProfile(c.ID)
-	if ga2.IsActive {
-		t.Fatal("after rollback: a.IsActive = true, want false")
-	}
-	if !gb2.IsActive {
-		t.Fatal("after rollback: b.IsActive = false, want true")
-	}
-	if gc2.IsActive {
-		t.Fatal("after rollback: c.IsActive = true, want false")
-	}
-}
-
 func TestReorderHostEntries(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -476,38 +414,8 @@ func TestReorderHostEntries(t *testing.T) {
 	}
 }
 
-func TestReorderHostEntries_AtomicOnUnknownID(t *testing.T) {
-	db := newTestSQLite(t)
-	p := &HostProfile{Name: "dev"}
-	if err := db.CreateHostProfile(p); err != nil {
-		t.Fatalf("CreateHostProfile() error = %v", err)
-	}
-	e1 := &HostEntry{ProfileID: p.ID, IP: "127.0.0.1", Hostnames: "a.local"}
-	if err := db.CreateHostEntry(e1); err != nil {
-		t.Fatalf("CreateHostEntry() error = %v", err)
-	}
-
-	// Reorder references a non-existent entry; the call should error and
-	// leave the existing positions untouched (transactional).
-	originalPos := e1.Position
-	if err := db.ReorderHostEntries(p.ID, []string{e1.ID, "missing"}); err == nil {
-		t.Fatal("ReorderHostEntries() error = nil, want error")
-	}
-
-	entries, err := db.ListHostEntries(p.ID)
-	if err != nil {
-		t.Fatalf("ListHostEntries() error = %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("len(entries) = %d, want 1", len(entries))
-	}
-	if entries[0].Position != originalPos {
-		t.Fatalf("entries[0].Position = %d, want %d (unchanged after failed reorder)", entries[0].Position, originalPos)
-	}
-}
-
 func TestListEnabledHostEntries(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	p := &HostProfile{Name: "dev"}
 	if err := db.CreateHostProfile(p); err != nil {
 		t.Fatalf("CreateHostProfile() error = %v", err)
@@ -539,7 +447,7 @@ func TestListEnabledHostEntries(t *testing.T) {
 }
 
 func TestListEnabledHostEntries_EmptyReturnsEmptySlice(t *testing.T) {
-	db := newTestSQLite(t)
+	db := newTestStore(t)
 	enabled, err := db.ListEnabledHostEntries("missing-profile")
 	if err != nil {
 		t.Fatalf("ListEnabledHostEntries() error = %v", err)

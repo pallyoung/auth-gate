@@ -32,7 +32,7 @@ const (
 //   - SourceImported: pasted/uploaded PEM. Never auto-renewed; Resign
 //     returns an error instructing the user to re-import.
 type Service struct {
-	db       *store.SQLite
+	db       store.Store
 	reloader runtime.Reloader
 
 	ca       *localca.CA
@@ -46,7 +46,7 @@ type Config struct {
 	CA      *localca.CA
 }
 
-func NewService(db *store.SQLite, cfg Config, reloader runtime.Reloader) (*Service, error) {
+func NewService(db store.Store, cfg Config, reloader runtime.Reloader) (*Service, error) {
 	if cfg.CA == nil {
 		return nil, fmt.Errorf("certificate service: local CA is required")
 	}

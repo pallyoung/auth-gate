@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,12 +21,12 @@ type fakeReloader struct{ called int }
 
 func (r *fakeReloader) Reload() { r.called++ }
 
-func newTestSetup(t *testing.T) (*Service, *localca.CA, *store.SQLite, *fakeReloader) {
+func newTestSetup(t *testing.T) (*Service, *localca.CA, store.Store, *fakeReloader) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.NewSQLite(filepath.Join(dir, "auth-gate.db"))
+	db, err := store.NewJSONStore(dir)
 	if err != nil {
-		t.Fatalf("NewSQLite: %v", err)
+		t.Fatalf("NewJSONStore: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 

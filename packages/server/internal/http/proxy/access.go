@@ -11,7 +11,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-func AccessLoginRoute(routerMgr *router.Manager, db *store.SQLite) gin.HandlerFunc {
+func AccessLoginRoute(routerMgr *router.Manager, db store.Store) gin.HandlerFunc {
 	sessionSvc := session.NewService(db)
 	return accessLoginHandler(routerMgr, sessionSvc)
 }
