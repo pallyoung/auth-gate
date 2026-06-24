@@ -73,7 +73,7 @@ const loadBalancedRoute = {
 describe('RouteForm', () => {
   it('exposes select fields with accessible labels', async () => {
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -85,14 +85,14 @@ describe('RouteForm', () => {
     const user = userEvent.setup()
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
     const pathPrefixInput = screen.getByLabelText('Path Prefix')
     const pathMatchModeSelect = screen.getByRole('combobox', { name: 'Path Match Mode' })
 
-    expect(pathPrefixInput).toHaveAttribute('placeholder', '/billing or empty to match all')
+    expect(pathPrefixInput).toHaveAttribute('placeholder', '/api/v1 or empty to match all')
     expect(screen.getByText('Leave empty to match all paths.')).toBeInTheDocument()
 
     await user.selectOptions(pathMatchModeSelect, 'regex')
@@ -115,7 +115,7 @@ describe('RouteForm', () => {
     const user = userEvent.setup()
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -141,7 +141,7 @@ describe('RouteForm', () => {
     )
     const user = userEvent.setup()
     const { container } = await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -167,7 +167,7 @@ describe('RouteForm', () => {
     const onSubmit = vi.fn()
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -190,7 +190,7 @@ describe('RouteForm', () => {
     const onSubmit = vi.fn()
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -213,7 +213,7 @@ describe('RouteForm', () => {
     const onSubmit = vi.fn()
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -232,12 +232,25 @@ describe('RouteForm', () => {
     })
   })
 
-  it('submits pooled backends and tls settings without a legacy backend target', async () => {
+  it('submits pooled backends and tls certificate selection', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
+    const certs = [
+      {
+        id: 'cert-1',
+        name: 'API Cert',
+        domain: 'api.example.com',
+        cert_path: '/data/certs/api.example.com/cert.pem',
+        key_path: '/data/certs/api.example.com/key.pem',
+        source: 'local_ca',
+        status: 'active' as const,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]
 
     await renderWithI18n(
-      <RouteForm route={null} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <RouteForm route={null} certificates={certs} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -257,8 +270,7 @@ describe('RouteForm', () => {
     await user.clear(screen.getByLabelText('Retry Attempts'))
     await user.type(screen.getByLabelText('Retry Attempts'), '3')
     await user.click(screen.getByLabelText('TLS Termination'))
-    await user.type(screen.getByLabelText('Certificate Path'), '  /etc/ssl/certs/api.pem  ')
-    await user.type(screen.getByLabelText('Private Key Path'), '  /etc/ssl/private/api.key  ')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'System Certificate' }), 'cert-1')
     await user.click(screen.getByRole('button', { name: 'Create Route' }))
 
     await waitFor(() => {
@@ -273,8 +285,7 @@ describe('RouteForm', () => {
             write_timeout_ms: 3200,
           }],
           tls_enabled: true,
-          tls_cert: '/etc/ssl/certs/api.pem',
-          tls_key: '/etc/ssl/private/api.key',
+          certificate_id: 'cert-1',
           timeout_ms: 4500,
           retry_attempts: 3,
         })
@@ -284,7 +295,7 @@ describe('RouteForm', () => {
 
   it('hydrates backend pool and tls fields from an existing load-balanced route', async () => {
     await renderWithI18n(
-      <RouteForm route={loadBalancedRoute} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RouteForm route={loadBalancedRoute} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -298,15 +309,14 @@ describe('RouteForm', () => {
     expect(screen.getByLabelText('Backend URL 2')).toHaveValue('https://backend-b.example.com')
     expect(screen.getByLabelText('Weight 2')).toHaveValue(1)
     expect(screen.getByLabelText('TLS Termination')).toBeChecked()
-    expect(screen.getByLabelText('Certificate Path')).toHaveValue('/etc/ssl/certs/api.pem')
-    expect(screen.getByLabelText('Private Key Path')).toHaveValue('/etc/ssl/private/api.key')
     expect(screen.getByLabelText('Timeout (ms)')).toHaveValue(4500)
     expect(screen.getByLabelText('Retry Attempts')).toHaveValue(3)
+    expect(screen.getByText(/This route uses a custom certificate path/)).toBeInTheDocument()
   })
 
   it('refreshes form fields when the edited route changes while the form stays mounted', async () => {
     const view = await renderWithI18n(
-      <RouteForm route={billingRoute} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RouteForm route={billingRoute} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -317,7 +327,7 @@ describe('RouteForm', () => {
 
     view.rerender(
       <I18nextProvider i18n={view.i18n}>
-        <RouteForm route={reportsRoute} onSubmit={vi.fn()} onCancel={vi.fn()} />
+        <RouteForm route={reportsRoute} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />
       </I18nextProvider>
     )
 
@@ -331,7 +341,7 @@ describe('RouteForm', () => {
 
   it('refreshes form fields when the same route receives updated values while the form stays mounted', async () => {
     const view = await renderWithI18n(
-      <RouteForm route={billingRoute} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RouteForm route={billingRoute} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { locale: 'en' }
     )
 
@@ -348,6 +358,7 @@ describe('RouteForm', () => {
             strip_prefix: false,
             enabled: false,
           }}
+          certificates={[]}
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
         />

@@ -25,6 +25,7 @@ const (
 	ErrCodeInvalidRouteBackendWeight = "invalid_route_backend_weight"
 	ErrCodeInvalidRouteRedirectCode  = "invalid_route_redirect_code"
 	ErrCodeRouteStoreFailure         = "route_store_failure"
+	ErrCodeCertificateNotFound       = "certificate_not_found"
 )
 
 const controlPlaneReservedPathPrefix = "/_authgate"
@@ -59,9 +60,16 @@ func newError(code, message string, cause error) error {
 	}
 }
 
+// CertService is the subset of certificate service that the route service
+// needs to resolve certificate paths from a certificate ID.
+type CertService interface {
+	Get(id string) (*store.Certificate, error)
+}
+
 type Service struct {
 	db       store.Store
 	reloader runtime.Reloader
+	certSvc  CertService
 }
 
 type CreateInput struct {
@@ -75,6 +83,7 @@ type CreateInput struct {
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool
+	CertificateID string
 	TimeoutMs     int
 	RetryAttempts int
 	Backends      []store.Backend
@@ -94,6 +103,7 @@ type UpdateInput struct {
 	TLSCert       *string
 	TLSKey        *string
 	TLSEnabled    *bool
+	CertificateID *string
 	TimeoutMs     *int
 	RetryAttempts *int
 	Backends      *[]store.Backend
@@ -102,10 +112,11 @@ type UpdateInput struct {
 	RedirectCode  *int
 }
 
-func NewService(db store.Store, reloader runtime.Reloader) *Service {
+func NewService(db store.Store, reloader runtime.Reloader, certSvc CertService) *Service {
 	return &Service{
 		db:       db,
 		reloader: reloader,
+		certSvc:  certSvc,
 	}
 }
 
@@ -144,12 +155,16 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 		TLSCert:       strings.TrimSpace(input.TLSCert),
 		TLSKey:        strings.TrimSpace(input.TLSKey),
 		TLSEnabled:    input.TLSEnabled,
+		CertificateID: strings.TrimSpace(input.CertificateID),
 		TimeoutMs:     input.TimeoutMs,
 		RetryAttempts: input.RetryAttempts,
 		Backends:      input.Backends,
 		PathMatchMode: normalizePathMatchMode(input.PathMatchMode),
 		RewriteTarget: strings.TrimSpace(input.RewriteTarget),
 		RedirectCode:  input.RedirectCode,
+	}
+	if err := s.resolveCertificate(route); err != nil {
+		return nil, err
 	}
 	route.Backends = normalizeBackends(route.Backends)
 	if err := validate(route); err != nil {
@@ -198,6 +213,9 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	if input.TLSEnabled != nil {
 		route.TLSEnabled = *input.TLSEnabled
 	}
+	if input.CertificateID != nil {
+		route.CertificateID = strings.TrimSpace(*input.CertificateID)
+	}
 	if input.TimeoutMs != nil {
 		route.TimeoutMs = *input.TimeoutMs
 	}
@@ -217,6 +235,10 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 		route.RedirectCode = *input.RedirectCode
 	}
 	route.Backends = normalizeBackends(route.Backends)
+
+	if err := s.resolveCertificate(route); err != nil {
+		return nil, err
+	}
 
 	if err := validate(route); err != nil {
 		return nil, err
@@ -354,6 +376,26 @@ func normalizePathMatchMode(pathMatchMode string) string {
 	default:
 		return pathMatchMode
 	}
+}
+
+// resolveCertificate populates TLSCert and TLSKey from a managed certificate
+// when CertificateID is set. The certificate ID takes precedence over any
+// manually supplied paths.
+func (s *Service) resolveCertificate(route *store.Route) error {
+	if route.CertificateID == "" {
+		return nil
+	}
+	if s.certSvc == nil {
+		return newError(ErrCodeCertificateNotFound, "certificate service not available", nil)
+	}
+	cert, err := s.certSvc.Get(route.CertificateID)
+	if err != nil {
+		return newError(ErrCodeCertificateNotFound, "certificate not found", err)
+	}
+	route.TLSCert = cert.CertPath
+	route.TLSKey = cert.KeyPath
+	route.TLSEnabled = true
+	return nil
 }
 
 func normalizeHost(host string) string {

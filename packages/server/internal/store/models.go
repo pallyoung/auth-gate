@@ -31,6 +31,7 @@ type Route struct {
 	TLSCert       string    `json:"tls_cert,omitempty"`
 	TLSKey        string    `json:"tls_key,omitempty"`
 	TLSEnabled    bool      `json:"tls_enabled"`
+	CertificateID string    `json:"certificate_id,omitempty"` // references Certificate.ID
 	TimeoutMs     int       `json:"timeout_ms,omitempty"`
 	RetryAttempts int       `json:"retry_attempts,omitempty"`
 	PathMatchMode string    `json:"path_match_mode,omitempty"` // "prefix"|"exact"|"regex"

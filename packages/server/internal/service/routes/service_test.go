@@ -34,7 +34,7 @@ func intPtr(v int) *int {
 }
 
 func TestServiceCreateRoute_RejectsInvalidBackend(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:        "broken",
@@ -52,7 +52,7 @@ func TestServiceCreateRoute_RejectsInvalidBackend(t *testing.T) {
 }
 
 func TestServiceCreateRoute_AllowsBackendsWithoutLegacyBackend(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:       "load-balanced",
@@ -75,7 +75,7 @@ func TestServiceCreateRoute_AllowsBackendsWithoutLegacyBackend(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RequiresBackendOrBackends(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:       "broken",
@@ -91,7 +91,7 @@ func TestServiceCreateRoute_RequiresBackendOrBackends(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidBackends(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:       "broken",
@@ -112,7 +112,7 @@ func TestServiceCreateRoute_RejectsInvalidBackends(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidBackendWeights(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:       "broken",
@@ -133,7 +133,7 @@ func TestServiceCreateRoute_RejectsInvalidBackendWeights(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsReservedControlPlanePrefix(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:        "reserved",
@@ -151,7 +151,7 @@ func TestServiceCreateRoute_RejectsReservedControlPlanePrefix(t *testing.T) {
 }
 
 func TestServiceCreateRoute_AcceptsRegexPathMatchMode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:          "regex-route",
@@ -173,7 +173,7 @@ func TestServiceCreateRoute_AcceptsRegexPathMatchMode(t *testing.T) {
 }
 
 func TestServiceCreateRoute_NormalizesExplicitPathMatchMode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:          "regex-route",
@@ -192,7 +192,7 @@ func TestServiceCreateRoute_NormalizesExplicitPathMatchMode(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidPathMatchMode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:          "invalid-mode",
@@ -210,7 +210,7 @@ func TestServiceCreateRoute_RejectsInvalidPathMatchMode(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidRegexPathPrefix(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:          "invalid-regex-route",
@@ -228,7 +228,7 @@ func TestServiceCreateRoute_RejectsInvalidRegexPathPrefix(t *testing.T) {
 }
 
 func TestServiceCreateRoute_NormalizesHostCase(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:       "host-route",
@@ -246,7 +246,7 @@ func TestServiceCreateRoute_NormalizesHostCase(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidHostFormats(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	tests := []struct {
 		name string
@@ -278,7 +278,7 @@ func TestServiceCreateRoute_RejectsInvalidHostFormats(t *testing.T) {
 }
 
 func TestServiceCreateRoute_NormalizesBracketedIPv6Host(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:       "ipv6-route",
@@ -296,7 +296,7 @@ func TestServiceCreateRoute_NormalizesBracketedIPv6Host(t *testing.T) {
 }
 
 func TestServiceCreateRoute_TrimsWhitespaceOnlyRewriteTarget(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:          "redirect-route",
@@ -315,7 +315,7 @@ func TestServiceCreateRoute_TrimsWhitespaceOnlyRewriteTarget(t *testing.T) {
 }
 
 func TestServiceCreateRoute_RejectsInvalidRedirectCode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Create(CreateInput{
 		Name:         "redirect-route",
@@ -333,7 +333,7 @@ func TestServiceCreateRoute_RejectsInvalidRedirectCode(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_ReturnsNotFound(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	_, err := svc.Update("missing", UpdateInput{
 		Name:        stringPtr("svc"),
@@ -351,7 +351,7 @@ func TestServiceUpdateRoute_ReturnsNotFound(t *testing.T) {
 }
 
 func TestServiceDeleteRoute_ReturnsNotFound(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	err := svc.Delete("missing")
 	if err == nil {
@@ -374,7 +374,7 @@ func TestServiceListRoutes_ReturnsStoredRoutes(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 
-	svc := NewService(db, nil)
+	svc := NewService(db, nil, nil)
 	routes, err := svc.List()
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -400,7 +400,7 @@ func TestServiceGetRoute_NormalizesLegacyStoredPathMatchMode(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 
-	svc := NewService(db, nil)
+	svc := NewService(db, nil, nil)
 	route, err := svc.Get("route-1")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
@@ -424,7 +424,7 @@ func TestServiceUpdateRoute_PreservesLegacyStoredRedirectCodeByNormalizingIt(t *
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 
-	svc := NewService(db, nil)
+	svc := NewService(db, nil, nil)
 	updated, err := svc.Update("route-1", UpdateInput{
 		Name: stringPtr("svc-renamed"),
 	})
@@ -447,7 +447,7 @@ func TestServiceDeleteRoute_MapsStoreNotFound(t *testing.T) {
 }
 
 func TestServiceCreateRoute_TLSConfigStored(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	route, err := svc.Create(CreateInput{
 		Name:        "tls-route",
@@ -488,7 +488,7 @@ func TestServiceCreateRoute_TLSConfigStored(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_TLSConfigUpdated(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "initial",
@@ -541,7 +541,7 @@ func TestServiceUpdateRoute_TLSConfigUpdated(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_NormalizesHostCase(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "route",
@@ -566,7 +566,7 @@ func TestServiceUpdateRoute_NormalizesHostCase(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_RejectsInvalidBackends(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "route",
@@ -594,7 +594,7 @@ func TestServiceUpdateRoute_RejectsInvalidBackends(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_AllowsSwitchingToBackendsWithoutLegacyBackend(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "route",
@@ -627,7 +627,7 @@ func TestServiceUpdateRoute_AllowsSwitchingToBackendsWithoutLegacyBackend(t *tes
 }
 
 func TestServiceUpdateRoute_RejectsInvalidBackendWeights(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "route",
@@ -681,7 +681,7 @@ func TestServiceUpdateRoute_PreservesOmittedFields(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 
-	svc := NewService(db, nil)
+	svc := NewService(db, nil, nil)
 	updated, err := svc.Update("route-preserve", UpdateInput{
 		Name: stringPtr("renamed"),
 	})
@@ -740,7 +740,7 @@ func TestServiceUpdateRoute_PreservesOmittedFields(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_NormalizesExplicitPathMatchMode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "svc",
@@ -766,7 +766,7 @@ func TestServiceUpdateRoute_NormalizesExplicitPathMatchMode(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_RejectsInvalidPathMatchMode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "svc",
@@ -790,7 +790,7 @@ func TestServiceUpdateRoute_RejectsInvalidPathMatchMode(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_RejectsInvalidRegexPathPrefix(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:          "regex-route",
@@ -816,7 +816,7 @@ func TestServiceUpdateRoute_RejectsInvalidRegexPathPrefix(t *testing.T) {
 }
 
 func TestServiceUpdateRoute_ClearsRewriteTargetWhenWhitespaceOnly(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:          "redirect-route",
@@ -843,7 +843,7 @@ func TestServiceUpdateRoute_ClearsRewriteTargetWhenWhitespaceOnly(t *testing.T) 
 }
 
 func TestServiceUpdateRoute_RejectsInvalidRedirectCode(t *testing.T) {
-	svc := NewService(newTestDB(t), nil)
+	svc := NewService(newTestDB(t), nil, nil)
 
 	created, err := svc.Create(CreateInput{
 		Name:       "route",

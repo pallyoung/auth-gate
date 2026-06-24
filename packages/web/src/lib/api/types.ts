@@ -50,6 +50,7 @@ export interface Route {
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean
+  certificate_id?: string
   timeout_ms?: number
   retry_attempts?: number
   path_match_mode?: string
@@ -82,6 +83,7 @@ export interface RouteInput {
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean
+  certificate_id?: string
   timeout_ms?: number
   retry_attempts?: number
   path_match_mode?: string

@@ -8,8 +8,9 @@ import { Alert, Badge, Button, Card, EmptyState, MetricCard, Modal } from '../co
 import { ApiError } from '../lib/api/client'
 import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { routesApi } from '../lib/api/routes'
+import { certificatesApi } from '../lib/api/certificates'
 import { getSessionUser } from '../lib/session-store'
-import type { Route, RouteInput } from '../lib/api/types'
+import type { Certificate, Route, RouteInput } from '../lib/api/types'
 
 function getPrimaryBackendTarget(route: Route) {
   const pooledTarget = route.backends?.find((backend) => backend.url?.trim())?.url
@@ -76,6 +77,7 @@ function getBackendTimeoutSummary(route: Route, t: ReturnType<typeof useTranslat
 export function RoutesPage() {
   const { t } = useTranslation('routes')
   const [routes, setRoutes] = React.useState<Route[]>([])
+  const [certificates, setCertificates] = React.useState<Certificate[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showForm, setShowForm] = React.useState(false)
   const [editingRoute, setEditingRoute] = React.useState<Route | null>(null)
@@ -141,11 +143,15 @@ export function RoutesPage() {
       setError(null)
       setRouteListUnavailable(false)
       setRouteDirectoryUnavailable(false)
-      const data = await routesApi.list()
+      const [data, certs] = await Promise.all([
+        routesApi.list(),
+        certificatesApi.list().catch(() => [] as Certificate[]),
+      ])
       if (requestGenerationRef.current !== requestGeneration) {
         return
       }
       setRoutes(data)
+      setCertificates(certs)
     } catch (err) {
       if (requestGenerationRef.current !== requestGeneration) {
         return
@@ -396,6 +402,7 @@ export function RoutesPage() {
       >
         <RouteForm
           route={editingRoute}
+          certificates={certificates}
           onSubmit={editingRoute ? handleUpdate : handleCreate}
           onCancel={() => {
             setShowForm(false)

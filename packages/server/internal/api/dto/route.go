@@ -18,6 +18,7 @@ type Route struct {
 	TLSCert       string          `json:"tls_cert,omitempty"`
 	TLSKey        string          `json:"tls_key,omitempty"`
 	TLSEnabled    bool            `json:"tls_enabled"`
+	CertificateID string          `json:"certificate_id,omitempty"`
 	TimeoutMs     int             `json:"timeout_ms,omitempty"`
 	RetryAttempts int             `json:"retry_attempts,omitempty"`
 	Backends      []store.Backend `json:"backends,omitempty"`
@@ -39,6 +40,7 @@ type RouteCreateRequest struct {
 	TLSCert       string          `json:"tls_cert"`
 	TLSKey        string          `json:"tls_key"`
 	TLSEnabled    bool            `json:"tls_enabled"`
+	CertificateID string          `json:"certificate_id"`
 	TimeoutMs     int             `json:"timeout_ms"`
 	RetryAttempts int             `json:"retry_attempts"`
 	Backends      []store.Backend `json:"backends"`
@@ -58,6 +60,7 @@ type RouteUpdateRequest struct {
 	TLSCert       *string          `json:"tls_cert,omitempty"`
 	TLSKey        *string          `json:"tls_key,omitempty"`
 	TLSEnabled    *bool            `json:"tls_enabled,omitempty"`
+	CertificateID *string          `json:"certificate_id,omitempty"`
 	TimeoutMs     *int             `json:"timeout_ms,omitempty"`
 	RetryAttempts *int             `json:"retry_attempts,omitempty"`
 	Backends      *[]store.Backend `json:"backends,omitempty"`
@@ -79,6 +82,7 @@ func RouteResponse(route store.Route) Route {
 		TLSCert:       route.TLSCert,
 		TLSKey:        route.TLSKey,
 		TLSEnabled:    route.TLSEnabled,
+		CertificateID: route.CertificateID,
 		TimeoutMs:     route.TimeoutMs,
 		RetryAttempts: route.RetryAttempts,
 		Backends:      route.Backends,

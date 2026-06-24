@@ -45,7 +45,7 @@ func TestRegisterRoutes_ProxySuccessDoesNotKeepNoRouteStatus(t *testing.T) {
 	}
 
 	engine := gin.New()
-	RegisterRoutes(engine, router.NewManager(db))
+	RegisterRoutes(engine, router.NewManager(db), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	resp := httptest.NewRecorder()

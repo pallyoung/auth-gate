@@ -58,7 +58,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
-	routeSvc := routesservice.NewService(db, routerMgr)
+	routeSvc := routesservice.NewService(db, routerMgr, certSvc)
 	authRuleSvc := authrulesservice.NewService(db, routerMgr)
 	userSvc := usersservice.NewService(db)
 	accessLogSvc := accesslogservice.NewService(accessLogStore)
@@ -285,6 +285,7 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			CertificateID: req.CertificateID,
 			TimeoutMs:     req.TimeoutMs,
 			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
@@ -319,6 +320,7 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			CertificateID: req.CertificateID,
 			TimeoutMs:     req.TimeoutMs,
 			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
@@ -659,7 +661,7 @@ func routeServiceError(c *gin.Context, err error) bool {
 	switch targetCode := routesservice.Code(err); targetCode {
 	case routesservice.ErrCodeRouteNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
-	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeInvalidRoutePathMatchMode, routesservice.ErrCodeInvalidRoutePathRegex, routesservice.ErrCodeReservedRoutePathPrefix, routesservice.ErrCodeInvalidRouteHost, routesservice.ErrCodeInvalidRouteBackend, routesservice.ErrCodeInvalidRouteBackendWeight, routesservice.ErrCodeInvalidRouteRedirectCode:
+	case routesservice.ErrCodeMissingRouteFields, routesservice.ErrCodeInvalidRoutePathPrefix, routesservice.ErrCodeInvalidRoutePathMatchMode, routesservice.ErrCodeInvalidRoutePathRegex, routesservice.ErrCodeReservedRoutePathPrefix, routesservice.ErrCodeInvalidRouteHost, routesservice.ErrCodeInvalidRouteBackend, routesservice.ErrCodeInvalidRouteBackendWeight, routesservice.ErrCodeInvalidRouteRedirectCode, routesservice.ErrCodeCertificateNotFound:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())

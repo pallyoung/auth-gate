@@ -26,6 +26,13 @@ vi.mock('../lib/api/routes', () => ({
   },
 }))
 
+vi.mock('../lib/api/certificates', () => ({
+  certificatesApi: {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+  },
+}))
+
 vi.mock('../lib/session-store', () => ({
   getSessionUser: () => sessionUser,
 }))
@@ -546,8 +553,6 @@ describe('RoutesPage i18n', () => {
     await user.clear(screen.getByLabelText('Weight 1'))
     await user.type(screen.getByLabelText('Weight 1'), '2')
     await user.click(screen.getByLabelText('TLS Termination'))
-    await user.type(screen.getByLabelText('Certificate Path'), '/etc/ssl/certs/api.pem')
-    await user.type(screen.getByLabelText('Private Key Path'), '/etc/ssl/private/api.key')
     await user.click(screen.getByRole('button', { name: 'Create Route' }))
 
     await waitFor(() => {
@@ -556,8 +561,6 @@ describe('RoutesPage i18n', () => {
           backend: '',
           backends: [{ url: 'http://backend-a.example.com', weight: 2 }],
           tls_enabled: true,
-          tls_cert: '/etc/ssl/certs/api.pem',
-          tls_key: '/etc/ssl/private/api.key',
         })
       )
     })

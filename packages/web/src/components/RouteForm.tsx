@@ -1,14 +1,18 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
-import type { Route, RouteBackend, RouteInput } from '../lib/api/types'
+import type { Certificate, Route, RouteBackend, RouteInput } from '../lib/api/types'
+import { certificatesApi } from '../lib/api/certificates'
 import { Alert, Button, Card, Input, Select, Switch } from './ui'
 
 interface RouteFormProps {
   route: Route | null
+  certificates: Certificate[]
   onSubmit: (data: RouteInput) => void
   onCancel: () => void
 }
+
+type TLSCertMode = 'system' | 'upload'
 
 function getInitialBackends(route: Route | null): RouteBackend[] {
   return (route?.backends || []).map((backend) => ({
@@ -35,6 +39,7 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     tls_cert: route?.tls_cert || '',
     tls_key: route?.tls_key || '',
     tls_enabled: route?.tls_enabled ?? false,
+    certificate_id: route?.certificate_id || '',
     timeout_ms: route?.timeout_ms || 0,
     retry_attempts: route?.retry_attempts || 0,
     path_match_mode: route?.path_match_mode || '',
@@ -51,7 +56,7 @@ function normalizeHost(host: string | undefined) {
   return trimmed
 }
 
-export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
+export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteFormProps) {
   const { t } = useTranslation('routes')
   const [form, setForm] = React.useState<RouteInput>(() => getInitialRouteForm(route))
   const [error, setError] = React.useState<LocalizedTextState>(null)
@@ -61,9 +66,25 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
   const isRegexPathMatchMode = form.path_match_mode === 'regex' || form.path_match_mode === 'regex_i'
   const errorMessage = resolveLocalizedText(t, error)
 
+  const [tlsCertMode, setTlsCertMode] = React.useState<TLSCertMode>('system')
+  const [uploadName, setUploadName] = React.useState('')
+  const [uploadDomain, setUploadDomain] = React.useState('')
+  const [uploadCertPem, setUploadCertPem] = React.useState('')
+  const [uploadKeyPem, setUploadKeyPem] = React.useState('')
+
+  const activeCerts = React.useMemo(
+    () => certificates.filter((cert) => cert.status === 'active'),
+    [certificates]
+  )
+
   React.useEffect(() => {
     setForm(getInitialRouteForm(route))
     setError(null)
+    setTlsCertMode(route?.certificate_id ? 'system' : 'system')
+    setUploadName('')
+    setUploadDomain('')
+    setUploadCertPem('')
+    setUploadKeyPem('')
   }, [initialFormSeed])
 
   const updateBackend = (index: number, updater: (current: RouteBackend) => RouteBackend) => {
@@ -103,6 +124,45 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
     setError(null)
     setSubmitting(true)
     try {
+      // If TLS is enabled and user chose upload mode, create the certificate first.
+      let certificateId = form.certificate_id || ''
+      if (form.tls_enabled && tlsCertMode === 'upload') {
+        const trimmedUploadName = uploadName.trim()
+        const trimmedUploadDomain = uploadDomain.trim()
+        if (!trimmedUploadName) {
+          setError({ translationKey: 'form.uploadCertName' })
+          setSubmitting(false)
+          activeSubmitRef.current = null
+          return
+        }
+        if (!trimmedUploadDomain) {
+          setError({ translationKey: 'form.uploadCertDomain' })
+          setSubmitting(false)
+          activeSubmitRef.current = null
+          return
+        }
+        if (!uploadCertPem.trim()) {
+          setError({ translationKey: 'form.uploadCertPem' })
+          setSubmitting(false)
+          activeSubmitRef.current = null
+          return
+        }
+        if (!uploadKeyPem.trim()) {
+          setError({ translationKey: 'form.uploadKeyPem' })
+          setSubmitting(false)
+          activeSubmitRef.current = null
+          return
+        }
+        const newCert = await certificatesApi.create({
+          name: trimmedUploadName,
+          domain: trimmedUploadDomain,
+          source: 'imported',
+          cert_pem: uploadCertPem.trim(),
+          key_pem: uploadKeyPem.trim(),
+        })
+        certificateId = newCert.id
+      }
+
       const normalizedBackends = (form.backends || [])
         .map((backend) => ({
           url: (backend.url || '').trim(),
@@ -124,6 +184,7 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
         tls_cert: (form.tls_cert || '').trim(),
         tls_key: (form.tls_key || '').trim(),
         rewrite_target: (form.rewrite_target || '').trim(),
+        certificate_id: certificateId,
       })
     } catch (err) {
       setError(getLocalizedTextState(err))
@@ -415,23 +476,115 @@ export function RouteForm({ route, onSubmit, onCancel }: RouteFormProps) {
           aria-label={t('form.tlsTermination')}
         />
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Input
-            label={t('form.certificatePath')}
-            value={form.tls_cert || ''}
-            onChange={(event) => setForm({ ...form, tls_cert: event.target.value })}
-            placeholder={t('form.certificatePathPlaceholder')}
-            disabled={!form.tls_enabled}
-            hint={t('form.tlsPathHint')}
-          />
-          <Input
-            label={t('form.privateKeyPath')}
-            value={form.tls_key || ''}
-            onChange={(event) => setForm({ ...form, tls_key: event.target.value })}
-            placeholder={t('form.privateKeyPathPlaceholder')}
-            disabled={!form.tls_enabled}
-          />
-        </div>
+        {form.tls_enabled && (
+          <>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTlsCertMode('system')}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  tlsCertMode === 'system'
+                    ? 'bg-[var(--primary-500)] text-white'
+                    : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {t('form.tlsSourceSystem')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTlsCertMode('upload')}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  tlsCertMode === 'upload'
+                    ? 'bg-[var(--primary-500)] text-white'
+                    : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {t('form.tlsSourceUpload')}
+              </button>
+            </div>
+
+            {tlsCertMode === 'system' && (
+              <div className="space-y-3">
+                {route?.tls_enabled && route?.tls_cert && !route?.certificate_id && (
+                  <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                    {t('form.legacyCertPath', { path: route.tls_cert })}
+                    <p className="mt-1 text-xs">{t('form.legacyCertPathHint')}</p>
+                  </div>
+                )}
+                {activeCerts.length > 0 ? (
+                  <Select
+                    label={t('form.tlsSourceSystem')}
+                    value={form.certificate_id || ''}
+                    onChange={(event) => setForm({ ...form, certificate_id: event.target.value })}
+                    options={[
+                      { value: '', label: t('form.selectCertificate') },
+                      ...activeCerts.map((cert) => ({
+                        value: cert.id,
+                        label: `${cert.name} (${cert.domain})`,
+                      })),
+                    ]}
+                    hint={t('form.certificateSelectHint')}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-5 text-sm text-[var(--text-muted)]">
+                    {t('form.noCertificates')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tlsCertMode === 'upload' && (
+              <div className="space-y-4">
+                <p className="text-xs text-[var(--text-muted)]">
+                  {t('form.uploadCertHint')}
+                </p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Input
+                    label={t('form.uploadCertName')}
+                    value={uploadName}
+                    onChange={(event) => setUploadName(event.target.value)}
+                    placeholder={t('form.uploadCertNamePlaceholder')}
+                  />
+                  <Input
+                    label={t('form.uploadCertDomain')}
+                    value={uploadDomain}
+                    onChange={(event) => setUploadDomain(event.target.value)}
+                    placeholder={form.host || 'example.com'}
+                    hint={t('form.uploadCertDomainHint')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="upload-cert-pem" className="block text-xs font-semibold text-[var(--text-muted)]">
+                    {t('form.uploadCertPem')}
+                  </label>
+                  <textarea
+                    id="upload-cert-pem"
+                    value={uploadCertPem}
+                    onChange={(event) => setUploadCertPem(event.target.value)}
+                    placeholder={t('form.uploadCertPemPlaceholder')}
+                    rows={5}
+                    className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:outline-none focus:ring-1 focus:ring-[var(--primary-500)]"
+                  />
+                  <p className="text-xs text-[var(--text-muted)]">{t('form.uploadCertPemHint')}</p>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="upload-key-pem" className="block text-xs font-semibold text-[var(--text-muted)]">
+                    {t('form.uploadKeyPem')}
+                  </label>
+                  <textarea
+                    id="upload-key-pem"
+                    value={uploadKeyPem}
+                    onChange={(event) => setUploadKeyPem(event.target.value)}
+                    placeholder={t('form.uploadKeyPemPlaceholder')}
+                    rows={5}
+                    className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:outline-none focus:ring-1 focus:ring-[var(--primary-500)]"
+                  />
+                  <p className="text-xs text-[var(--text-muted)]">{t('form.uploadKeyPemHint')}</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
