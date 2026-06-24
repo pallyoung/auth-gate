@@ -214,3 +214,73 @@ export interface HostEntryInput {
 export interface HostEntryReorderInput {
   entry_ids: string[]
 }
+
+export interface AccessLogEntry {
+  request_id: string
+  route_id: string
+  method: string
+  path: string
+  backend_url: string
+  backend_latency_ms: number
+  status_code: number
+  client_ip: string
+  user_agent: string
+  username?: string
+  auth_result: 'pass' | 'fail' | 'none'
+  timestamp: string
+}
+
+export interface AccessLogListResponse {
+  entries: AccessLogEntry[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+export interface AccessLogStats {
+  total_requests: number
+  success_count: number
+  error_count: number
+  avg_latency_ms: number
+  p95_latency_ms: number
+  requests_per_minute: TimeBucket[]
+  error_rate_per_hour: TimeBucket[]
+  latency_per_hour: LatencyBucket[]
+  top_paths: PathCount[]
+  top_ips: IPCount[]
+}
+
+export interface TimeBucket {
+  time: string
+  count: number
+}
+
+export interface LatencyBucket {
+  time: string
+  avg_ms: number
+  p95_ms: number
+}
+
+export interface PathCount {
+  path: string
+  count: number
+}
+
+export interface IPCount {
+  ip: string
+  count: number
+}
+
+export interface AccessLogQueryParams {
+  client_ip?: string
+  path?: string
+  username?: string
+  auth_result?: string
+  route_id?: string
+  status_code?: number
+  start_time?: string
+  end_time?: string
+  page?: number
+  per_page?: number
+}

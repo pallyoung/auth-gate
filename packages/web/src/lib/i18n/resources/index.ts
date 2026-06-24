@@ -1,4 +1,6 @@
 import { accessLoginEn, accessLoginZhCN } from './accessLogin'
+import { accessLogsEn } from './accessLogs'
+import { accessLogsZhCN } from './accessLogsZhCN'
 import { authRulesEn, authRulesZhCN } from './authRules'
 import { certificatesEn, certificatesZhCN } from './certificates'
 import { commonEn, commonZhCN } from './common'
@@ -15,6 +17,7 @@ export const resources = {
     layout: layoutEn,
     login: loginEn,
     accessLogin: accessLoginEn,
+    accessLogs: accessLogsEn,
     routes: routesEn,
     authRules: authRulesEn,
     users: usersEn,
@@ -27,6 +30,7 @@ export const resources = {
     layout: layoutZhCN,
     login: loginZhCN,
     accessLogin: accessLoginZhCN,
+    accessLogs: accessLogsZhCN,
     routes: routesZhCN,
     authRules: authRulesZhCN,
     users: usersZhCN,

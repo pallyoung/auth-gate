@@ -69,6 +69,8 @@ type accessLogEntry struct {
 	StatusCode       int    `json:"status_code"`
 	ClientIP         string `json:"client_ip"`
 	UserAgent        string `json:"user_agent"`
+	Username         string `json:"username,omitempty"`
+	AuthResult       string `json:"auth_result"`
 }
 
 var cs *circuitState
@@ -432,7 +434,9 @@ func selectRuntimeBackend(route *router.Route) (*url.URL, store.Backend, error) 
 	return backendURL, picked, nil
 }
 
-func Handler(routerMgr *router.Manager) gin.HandlerFunc {
+func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gin.HandlerFunc {
+	setAccessLogStore(accessLogStore)
+
 	return func(c *gin.Context) {
 		startedAt := time.Now()
 		host := requestMatchHost(c.Request.Host)
@@ -466,6 +470,7 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 					c.Set("jwt_username", claims.Username)
 					c.Set("jwt_role", claims.Role)
 				} else {
+					recordAuthFailure(c, route, http.StatusFound)
 					c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
 					c.Abort()
 					return
@@ -482,6 +487,7 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 			allowed, retryAfter := middleware.Check(route.ID, c.ClientIP(), route.AuthRule.RateLimit, route.AuthRule.Burst, route.AuthRule.Whitelist)
 			if !allowed {
 				metrics.RecordRateLimitExceeded(route.ID)
+				recordAuthFailure(c, route, http.StatusTooManyRequests)
 				c.Header("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
 				c.AbortWithStatusJSON(http.StatusTooManyRequests, httpresponse.ErrorEnvelope{
 					Error: httpresponse.ErrorDetail{
@@ -633,6 +639,12 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 		}
 
 		// 结构化访问日志
+		username, _ := c.Get("jwt_username")
+		authResult := "none"
+		if route.AuthRule != nil && route.AuthRule.Type != "none" {
+			authResult = "pass"
+		}
+
 		accessLog := accessLogEntry{
 			RequestID:        requestID,
 			RouteID:          route.ID,
@@ -643,9 +655,29 @@ func Handler(routerMgr *router.Manager) gin.HandlerFunc {
 			StatusCode:       finalStatus,
 			ClientIP:         c.ClientIP(),
 			UserAgent:        c.Request.UserAgent(),
+			Username:         username.(string),
+			AuthResult:       authResult,
 		}
 		if accessLogBytes, err := json.Marshal(accessLog); err == nil {
 			accessLogger.Printf("access %s", string(accessLogBytes))
+		}
+
+		// Record to access log store
+		if accessLogStore != nil {
+			accessLogStore.Record(store.AccessLogEntry{
+				RequestID:        accessLog.RequestID,
+				RouteID:          accessLog.RouteID,
+				Method:           accessLog.Method,
+				Path:             accessLog.Path,
+				BackendURL:       accessLog.BackendURL,
+				BackendLatencyMs: accessLog.BackendLatencyMs,
+				StatusCode:       accessLog.StatusCode,
+				ClientIP:         accessLog.ClientIP,
+				UserAgent:        accessLog.UserAgent,
+				Username:         accessLog.Username,
+				AuthResult:       accessLog.AuthResult,
+				Timestamp:        startedAt,
+			})
 		}
 
 		c.Abort()
@@ -817,7 +849,36 @@ func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
 	return false
 }
 
+// accessLogStoreInstance is the package-level access log store instance.
+var accessLogStoreInstance *store.AccessLogStore
+
+// setAccessLogStore sets the package-level access log store.
+func setAccessLogStore(s *store.AccessLogStore) {
+	accessLogStoreInstance = s
+}
+
+// recordAuthFailure records a failed authentication attempt.
+func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
+	if accessLogStoreInstance == nil {
+		return
+	}
+
+	accessLogStoreInstance.Record(store.AccessLogEntry{
+		RequestID:  uuid.New().String(),
+		RouteID:    route.ID,
+		Method:     c.Request.Method,
+		Path:       c.Request.URL.Path,
+		StatusCode: statusCode,
+		ClientIP:   c.ClientIP(),
+		UserAgent:  c.Request.UserAgent(),
+		AuthResult: "fail",
+		Timestamp:  time.Now(),
+	})
+}
+
 func writeUnauthorized(c *gin.Context, route *router.Route) {
+	recordAuthFailure(c, route, http.StatusUnauthorized)
+
 	switch route.AuthRule.Type {
 	case "basic":
 		realm := route.Name

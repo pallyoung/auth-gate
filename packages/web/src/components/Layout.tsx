@@ -6,6 +6,7 @@ import {
   Menu,
   Network,
   Route as RouteIcon,
+  ScrollText,
   Settings,
   Shield,
   User as UserIcon,
@@ -51,6 +52,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         label: t('sections.routes.label'),
         description: t('sections.routes.description'),
         visible: true,
+      },
+      {
+        path: '/logs',
+        icon: ScrollText,
+        label: t('sections.logs.label'),
+        description: t('sections.logs.description'),
+        visible: user?.permissions?.can_view_logs === true,
       },
       {
         path: '/certificates',

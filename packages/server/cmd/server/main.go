@@ -112,7 +112,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -126,10 +126,10 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore)
 
 	// Proxy for unmatched routes
-	proxyhttp.RegisterRoutes(engine, routerMgr)
+	proxyhttp.RegisterRoutes(engine, routerMgr, accessLogStore)
 
 	return engine
 }
@@ -313,6 +313,14 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize access log store
+	accessLogStore, err := store.NewAccessLogStore(cfg.Database.Path, 10000)
+	if err != nil {
+		log.Fatalf("Failed to init access log store: %v", err)
+	}
+	accessLogStore.StartFlusher(30 * time.Second)
+	defer accessLogStore.StopFlusher()
+
 	if err := ensureBootstrapAdmin(db, cfg.Auth); err != nil {
 		log.Printf("Warning: failed to ensure admin: %v", err)
 	}
@@ -356,7 +364,7 @@ func main() {
 	log.Printf("Serving web from: %s", webRoot)
 	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc)
+	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

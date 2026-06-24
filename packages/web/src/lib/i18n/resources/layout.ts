@@ -18,6 +18,10 @@ export const layoutEn = {
       label: 'Routes',
       description: 'Traffic orchestration',
     },
+    logs: {
+      label: 'Access Logs',
+      description: 'Monitor traffic',
+    },
     certificates: {
       label: 'Certificates',
       description: 'TLS automation',
@@ -60,6 +64,10 @@ export const layoutZhCN = {
     routes: {
       label: '路由',
       description: '流量编排',
+    },
+    logs: {
+      label: '访问日志',
+      description: '流量监控',
     },
     certificates: {
       label: '证书',

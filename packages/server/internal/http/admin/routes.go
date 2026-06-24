@@ -13,6 +13,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/api/dto"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
+	accesslogservice "github.com/pallyoung/auth-gate/packages/server/internal/service/accesslog"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
@@ -52,13 +53,14 @@ type HostService interface {
 	DeleteEntry(profileID, entryID string) error
 }
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService) {
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService, accessLogStore *store.AccessLogStore) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
 	routeSvc := routesservice.NewService(db, routerMgr)
 	authRuleSvc := authrulesservice.NewService(db, routerMgr)
 	userSvc := usersservice.NewService(db)
+	accessLogSvc := accesslogservice.NewService(accessLogStore)
 
 	group.POST("/auth/logout", logoutHandler())
 	group.GET("/auth/me", meHandler(db, certSvc))
@@ -67,6 +69,12 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	group.GET("/routes/:id", getRoute(routeSvc))
 	group.GET("/auth-rules", listAuthRules(authRuleSvc))
 	group.GET("/auth-rules/:id", getAuthRule(authRuleSvc))
+
+	// Access log endpoints - available to any authenticated user
+	if accessLogStore != nil {
+		group.GET("/access-logs", listAccessLogs(accessLogSvc))
+		group.GET("/access-logs/stats", getAccessLogStats(accessLogSvc))
+	}
 
 	// Certificate endpoints
 	if certSvc != nil {
@@ -709,5 +717,157 @@ func requestLogger() gin.HandlerFunc {
 				username,
 			)
 		}
+	}
+}
+
+func listAccessLogs(svc *accesslogservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var params dto.AccessLogQueryParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_params", "invalid query parameters")
+			return
+		}
+
+		filter := store.AccessLogFilter{
+			ClientIP:   params.ClientIP,
+			Path:       params.Path,
+			Username:   params.Username,
+			AuthResult: params.AuthResult,
+			RouteID:    params.RouteID,
+			StatusCode: params.StatusCode,
+		}
+
+		if params.StartTime != "" {
+			t, err := time.Parse(time.RFC3339, params.StartTime)
+			if err != nil {
+				writeError(c, http.StatusBadRequest, "invalid_start_time", "invalid start_time format")
+				return
+			}
+			filter.StartTime = &t
+		}
+		if params.EndTime != "" {
+			t, err := time.Parse(time.RFC3339, params.EndTime)
+			if err != nil {
+				writeError(c, http.StatusBadRequest, "invalid_end_time", "invalid end_time format")
+				return
+			}
+			filter.EndTime = &t
+		}
+
+		page := params.Page
+		if page < 1 {
+			page = 1
+		}
+		perPage := params.PerPage
+		if perPage < 1 {
+			perPage = 20
+		}
+		if perPage > 100 {
+			perPage = 100
+		}
+
+		result, err := svc.List(filter, page, perPage)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "list_failed", "failed to list access logs")
+			return
+		}
+
+		entries := make([]dto.AccessLogEntry, len(result.Entries))
+		for i, entry := range result.Entries {
+			entries[i] = dto.AccessLogEntry{
+				RequestID:        entry.RequestID,
+				RouteID:          entry.RouteID,
+				Method:           entry.Method,
+				Path:             entry.Path,
+				BackendURL:       entry.BackendURL,
+				BackendLatencyMs: entry.BackendLatencyMs,
+				StatusCode:       entry.StatusCode,
+				ClientIP:         entry.ClientIP,
+				UserAgent:        entry.UserAgent,
+				Username:         entry.Username,
+				AuthResult:       entry.AuthResult,
+				Timestamp:        entry.Timestamp.Format(time.RFC3339),
+			}
+		}
+
+		c.JSON(http.StatusOK, dto.AccessLogListResponse{
+			Entries:    entries,
+			Total:      result.Total,
+			Page:       result.Page,
+			PerPage:    result.PerPage,
+			TotalPages: result.TotalPages,
+		})
+	}
+}
+
+func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		durationStr := c.DefaultQuery("duration", "1h")
+		duration, err := time.ParseDuration(durationStr)
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_duration", "invalid duration format")
+			return
+		}
+
+		stats, err := svc.Stats(duration)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "stats_failed", "failed to get access log stats")
+			return
+		}
+
+		// Convert to DTO
+		requestsPerMinute := make([]dto.TimeBucket, len(stats.RequestsPerMinute))
+		for i, bucket := range stats.RequestsPerMinute {
+			requestsPerMinute[i] = dto.TimeBucket{
+				Time:  bucket.Time.Format(time.RFC3339),
+				Count: bucket.Count,
+			}
+		}
+
+		errorRatePerHour := make([]dto.TimeBucket, len(stats.ErrorRatePerHour))
+		for i, bucket := range stats.ErrorRatePerHour {
+			errorRatePerHour[i] = dto.TimeBucket{
+				Time:  bucket.Time.Format(time.RFC3339),
+				Count: bucket.Count,
+			}
+		}
+
+		latencyPerHour := make([]dto.LatencyBucket, len(stats.LatencyPerHour))
+		for i, bucket := range stats.LatencyPerHour {
+			latencyPerHour[i] = dto.LatencyBucket{
+				Time:  bucket.Time.Format(time.RFC3339),
+				AvgMs: bucket.AvgMs,
+				P95Ms: bucket.P95Ms,
+			}
+		}
+
+		topPaths := make([]dto.PathCount, len(stats.TopPaths))
+		for i, pc := range stats.TopPaths {
+			topPaths[i] = dto.PathCount{
+				Path:  pc.Path,
+				Count: pc.Count,
+			}
+		}
+
+		topIPs := make([]dto.IPCount, len(stats.TopIPs))
+		for i, ip := range stats.TopIPs {
+			topIPs[i] = dto.IPCount{
+				IP:    ip.IP,
+				Count: ip.Count,
+			}
+		}
+
+		c.JSON(http.StatusOK, dto.AccessLogStatsResponse{
+			TotalRequests:     stats.TotalRequests,
+			SuccessCount:      stats.SuccessCount,
+			ErrorCount:        stats.ErrorCount,
+			AvgLatencyMs:      stats.AvgLatencyMs,
+			P95LatencyMs:      stats.P95LatencyMs,
+			RequestsPerMinute: requestsPerMinute,
+			ErrorRatePerHour:  errorRatePerHour,
+			LatencyPerHour:    latencyPerHour,
+			TopPaths:          topPaths,
+			TopIPs:            topIPs,
+		})
 	}
 }

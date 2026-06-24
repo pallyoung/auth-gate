@@ -5,6 +5,7 @@ export { authRulesApi } from './auth-rules'
 export { usersApi } from './users'
 export { configApi } from './config'
 export { hostsApi } from './hosts'
+export { accessLogsApi } from './access-logs'
 export type {
   Permissions,
   SessionUser,
@@ -22,4 +23,12 @@ export type {
   HostEntryInput,
   HostEntryReorderInput,
   HostProfileListResponse,
+  AccessLogEntry,
+  AccessLogListResponse,
+  AccessLogStats,
+  AccessLogQueryParams,
+  TimeBucket,
+  LatencyBucket,
+  PathCount,
+  IPCount,
 } from './types'
