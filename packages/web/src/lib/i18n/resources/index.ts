@@ -9,6 +9,7 @@ import { layoutEn, layoutZhCN } from './layout'
 import { loginEn, loginZhCN } from './login'
 import { routesEn, routesZhCN } from './routes'
 import { settingsEn, settingsZhCN } from './settings'
+import { setupEn, setupZhCN } from './setup'
 import { usersEn, usersZhCN } from './users'
 
 export const resources = {
@@ -16,6 +17,7 @@ export const resources = {
     common: commonEn,
     layout: layoutEn,
     login: loginEn,
+    setup: setupEn,
     accessLogin: accessLoginEn,
     accessLogs: accessLogsEn,
     routes: routesEn,
@@ -29,6 +31,7 @@ export const resources = {
     common: commonZhCN,
     layout: layoutZhCN,
     login: loginZhCN,
+    setup: setupZhCN,
     accessLogin: accessLoginZhCN,
     accessLogs: accessLogsZhCN,
     routes: routesZhCN,

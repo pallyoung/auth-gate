@@ -34,7 +34,7 @@ Copy-Item $srcWeb -Destination $dstWeb -Recurse -Force
 Write-Host "[3/3] Starting service..." -ForegroundColor Yellow
 Set-Location $DistDir
 
-$proc = Start-Process -FilePath ".\auth-gate.exe" -PassThru -NoNewWindow
+$proc = Start-Process -FilePath ".\auth-gate.exe" -ArgumentList "start","-f" -PassThru -NoNewWindow
 if ($proc) {
     Write-Host ""
     Write-Host "=== Deploy complete ===" -ForegroundColor Green

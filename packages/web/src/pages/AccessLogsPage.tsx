@@ -9,11 +9,14 @@ import { Alert } from '../components/ui/Alert'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 import { AccessLogFilters } from '../components/AccessLogFilters'
-import { AccessLogCharts } from '../components/AccessLogCharts'
 import { AccessLogDetail } from '../components/AccessLogDetail'
 import { Pagination } from '../components/ui/Pagination'
 import { accessLogsApi } from '../lib/api'
 import type { AccessLogEntry, AccessLogListResponse, AccessLogStats, AccessLogQueryParams } from '../lib/api/types'
+
+const AccessLogCharts = React.lazy(() =>
+  import('../components/AccessLogCharts').then((m) => ({ default: m.AccessLogCharts }))
+)
 
 export function AccessLogsPage() {
   const { t } = useTranslation('accessLogs')
@@ -122,31 +125,33 @@ export function AccessLogsPage() {
         <MetricCard
           label={t('stats.totalRequests')}
           value={stats?.total_requests || 0}
-          icon={Activity}
+          icon={<Activity className="h-4 w-4" />}
           tone="primary"
         />
         <MetricCard
           label={t('stats.errorRate')}
           value={`${errorRate}%`}
-          icon={AlertTriangle}
+          icon={<AlertTriangle className="h-4 w-4" />}
           tone="warning"
         />
         <MetricCard
           label={t('stats.avgLatency')}
           value={`${stats?.avg_latency_ms?.toFixed(0) || 0} ms`}
-          icon={Clock}
+          icon={<Clock className="h-4 w-4" />}
           tone="default"
         />
         <MetricCard
           label={t('stats.authFailures')}
           value={authFailures}
-          icon={UserX}
+          icon={<UserX className="h-4 w-4" />}
           tone="error"
         />
       </div>
 
       <Card className="mb-6" padding="lg">
-        <AccessLogCharts stats={stats} />
+        <React.Suspense fallback={<div className="flex h-48 items-center justify-center"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" /></div>}>
+          <AccessLogCharts stats={stats} />
+        </React.Suspense>
       </Card>
 
       <Card padding="lg">
@@ -167,7 +172,7 @@ export function AccessLogsPage() {
               </div>
             ) : entries.length === 0 ? (
               <EmptyState
-                icon={ScrollText}
+                icon={<ScrollText className="h-6 w-6" />}
                 title={t('table.noData')}
               />
             ) : (

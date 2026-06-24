@@ -5,9 +5,13 @@ export default defineConfig({
   base: '/_authgate/',
   plugins: [react()],
   server: {
+    port: 5174,
     proxy: {
       '/_authgate/api': 'http://localhost:8080',
     },
+  },
+  optimizeDeps: {
+    include: ['recharts'],
   },
   build: {
     outDir: 'dist',

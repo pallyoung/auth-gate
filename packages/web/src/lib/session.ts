@@ -39,6 +39,12 @@ export async function login(username: string, password: string) {
   return session
 }
 
+export async function setup(username: string, password: string) {
+  const session = await authApi.setup(username, password)
+  setSession(session)
+  return session
+}
+
 export async function logout() {
   try {
     await authApi.logout()
@@ -54,6 +60,7 @@ export function useSession() {
     notice: SessionNoticeState
     loading: boolean
     bootstrapping: boolean
+    setupRequired: boolean | null
   }>(() => {
     const token = getSessionToken()
     const user = getSessionUser()
@@ -64,6 +71,7 @@ export function useSession() {
       notice: getSessionNotice(),
       loading: Boolean(token && !user),
       bootstrapping: Boolean(token),
+      setupRequired: null,
     }
   })
 
@@ -71,13 +79,33 @@ export function useSession() {
     const token = getSessionToken()
     const user = getSessionUser()
 
-    setState((current) => ({
-      token,
-      user,
-      notice: getSessionNotice(),
-      loading: Boolean(token && !user),
-      bootstrapping: current.bootstrapping && Boolean(token),
-    }))
+    setState((current) => {
+      const next = {
+        token,
+        user,
+        notice: getSessionNotice(),
+        loading: Boolean(token && !user),
+        bootstrapping: current.bootstrapping && Boolean(token),
+        setupRequired: token ? false : current.setupRequired,
+      }
+
+      // When the token is cleared (e.g. another tab logged out) and we
+      // haven't checked setup status yet, kick off the check so the UI
+      // can decide between showing the login page or the setup page.
+      if (!token && current.setupRequired === null) {
+        authApi.setupStatus()
+          .then((res) => {
+            if (!getSessionToken()) {
+              setState((s) => ({ ...s, setupRequired: res.setup_required }))
+            }
+          })
+          .catch(() => {
+            setState((s) => ({ ...s, setupRequired: false }))
+          })
+      }
+
+      return next
+    })
   }), [])
 
   React.useEffect(() => {
@@ -91,7 +119,21 @@ export function useSession() {
         notice: getSessionNotice(),
         loading: false,
         bootstrapping: false,
+        setupRequired: null,
       })
+
+      // Check if setup is required when there's no token
+      authApi.setupStatus()
+        .then((res) => {
+          if (!getSessionToken()) {
+            setState((current) => ({ ...current, setupRequired: res.setup_required }))
+          }
+        })
+        .catch(() => {
+          // On error, assume setup is not required (fallback to login)
+          setState((current) => ({ ...current, setupRequired: false }))
+        })
+
       return
     }
 
@@ -123,6 +165,7 @@ export function useSession() {
           notice,
           loading: false,
           bootstrapping: false,
+          setupRequired: false,
         })
       })
 
@@ -149,6 +192,7 @@ export function useSession() {
   return {
     ...state,
     login,
+    setup,
     logout,
     clearNotice,
   }

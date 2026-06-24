@@ -7,6 +7,11 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type SetupRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required,min=8"`
+}
+
 type LoginResponse struct {
 	Token       string      `json:"token"`
 	User        User        `json:"user"`

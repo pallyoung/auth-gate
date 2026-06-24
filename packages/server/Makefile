@@ -11,10 +11,10 @@ build: web-build
 	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 
 run: build
-	$(BUILD_DIR)/$(BINARY)
+	$(BUILD_DIR)/$(BINARY) start
 
 dev:
-	DEBUG=true go run ./cmd/server
+	DEBUG=true air
 
 web-deps:
 	cd $(WEB_DIR) && npm install

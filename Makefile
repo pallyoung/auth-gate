@@ -41,7 +41,12 @@ run:
 		./scripts/$(RUN_SCRIPT); \
 	fi
 
-dev: run
+dev:
+	@if [ "$(OS)" = "Windows_NT" ]; then \
+		powershell -ExecutionPolicy Bypass -File scripts/dev.ps1; \
+	else \
+		./scripts/dev.sh; \
+	fi
 
 deploy:
 	@if [ "$(OS)" = "Windows_NT" ]; then \

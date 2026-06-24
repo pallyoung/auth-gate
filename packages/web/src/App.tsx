@@ -1,5 +1,6 @@
 import React from 'react'
 import { LoginPage } from './pages/LoginPage'
+import { SetupPage } from './pages/SetupPage'
 import { AccessLoginPage } from './pages/AccessLoginPage'
 import { Layout } from './components/Layout'
 import { RoutesPage } from './pages/RoutesPage'
@@ -35,7 +36,7 @@ function useRoute() {
 }
 
 export default function App() {
-  const { user, token, loading, bootstrapping, notice, login, logout, clearNotice } = useSession()
+  const { user, token, loading, bootstrapping, notice, setupRequired, login, setup, logout, clearNotice } = useSession()
   const path = useRoute()
   const [pathname, search = ''] = path.split('?')
   const searchParams = React.useMemo(() => new URLSearchParams(search), [search])
@@ -70,6 +71,18 @@ export default function App() {
   }
 
   if (!token || !user) {
+    if (setupRequired === null) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[var(--bg-page)]">
+          <div className="animate-spin w-8 h-8 border-2 border-[var(--primary-500)] border-t-transparent rounded-full" />
+        </div>
+      )
+    }
+
+    if (setupRequired) {
+      return <SetupPage onSetup={setup} />
+    }
+
     return <LoginPage onLogin={login} sessionNotice={notice} onSessionNoticeShown={clearNotice} />
   }
 

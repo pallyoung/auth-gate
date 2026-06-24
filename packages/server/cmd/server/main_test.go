@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,7 +46,7 @@ func TestBuildEngine_ServesIndexWithoutSwallowingProxyPaths(t *testing.T) {
 		t.Fatalf("WriteFile(favicon.ico) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil)
 
 	controlPlaneReq := httptest.NewRequest(http.MethodGet, controlPlaneBasePath, nil)
 	controlPlaneResp := httptest.NewRecorder()
@@ -108,7 +106,7 @@ func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
 		t.Fatalf("WriteFile(index.html) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil)
 
 	token, err := auth.GenerateToken("admin-1", "admin", store.RoleAdmin)
 	if err != nil {
@@ -177,7 +175,7 @@ func TestBuildEngine_LoginResponseReportsCertificateFeatureAvailability(t *testi
 				t.Fatalf("WriteFile(index.html) error = %v", err)
 			}
 
-			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc, nil)
+			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc, nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, controlPlaneAPIBasePath+"/auth/login", strings.NewReader(`{"username":"admin","password":"password123"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -244,47 +242,5 @@ func TestConfigureJWTSecret_UsesConfigValue(t *testing.T) {
 	}
 	if _, err := auth.ValidateTokenWithSecret(token, []byte("config-secret")); err != nil {
 		t.Fatalf("ValidateTokenWithSecret() error = %v", err)
-	}
-}
-
-func TestEnsureBootstrapAdmin_LogsGeneratedPassword(t *testing.T) {
-	db, cleanup := newTestSQLite(t)
-	defer cleanup()
-
-	if err := os.Unsetenv("BOOTSTRAP_ADMIN_PASSWORD"); err != nil {
-		t.Fatalf("Unsetenv() error = %v", err)
-	}
-
-	var buf bytes.Buffer
-	previousOutput := log.Writer()
-	log.SetOutput(&buf)
-	t.Cleanup(func() {
-		log.SetOutput(previousOutput)
-	})
-
-	if err := ensureBootstrapAdmin(db, config.AuthConfig{}); err != nil {
-		t.Fatalf("ensureBootstrapAdmin() error = %v", err)
-	}
-
-	logs := buf.String()
-	if !strings.Contains(logs, "Auth Gate Admin Console") {
-		t.Fatalf("ensureBootstrapAdmin() logs = %q", logs)
-	}
-	if !strings.Contains(logs, "URL:   http://localhost:8080/_authgate") {
-		t.Fatalf("ensureBootstrapAdmin() logs = %q", logs)
-	}
-	if !strings.Contains(logs, "Username: admin") {
-		t.Fatalf("ensureBootstrapAdmin() logs = %q", logs)
-	}
-	if !strings.Contains(logs, "Password: ") {
-		t.Fatalf("ensureBootstrapAdmin() logs = %q", logs)
-	}
-
-	user, err := db.GetUserByUsername("admin")
-	if err != nil {
-		t.Fatalf("GetUserByUsername() error = %v", err)
-	}
-	if user.Username != "admin" {
-		t.Fatalf("user.Username = %q, want %q", user.Username, "admin")
 	}
 }

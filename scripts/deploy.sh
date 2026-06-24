@@ -135,7 +135,7 @@ kill_port_8080
 # Start service in background
 echo "[4/4] Starting service..."
 cd "$DIST_DIR"
-./auth-gate > auth-gate.log 2>&1 &
+./auth-gate start > auth-gate.log 2>&1 &
 AUTH_GATE_PID=$!
 sleep 2
 

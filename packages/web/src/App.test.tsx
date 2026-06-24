@@ -445,6 +445,13 @@ describe('App', () => {
         })
       }
 
+      if (url === '/_authgate/api/auth/setup-status') {
+        return Promise.resolve(new Response(JSON.stringify({ setup_required: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+      }
+
       throw new Error(`Unhandled fetch request: ${url}`)
     })
 

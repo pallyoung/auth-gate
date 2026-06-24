@@ -25,4 +25,4 @@ COPY packages/server/configs/config.yaml ./
 
 EXPOSE 8080
 
-ENTRYPOINT ["./auth-gate"]
+ENTRYPOINT ["./auth-gate", "start", "-f"]

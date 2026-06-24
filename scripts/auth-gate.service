@@ -7,7 +7,7 @@ Type=simple
 User=auth-gate
 Group=auth-gate
 WorkingDirectory=/opt/auth-gate
-ExecStart=/opt/auth-gate/auth-gate
+ExecStart=/opt/auth-gate/auth-gate start
 Restart=always
 RestartSec=5
 

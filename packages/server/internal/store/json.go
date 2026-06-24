@@ -658,6 +658,20 @@ func (s *JSONStore) EnsureAdmin(username, password string) (bool, error) {
 	return false, nil
 }
 
+// HasAdminUsers reports whether the store contains at least one admin user.
+func (s *JSONStore) HasAdminUsers() (bool, error) {
+	users, err := s.ListUsers()
+	if err != nil {
+		return false, err
+	}
+	for _, u := range users {
+		if u.Role == RoleAdmin {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func normalizeAuthRule(r *AuthRule) {
 	r.Type = strings.TrimSpace(r.Type)
 	r.Config.HeaderName = strings.TrimSpace(r.Config.HeaderName)

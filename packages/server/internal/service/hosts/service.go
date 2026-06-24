@@ -339,8 +339,11 @@ func (s *Service) ActivateProfile(id string) (*store.HostProfile, error) {
 	}
 
 	if err := s.renderer.Apply(content); err != nil {
+		if errors.Is(err, syshosts.ErrPermissionDenied) {
+			return nil, newError(ErrCodePermissionDenied, err.Error(), err)
+		}
 		if errors.Is(err, syshosts.ErrMarkerMissing) {
-			return nil, newError(ErrCodeMarkerMissing, "managed marker block is missing in /etc/hosts; append the markers manually before activating", err)
+			return nil, newError(ErrCodeMarkerMissing, "managed marker block is missing in hosts file; append the markers manually before activating", err)
 		}
 		return nil, newError(ErrCodeRenderFailure, "failed to apply hosts file change", err)
 	}

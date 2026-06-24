@@ -16,6 +16,13 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
     onChange({ ...filters, [key]: value })
   }
 
+  const authResultOptions = [
+    { value: '', label: t('filters.all') },
+    { value: 'pass', label: t('filters.pass') },
+    { value: 'fail', label: t('filters.fail') },
+    { value: 'none', label: t('filters.none') },
+  ]
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div>
@@ -56,14 +63,10 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
           {t('filters.authResult')}
         </label>
         <Select
+          options={authResultOptions}
           value={filters.auth_result || ''}
           onChange={(e) => handleChange('auth_result', e.target.value || undefined)}
-        >
-          <option value="">{t('filters.all')}</option>
-          <option value="pass">{t('filters.pass')}</option>
-          <option value="fail">{t('filters.fail')}</option>
-          <option value="none">{t('filters.none')}</option>
-        </Select>
+        />
       </div>
     </div>
   )

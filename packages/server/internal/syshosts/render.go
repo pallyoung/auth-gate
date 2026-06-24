@@ -20,8 +20,6 @@ const (
 	BeginMarker = "# BEGIN AUTH-GATE MANAGED BLOCK"
 	// EndMarker marks the end of the managed region in the file.
 	EndMarker = "# END AUTH-GATE MANAGED BLOCK"
-	// DefaultHostsPath is the default file the Renderer targets.
-	DefaultHostsPath = "/etc/hosts"
 )
 
 // ErrMarkerMissing is returned when the file does not contain a valid managed
@@ -29,6 +27,10 @@ const (
 // or the end marker appears before the begin marker). The renderer refuses to
 // write a fresh block over hand-written content.
 var ErrMarkerMissing = errors.New("syshosts: managed marker block missing or inconsistent")
+
+// ErrPermissionDenied is returned when the process lacks write access to the
+// hosts file (e.g. not running as Administrator on Windows).
+var ErrPermissionDenied = errors.New("syshosts: permission denied")
 
 // Renderer rewrites a marker-protected region of a file. It is safe for
 // concurrent use only when Now is a function whose return value does not
@@ -62,6 +64,10 @@ func NewRenderer(dataDir string) *Renderer {
 func (r *Renderer) Apply(content string) error {
 	if r.HostsPath == "" {
 		return errors.New("syshosts: HostsPath is empty")
+	}
+
+	if err := checkWriteAccess(r.HostsPath); err != nil {
+		return fmt.Errorf("%w: %v", ErrPermissionDenied, err)
 	}
 
 	existing, err := os.ReadFile(r.HostsPath)
@@ -190,8 +196,9 @@ func (r *Renderer) pruneBackups() error {
 }
 
 // writeAtomic writes data to a temp file adjacent to HostsPath, fsyncs it,
-// closes it, and renames it over HostsPath. On any failure the temp file
-// is left behind for the next Apply or manual cleanup.
+// closes it, and replaces HostsPath. The actual replacement is delegated to
+// writeReplace which handles platform-specific quirks (e.g. Windows file
+// locking by the DNS Client service).
 func (r *Renderer) writeAtomic(data []byte) error {
 	tmp := r.HostsPath + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
@@ -209,7 +216,22 @@ func (r *Renderer) writeAtomic(data []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, r.HostsPath)
+	return writeReplace(tmp, r.HostsPath)
+}
+
+// renameOrCopy tries os.Rename first, falling back to a copy+remove if
+// rename fails (e.g. cross-device or platform restrictions).
+func renameOrCopy(tmp, target string) error {
+	if err := os.Rename(tmp, target); err == nil {
+		return nil
+	}
+
+	data, err := os.ReadFile(tmp)
+	if err != nil {
+		return err
+	}
+	_ = os.Remove(tmp)
+	return os.WriteFile(target, data, 0644)
 }
 
 func (r *Renderer) now() time.Time {

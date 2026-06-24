@@ -1,0 +1,20 @@
+# Air config for auth-gate development
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/auth-gate.exe ./cmd/server"
+  bin = "./tmp/auth-gate.exe"
+  full_bin = "./tmp/auth-gate.exe start -f"
+  include_ext = ["go", "yaml"]
+  exclude_dir = ["tmp", "bin", "data"]
+  exclude_regex = ["_test\\.go$"]
+  delay = 500
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

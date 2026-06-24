@@ -137,6 +137,10 @@ export interface LoginResponse {
   permissions: Permissions
 }
 
+export interface SetupStatusResponse {
+  setup_required: boolean
+}
+
 export interface RouteAccessLoginResponse {
   next: string
   user: SessionUser

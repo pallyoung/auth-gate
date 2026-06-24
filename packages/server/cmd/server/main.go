@@ -32,7 +32,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const bootstrapAdminUsername = "admin"
 const controlPlaneBasePath = "/_authgate"
 const controlPlaneAPIBasePath = controlPlaneBasePath + "/api"
 
@@ -120,6 +119,8 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 
 	// Public routes
 	engine.POST(controlPlaneAPIBasePath+"/auth/login", adminhttp.LoginRoute(db, certSvc))
+	engine.GET(controlPlaneAPIBasePath+"/auth/setup-status", adminhttp.SetupStatusRoute(db))
+	engine.POST(controlPlaneAPIBasePath+"/auth/setup", adminhttp.SetupRoute(db, certSvc))
 	engine.POST(controlPlaneAPIBasePath+"/access/login", proxyhttp.AccessLoginRoute(routerMgr, db))
 	engine.POST(controlPlaneAPIBasePath+"/access/logout", proxyhttp.AccessLogoutRoute())
 
@@ -248,47 +249,6 @@ func configureJWTSecret(cfg config.AuthConfig) {
 	}
 }
 
-func ensureBootstrapAdmin(db store.Store, cfg config.AuthConfig) error {
-	password := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
-	configuredPassword := true
-
-	if strings.TrimSpace(password) == "" {
-		password = cfg.BootstrapPasswordValue()
-	}
-	if strings.TrimSpace(password) == "" {
-		generatedPassword, err := generateCredential(24)
-		if err != nil {
-			return err
-		}
-		password = generatedPassword
-		configuredPassword = false
-	}
-
-	created, err := db.EnsureAdmin(bootstrapAdminUsername, password)
-	if err != nil {
-		return err
-	}
-	if !created {
-		return nil
-	}
-
-	if configuredPassword {
-		log.Printf("Bootstrap admin created: username=%s (using configured password)", bootstrapAdminUsername)
-		return nil
-	}
-
-	log.Printf("")
-	log.Printf("========================================")
-	log.Printf("  Auth Gate Admin Console")
-	log.Printf("========================================")
-	log.Printf("  URL:   http://localhost:8080/_authgate")
-	log.Printf("  Username: %s", bootstrapAdminUsername)
-	log.Printf("  Password: %s", password)
-	log.Printf("========================================")
-	log.Printf("")
-	return nil
-}
-
 func generateCredential(size int) (string, error) {
 	buf := make([]byte, size)
 	if _, err := rand.Read(buf); err != nil {
@@ -297,8 +257,16 @@ func generateCredential(size int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func main() {
-	ensureDataDir()
+// startForeground runs the Auth Gate server in the foreground (blocking).
+// This is the original main() logic, now callable from the CLI "start --foreground" command.
+func startForeground() {
+	os.MkdirAll(dataDir, 0755)
+
+	// Write PID file so stop/status can find us.
+	if err := writePIDFile(); err != nil {
+		log.Printf("Warning: failed to write PID file: %v", err)
+	}
+	defer removePIDFile()
 
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
@@ -320,10 +288,6 @@ func main() {
 	}
 	accessLogStore.StartFlusher(30 * time.Second)
 	defer accessLogStore.StopFlusher()
-
-	if err := ensureBootstrapAdmin(db, cfg.Auth); err != nil {
-		log.Printf("Warning: failed to ensure admin: %v", err)
-	}
 
 	routerMgr := router.NewManager(db)
 
@@ -389,6 +353,10 @@ func main() {
 	}
 
 	log.Printf("Auth Gate stopped gracefully")
+}
+
+func main() {
+	Execute()
 }
 
 func ensureDataDir() {

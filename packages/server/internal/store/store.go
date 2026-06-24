@@ -28,6 +28,7 @@ type Store interface {
 	DeleteUser(id string) error
 	VerifyPassword(user *User, password string) bool
 	EnsureAdmin(username, password string) (bool, error)
+	HasAdminUsers() (bool, error)
 
 	// Certificates
 	ListCertificates() ([]Certificate, error)

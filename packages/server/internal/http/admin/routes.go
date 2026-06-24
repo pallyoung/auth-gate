@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -154,6 +155,71 @@ func LoginRoute(db store.Store, certSvc CertService) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, dto.LoginResponseFromStore(session.Token, session.User, session.Permissions, certificatesEnabled))
+	}
+}
+
+// SetupStatusRoute returns whether the initial admin setup is required.
+func SetupStatusRoute(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		hasAdmin, err := db.HasAdminUsers()
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "internal_error", "failed to check setup status")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"setup_required": !hasAdmin})
+	}
+}
+
+// SetupRoute creates the first admin user when no admin exists yet.
+func SetupRoute(db store.Store, certSvc CertService) gin.HandlerFunc {
+	certificatesEnabled := certSvc != nil
+
+	return func(c *gin.Context) {
+		hasAdmin, err := db.HasAdminUsers()
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "internal_error", "failed to check setup status")
+			return
+		}
+		if hasAdmin {
+			writeError(c, http.StatusConflict, "setup_already_completed", "admin user already exists")
+			return
+		}
+
+		var req dto.SetupRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "invalid request")
+			return
+		}
+
+		user := &store.User{
+			Username: strings.TrimSpace(req.Username),
+			Role:     store.RoleAdmin,
+			Enabled:  true,
+		}
+		if user.Username == "" {
+			writeError(c, http.StatusBadRequest, "invalid_request", "username is required")
+			return
+		}
+		hash, err := store.HashPassword(req.Password)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "internal_error", "failed to hash password")
+			return
+		}
+		user.PasswordHash = hash
+
+		if err := db.CreateUser(user); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+
+		token, err := auth.GenerateControlPlaneToken(user.ID, user.Username, user.Role)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "token_generation_failed", "failed to generate token")
+			return
+		}
+
+		permissions := store.GetPermissions(user.Role)
+		c.JSON(http.StatusOK, dto.LoginResponseFromStore(token, *user, permissions, certificatesEnabled))
 	}
 }
 
