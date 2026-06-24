@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: packages/server/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: packages/web/package-lock.json
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build frontend
+        working-directory: packages/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build binaries
+        working-directory: packages/server
+        run: |
+          mkdir -p ../../dist
+
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-linux-amd64 ./cmd/server
+
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-linux-arm64 ./cmd/server
+
+          # macOS amd64
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-darwin-amd64 ./cmd/server
+
+          # macOS arm64
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-darwin-arm64 ./cmd/server
+
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-windows-amd64.exe ./cmd/server
+
+          # Windows arm64
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/auth-gate-windows-arm64.exe ./cmd/server
+
+      - name: Package release
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          mkdir -p dist/release
+
+          # Create packages for Unix platforms (tar.gz)
+          for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            PKG_DIR="auth-gate-${VERSION}-${platform}"
+            mkdir -p "$PKG_DIR"
+
+            # Copy binary
+            cp "dist/auth-gate-${platform}" "$PKG_DIR/auth-gate"
+            chmod +x "$PKG_DIR/auth-gate"
+
+            # Copy web files
+            cp -r packages/web/dist "$PKG_DIR/web"
+
+            # Copy config files
+            cp packages/server/configs/config.yaml "$PKG_DIR/config.yaml.example"
+            cp scripts/auth-gate.service "$PKG_DIR/"
+            cp install.sh "$PKG_DIR/"
+
+            # Create tar.gz
+            tar -czvf "dist/release/${PKG_DIR}.tar.gz" "$PKG_DIR"
+
+            # Cleanup
+            rm -rf "$PKG_DIR"
+          done
+
+          # Create packages for Windows (zip)
+          for platform in windows-amd64 windows-arm64; do
+            PKG_DIR="auth-gate-${VERSION}-${platform}"
+            mkdir -p "$PKG_DIR"
+
+            # Copy binary
+            cp "dist/auth-gate-${platform}.exe" "$PKG_DIR/auth-gate.exe"
+
+            # Copy web files
+            cp -r packages/web/dist "$PKG_DIR/web"
+
+            # Copy config files
+            cp packages/server/configs/config.yaml "$PKG_DIR/config.yaml.example"
+            cp install.ps1 "$PKG_DIR/"
+
+            # Create zip
+            zip -r "dist/release/${PKG_DIR}.zip" "$PKG_DIR"
+
+            # Cleanup
+            rm -rf "$PKG_DIR"
+          done
+
+      - name: Generate checksums
+        working-directory: dist/release
+        run: |
+          sha256sum *.tar.gz *.zip > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          body: |
+            ## Downloads
+
+            | Platform | Architecture | File |
+            |----------|--------------|------|
+            | Linux | x86_64 | `auth-gate-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz` |
+            | Linux | ARM64 | `auth-gate-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz` |
+            | macOS | Intel | `auth-gate-${{ steps.get_version.outputs.VERSION }}-darwin-amd64.tar.gz` |
+            | macOS | Apple Silicon | `auth-gate-${{ steps.get_version.outputs.VERSION }}-darwin-arm64.tar.gz` |
+            | Windows | x86_64 | `auth-gate-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip` |
+            | Windows | ARM64 | `auth-gate-${{ steps.get_version.outputs.VERSION }}-windows-arm64.zip` |
+
+            ## Quick Install
+
+            **Linux / macOS:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/pallyoung/auth-gate/main/install.sh | sudo bash
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            Invoke-WebRequest -Uri "https://github.com/pallyoung/auth-gate/releases/latest/download/auth-gate-windows-amd64.zip" -OutFile "auth-gate.zip"
+            Expand-Archive -Path "auth-gate.zip" -DestinationPath "auth-gate"
+            cd auth-gate-*
+            .\install.ps1
+            ```
+
+            See [INSTALL.md](docs/INSTALL.md) for detailed instructions.
+          files: |
+            dist/release/*.tar.gz
+            dist/release/*.zip
+            dist/release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

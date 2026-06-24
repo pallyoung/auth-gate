@@ -4,14 +4,18 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/etc/auth-gate
-ExecStart=/usr/local/bin/auth-gate
+User=auth-gate
+Group=auth-gate
+WorkingDirectory=/opt/auth-gate
+ExecStart=/opt/auth-gate/auth-gate
 Restart=always
 RestartSec=5
 
-# Environment
-EnvironmentFile=/etc/auth-gate/env
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/auth-gate
 
 [Install]
 WantedBy=multi-user.target
