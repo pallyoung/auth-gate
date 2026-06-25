@@ -236,7 +236,7 @@ func TestCreateAuthRule_RejectsMissingRoute(t *testing.T) {
 	}
 }
 
-func TestCreateAuthRule_RejectsDuplicateRouteRule(t *testing.T) {
+func TestCreateAuthRule_AllowsMultipleRulesPerRoute(t *testing.T) {
 	db := newTestStore(t)
 	route := createTestRoute(t, db, "route-1")
 
@@ -249,14 +249,21 @@ func TestCreateAuthRule_RejectsDuplicateRouteRule(t *testing.T) {
 		t.Fatalf("CreateAuthRule(first) error = %v", err)
 	}
 
-	err := db.CreateAuthRule(&AuthRule{
+	if err := db.CreateAuthRule(&AuthRule{
 		ID:      "rule-2",
 		RouteID: route.ID,
-		Type:    "bearer",
-		Config:  AuthConfig{Secret: "secret-2"},
-	})
-	if err == nil {
-		t.Fatal("CreateAuthRule(second) error = nil, want duplicate-route rejection")
+		Type:    "basic",
+		Config:  AuthConfig{Username: "user", Password: "pass"},
+	}); err != nil {
+		t.Fatalf("CreateAuthRule(second) error = %v, want nil", err)
+	}
+
+	rules, err := db.ListAuthRules()
+	if err != nil {
+		t.Fatalf("ListAuthRules() error = %v", err)
+	}
+	if len(rules) != 2 {
+		t.Fatalf("len(rules) = %d, want 2", len(rules))
 	}
 }
 
@@ -330,5 +337,90 @@ func TestListExpiringLocalCertificates(t *testing.T) {
 	}
 	if len(certs) != 1 || certs[0].ID != "cert-expiring" {
 		t.Fatalf("expected 1 expiring cert, got %d", len(certs))
+	}
+}
+
+func TestRoute_PersistsHeaderManipulationFields(t *testing.T) {
+	db := newTestStore(t)
+
+	route := &Route{
+		ID:         "hdr-route",
+		Name:       "header-route",
+		PathPrefix: "/api",
+		Backend:    "http://backend:8080",
+		Enabled:    true,
+		SetRequestHeaders:     map[string]string{"X-Token": "abc", "Authorization": "Bearer tok"},
+		RemoveRequestHeaders:  []string{"Cookie", "X-Debug"},
+		AddResponseHeaders:    map[string]string{"X-Request-Id": "req-1"},
+		RemoveResponseHeaders: []string{"X-Powered-By"},
+	}
+	if err := db.CreateRoute(route); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+
+	got, err := db.GetRoute("hdr-route")
+	if err != nil {
+		t.Fatalf("GetRoute() error = %v", err)
+	}
+
+	// SetRequestHeaders
+	if len(got.SetRequestHeaders) != 2 {
+		t.Fatalf("len(SetRequestHeaders) = %d, want 2", len(got.SetRequestHeaders))
+	}
+	if got.SetRequestHeaders["X-Token"] != "abc" {
+		t.Errorf("SetRequestHeaders[X-Token] = %q, want %q", got.SetRequestHeaders["X-Token"], "abc")
+	}
+
+	// RemoveRequestHeaders
+	if len(got.RemoveRequestHeaders) != 2 {
+		t.Fatalf("len(RemoveRequestHeaders) = %d, want 2", len(got.RemoveRequestHeaders))
+	}
+	if got.RemoveRequestHeaders[0] != "Cookie" {
+		t.Errorf("RemoveRequestHeaders[0] = %q, want %q", got.RemoveRequestHeaders[0], "Cookie")
+	}
+
+	// AddResponseHeaders
+	if len(got.AddResponseHeaders) != 1 {
+		t.Fatalf("len(AddResponseHeaders) = %d, want 1", len(got.AddResponseHeaders))
+	}
+	if got.AddResponseHeaders["X-Request-Id"] != "req-1" {
+		t.Errorf("AddResponseHeaders[X-Request-Id] = %q, want %q", got.AddResponseHeaders["X-Request-Id"], "req-1")
+	}
+
+	// RemoveResponseHeaders
+	if len(got.RemoveResponseHeaders) != 1 {
+		t.Fatalf("len(RemoveResponseHeaders) = %d, want 1", len(got.RemoveResponseHeaders))
+	}
+	if got.RemoveResponseHeaders[0] != "X-Powered-By" {
+		t.Errorf("RemoveResponseHeaders[0] = %q, want %q", got.RemoveResponseHeaders[0], "X-Powered-By")
+	}
+
+	// Update with new header config
+	if err := db.UpdateRoute(&Route{
+		ID:                    "hdr-route",
+		Name:                  "header-route",
+		PathPrefix:            "/api",
+		Backend:               "http://backend:8080",
+		Enabled:               true,
+		SetRequestHeaders:     map[string]string{"X-New": "val"},
+		RemoveRequestHeaders:  nil,
+		AddResponseHeaders:    nil,
+		RemoveResponseHeaders: []string{"Server"},
+	}); err != nil {
+		t.Fatalf("UpdateRoute() error = %v", err)
+	}
+
+	got2, err := db.GetRoute("hdr-route")
+	if err != nil {
+		t.Fatalf("GetRoute() after update error = %v", err)
+	}
+	if len(got2.SetRequestHeaders) != 1 || got2.SetRequestHeaders["X-New"] != "val" {
+		t.Errorf("updated SetRequestHeaders = %v, want map[X-New:val]", got2.SetRequestHeaders)
+	}
+	if len(got2.RemoveRequestHeaders) != 0 {
+		t.Errorf("updated RemoveRequestHeaders = %v, want empty", got2.RemoveRequestHeaders)
+	}
+	if len(got2.RemoveResponseHeaders) != 1 || got2.RemoveResponseHeaders[0] != "Server" {
+		t.Errorf("updated RemoveResponseHeaders = %v, want [Server]", got2.RemoveResponseHeaders)
 	}
 }

@@ -71,7 +71,7 @@ describe('AuthRulesPage permissions', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByText(
-        'Add a rule to require API keys, bearer tokens, basic auth, or gateway-managed login before requests are forwarded.'
+        'Add a rule to require API keys, basic auth, or gateway-managed login before requests are forwarded.'
       )
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create First Rule' })).not.toBeInTheDocument()
@@ -168,7 +168,7 @@ describe('AuthRulesPage permissions', () => {
     expect(screen.queryByText('0 active rule definitions')).not.toBeInTheDocument()
     expect(screen.queryByText('Protected Routes')).not.toBeInTheDocument()
     expect(screen.queryByText('API Key Rules')).not.toBeInTheDocument()
-    expect(screen.queryByText('Bearer + Basic')).not.toBeInTheDocument()
+    expect(screen.queryByText('Basic Auth Rules')).not.toBeInTheDocument()
   })
 
   it('shows session expiry guidance instead of the raw invalid token error when loading auth rules fails', async () => {
@@ -306,8 +306,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'bearer',
-        config: {},
+        type: 'basic',
+        config: { username: 'service-user' },
         created_at: '',
         updated_at: '',
       },
@@ -346,8 +346,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'bearer',
-        config: {},
+        type: 'basic',
+        config: { username: 'service-user' },
         whitelist: ['127.0.0.1/32', '10.0.0.0/8'],
         rate_limit: 15,
         burst: 30,
@@ -385,8 +385,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'bearer',
-        config: {},
+        type: 'basic',
+        config: { username: 'service-user' },
         created_at: '',
         updated_at: '',
       },
@@ -429,7 +429,7 @@ describe('AuthRulesPage permissions', () => {
     expect(window.location.hash).toBe('#/')
   })
 
-  it('shows a duplicate rule guidance message instead of the raw API error', async () => {
+  it('shows a store failure guidance message instead of the raw API error', async () => {
     const user = userEvent.setup()
 
     sessionUser.id = 'editor-1'
@@ -455,7 +455,7 @@ describe('AuthRulesPage permissions', () => {
       },
     ])
     vi.mocked(authRulesApi.create).mockRejectedValue(
-      new ApiError('route already has an auth rule', 400, 'duplicate_route_auth_rule')
+      new ApiError('failed to create auth rule', 500, 'auth_rule_store_failure')
     )
 
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
@@ -471,7 +471,7 @@ describe('AuthRulesPage permissions', () => {
 
     expect(
       await within(dialog).findByText(
-        'This route already has an auth rule. Edit the existing policy instead of creating another one.'
+        'The auth rule change could not be saved. Try again in a moment.'
       )
     ).toBeInTheDocument()
   })
@@ -624,7 +624,7 @@ describe('AuthRulesPage permissions', () => {
       },
     ])
     vi.mocked(authRulesApi.create).mockRejectedValue(
-      new ApiError('route already has an auth rule', 400, 'duplicate_route_auth_rule')
+      new ApiError('failed to create auth rule', 500, 'auth_rule_store_failure')
     )
 
     const view = await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
@@ -640,7 +640,7 @@ describe('AuthRulesPage permissions', () => {
 
     expect(
       await within(dialog).findByText(
-        'This route already has an auth rule. Edit the existing policy instead of creating another one.'
+        'The auth rule change could not be saved. Try again in a moment.'
       )
     ).toBeInTheDocument()
 
@@ -649,11 +649,11 @@ describe('AuthRulesPage permissions', () => {
     })
 
     expect(
-      within(dialog).getByText('该路由已经配置了鉴权规则。请改为编辑现有策略，而不是再创建一条。')
+      within(dialog).getByText('无法保存此次鉴权规则变更。请稍后重试。')
     ).toBeInTheDocument()
     expect(
       screen.queryByText(
-        'This route already has an auth rule. Edit the existing policy instead of creating another one.'
+        'The auth rule change could not be saved. Try again in a moment.'
       )
     ).not.toBeInTheDocument()
   })
@@ -734,8 +734,8 @@ describe('AuthRulesPage permissions', () => {
         {
           id: 'rule-2',
           route_id: 'route-2',
-          type: 'bearer',
-          config: {},
+          type: 'basic',
+          config: { username: 'service-user' },
           created_at: '',
           updated_at: '',
         },

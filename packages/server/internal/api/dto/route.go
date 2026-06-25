@@ -24,8 +24,15 @@ type Route struct {
 	RetryAttempts int             `json:"retry_attempts,omitempty"`
 	Backends      []store.Backend `json:"backends,omitempty"`
 	PathMatchMode string          `json:"path_match_mode,omitempty"`
+	HeaderName    string          `json:"header_name,omitempty"`
+	HeaderValue   string          `json:"header_value,omitempty"`
 	RewriteTarget string          `json:"rewrite_target,omitempty"`
 	RedirectCode  int             `json:"redirect_code,omitempty"`
+	// Header manipulation
+	SetRequestHeaders     map[string]string `json:"set_request_headers,omitempty"`
+	RemoveRequestHeaders  []string          `json:"remove_request_headers,omitempty"`
+	AddResponseHeaders    map[string]string `json:"add_response_headers,omitempty"`
+	RemoveResponseHeaders []string          `json:"remove_response_headers,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
 }
@@ -47,8 +54,15 @@ type RouteCreateRequest struct {
 	RetryAttempts int             `json:"retry_attempts"`
 	Backends      []store.Backend `json:"backends"`
 	PathMatchMode string          `json:"path_match_mode"`
+	HeaderName    string          `json:"header_name"`
+	HeaderValue   string          `json:"header_value"`
 	RewriteTarget string          `json:"rewrite_target"`
 	RedirectCode  int             `json:"redirect_code"`
+	// Header manipulation
+	SetRequestHeaders     map[string]string `json:"set_request_headers"`
+	RemoveRequestHeaders  []string          `json:"remove_request_headers"`
+	AddResponseHeaders    map[string]string `json:"add_response_headers"`
+	RemoveResponseHeaders []string          `json:"remove_response_headers"`
 }
 
 type RouteUpdateRequest struct {
@@ -68,8 +82,15 @@ type RouteUpdateRequest struct {
 	RetryAttempts *int             `json:"retry_attempts,omitempty"`
 	Backends      *[]store.Backend `json:"backends,omitempty"`
 	PathMatchMode *string          `json:"path_match_mode,omitempty"`
+	HeaderName    *string          `json:"header_name,omitempty"`
+	HeaderValue   *string          `json:"header_value,omitempty"`
 	RewriteTarget *string          `json:"rewrite_target,omitempty"`
 	RedirectCode  *int             `json:"redirect_code,omitempty"`
+	// Header manipulation (pointer-to-map/slice for merge semantics)
+	SetRequestHeaders     *map[string]string `json:"set_request_headers,omitempty"`
+	RemoveRequestHeaders  *[]string          `json:"remove_request_headers,omitempty"`
+	AddResponseHeaders    *map[string]string `json:"add_response_headers,omitempty"`
+	RemoveResponseHeaders *[]string          `json:"remove_response_headers,omitempty"`
 }
 
 func RouteResponse(route store.Route) Route {
@@ -91,8 +112,15 @@ func RouteResponse(route store.Route) Route {
 		RetryAttempts: route.RetryAttempts,
 		Backends:      route.Backends,
 		PathMatchMode: route.PathMatchMode,
+		HeaderName:    route.HeaderName,
+		HeaderValue:   route.HeaderValue,
 		RewriteTarget: route.RewriteTarget,
 		RedirectCode:  route.RedirectCode,
+		// Header manipulation
+		SetRequestHeaders:     route.SetRequestHeaders,
+		RemoveRequestHeaders:  route.RemoveRequestHeaders,
+		AddResponseHeaders:    route.AddResponseHeaders,
+		RemoveResponseHeaders: route.RemoveResponseHeaders,
 		CreatedAt:     route.CreatedAt,
 		UpdatedAt:     route.UpdatedAt,
 	}

@@ -442,7 +442,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		host := requestMatchHost(c.Request.Host)
 		path := c.Request.URL.Path
 
-		route := routerMgr.Match(host, path)
+		route := routerMgr.Match(host, path, c.Request.Header)
 		if route == nil {
 			log.Printf("proxy match miss host=%s path=%s", host, path)
 			c.JSON(http.StatusNotFound, httpresponse.ErrorEnvelope{
@@ -470,50 +470,98 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			return
 		}
 
-		// 鉴权
-		if route.AuthRule != nil && route.AuthRule.Type != "none" {
-			if route.AuthRule.Type == "gateway" {
+		// 鉴权（OR 逻辑：任一启用的认证方式通过即放行）
+		authenticated := false
+		if route.AuthConfig != nil && route.AuthConfig.HasAuth() {
+			cfg := route.AuthConfig
+
+			// 1. API Key 认证
+			if !authenticated && cfg.ApiKeyEnabled {
+				keyValue := c.GetHeader(cfg.ApiKeyHeader)
+				if keyValue == "" {
+					keyValue = c.Query("api_key")
+				}
+				if keyValue != "" {
+					for _, key := range route.ApiKeys {
+						if key.Status == "active" && key.Secret == keyValue {
+							// 检查过期
+							expired := false
+							if key.ExpiresAt != nil {
+								if t, err := time.Parse(time.RFC3339, *key.ExpiresAt); err == nil && t.Before(time.Now()) {
+									expired = true
+								}
+							}
+							if !expired {
+								authenticated = true
+								go func(keyID string) {
+									if k, err := routerMgr.DB().GetApiKey(keyID); err == nil {
+										now := time.Now()
+										k.LastUsedAt = &now
+										routerMgr.DB().UpdateApiKey(k)
+									}
+								}(key.ID)
+								break
+							}
+						}
+					}
+				}
+			}
+
+			// 2. Basic Auth 认证
+			if !authenticated && cfg.BasicEnabled {
+				username, password, ok := c.Request.BasicAuth()
+				if ok && username == cfg.BasicUsername && password == cfg.BasicPassword {
+					authenticated = true
+				}
+			}
+
+			// 3. 网关登录认证
+			if !authenticated && cfg.GatewayEnabled {
 				if claims, ok := routeAccessClaims(c, routerMgr.DB()); ok && routeAllowedByClaims(claims, route.ID) {
 					c.Set("jwt_subject", claims.UserID)
 					c.Set("jwt_username", claims.Username)
 					c.Set("jwt_role", claims.Role)
-				} else {
+					authenticated = true
+				}
+			}
+
+			// 全部未通过
+			if !authenticated {
+				if cfg.GatewayEnabled {
 					recordAuthFailure(c, route, http.StatusFound)
 					c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
 					c.Abort()
+				} else {
+					writeUnauthorized(c, route)
+				}
+				return
+			}
+
+			// 速率限制（使用路由级共享策略）
+			if cfg.RateLimit > 0 || cfg.Burst > 0 {
+				allowed, retryAfter := middleware.Check(route.ID, c.ClientIP(), cfg.RateLimit, cfg.Burst, cfg.Whitelist)
+				if !allowed {
+					metrics.RecordRateLimitExceeded(route.ID)
+					recordAuthFailure(c, route, http.StatusTooManyRequests)
+					c.Header("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
+					c.AbortWithStatusJSON(http.StatusTooManyRequests, httpresponse.ErrorEnvelope{
+						Error: httpresponse.ErrorDetail{
+							Code:    "rate_limit_exceeded",
+							Message: "too many requests",
+						},
+					})
 					return
 				}
 			}
-			if !auth.Check(c, route.AuthRule) {
-				writeUnauthorized(c, route)
-				return
-			}
-		}
 
-		// 速率限制
-		if route.AuthRule != nil && (route.AuthRule.RateLimit > 0 || route.AuthRule.Burst > 0) {
-			allowed, retryAfter := middleware.Check(route.ID, c.ClientIP(), route.AuthRule.RateLimit, route.AuthRule.Burst, route.AuthRule.Whitelist)
-			if !allowed {
-				metrics.RecordRateLimitExceeded(route.ID)
-				recordAuthFailure(c, route, http.StatusTooManyRequests)
-				c.Header("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
-				c.AbortWithStatusJSON(http.StatusTooManyRequests, httpresponse.ErrorEnvelope{
-					Error: httpresponse.ErrorDetail{
-						Code:    "rate_limit_exceeded",
-						Message: "too many requests",
-					},
-				})
-				return
+			// CORS：检测 OPTIONS 预检请求并尽早响应
+			if cfg.CORSAllowedOrigins != "" {
+				corsAllowed, preflightAbort := handleCORS(cfg, c)
+				if preflightAbort {
+					return
+				}
+				_ = corsAllowed
 			}
-		}
-
-		// CORS：检测 OPTIONS 预检请求并尽早响应，避免触发需要后端的逻辑
-		if route.AuthRule != nil && route.AuthRule.CORSAllowedOrigins != "" {
-			corsAllowed, preflightAbort := handleCORS(route.AuthRule, c)
-			if preflightAbort {
-				return
-			}
-			_ = corsAllowed // used for allow-origin propagation if needed
 		}
 
 		requestID := uuid.New().String()
@@ -618,6 +666,27 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 					req.URL.Path = newPath
 				}
 			}
+
+			// 自定义请求头：在转发前设置/删除
+			for k, v := range route.SetRequestHeaders {
+				req.Header.Set(k, v)
+			}
+			for _, k := range route.RemoveRequestHeaders {
+				req.Header.Del(k)
+			}
+		}
+
+		// 自定义响应头：在返回客户端前添加/删除
+		if len(route.AddResponseHeaders) > 0 || len(route.RemoveResponseHeaders) > 0 {
+			proxy.ModifyResponse = func(resp *http.Response) error {
+				for k, v := range route.AddResponseHeaders {
+					resp.Header.Set(k, v)
+				}
+				for _, k := range route.RemoveResponseHeaders {
+					resp.Header.Del(k)
+				}
+				return nil
+			}
 		}
 
 		// 错误处理：记录熔断失败
@@ -650,7 +719,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		// 结构化访问日志
 		username, _ := c.Get("jwt_username")
 		authResult := "none"
-		if route.AuthRule != nil && route.AuthRule.Type != "none" {
+		if authenticated {
 			authResult = "pass"
 		}
 
@@ -860,6 +929,10 @@ func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
 	if claims == nil {
 		return false
 	}
+	// 管理员默认拥有所有项目的访问权限
+	if claims.Role == store.RoleAdmin {
+		return true
+	}
 	for _, allowedRouteID := range claims.RouteIDs {
 		if allowedRouteID == routeID {
 			return true
@@ -898,61 +971,64 @@ func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
 func writeUnauthorized(c *gin.Context, route *router.Route) {
 	recordAuthFailure(c, route, http.StatusUnauthorized)
 
-	switch route.AuthRule.Type {
-	case "basic":
-		realm := route.Name
-		if strings.TrimSpace(realm) == "" {
-			realm = route.PathPrefix
+	if route.AuthConfig != nil {
+		// 优先返回 Basic Auth 的 WWW-Authenticate 头
+		if route.AuthConfig.BasicEnabled {
+			realm := route.Name
+			if strings.TrimSpace(realm) == "" {
+				realm = route.PathPrefix
+			}
+			realm = strings.ReplaceAll(realm, `"`, `'`)
+			auth.RequireAuth(fmt.Sprintf(`Basic realm="%s"`, realm))(c)
+			return
 		}
-		realm = strings.ReplaceAll(realm, `"`, `'`)
-		auth.RequireAuth(fmt.Sprintf(`Basic realm="%s"`, realm))(c)
-	case "bearer":
-		auth.RequireAuth("Bearer")(c)
-	case "gateway":
-		c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
-		c.Abort()
-	default:
-		c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
-			Error: httpresponse.ErrorDetail{
-				Code:    "unauthorized",
-				Message: "unauthorized",
-			},
-		})
-		c.Abort()
+		// 有网关登录时重定向
+		if route.AuthConfig.GatewayEnabled {
+			c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
+			c.Abort()
+			return
+		}
 	}
+
+	c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+		Error: httpresponse.ErrorDetail{
+			Code:    "unauthorized",
+			Message: "unauthorized",
+		},
+	})
+	c.Abort()
 }
 
 // handleCORS applies CORS headers for a route.
 // Returns (allowedOrigin, true) if a preflight (OPTIONS) was handled and the request should abort.
 // Returns ("", false) if normal request processing should continue.
-func handleCORS(rule *router.AuthRule, c *gin.Context) (string, bool) {
+func handleCORS(cfg *router.RouteAuthConfig, c *gin.Context) (string, bool) {
 	origin := c.Request.Header.Get("Origin")
 	if origin == "" {
 		return "", false
 	}
 
-	allowedOrigins := rule.CORSAllowedOrigins
+	allowedOrigins := cfg.CORSAllowedOrigins
 	allowAll := strings.TrimSpace(allowedOrigins) == "*"
 	if !allowAll && !originMatches(origin, allowedOrigins) {
 		return "", false
 	}
 
-	maxAge := rule.CORSMaxAge
+	maxAge := cfg.CORSMaxAge
 	if maxAge <= 0 {
 		maxAge = 86400
 	}
-	allowedMethods := rule.CORSAllowedMethods
+	allowedMethods := cfg.CORSAllowedMethods
 	if allowedMethods == "" {
 		allowedMethods = "GET,POST,PUT,DELETE,PATCH,OPTIONS"
 	}
-	allowedHeaders := rule.CORSAllowedHeaders
+	allowedHeaders := cfg.CORSAllowedHeaders
 	if allowedHeaders == "" {
 		allowedHeaders = "Authorization,Content-Type,X-Requested-With"
 	}
 
-	// Use the actual Origin value for Access-Control-Allow-Origin (not "*" pattern)
 	c.Header("Access-Control-Allow-Origin", origin)
-	if rule.CORSAllowCredentials {
+	if cfg.CORSAllowCredentials {
 		c.Header("Access-Control-Allow-Credentials", "true")
 	}
 	c.Header("Access-Control-Allow-Methods", allowedMethods)

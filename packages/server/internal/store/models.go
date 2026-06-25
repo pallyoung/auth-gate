@@ -36,8 +36,15 @@ type Route struct {
 	TimeoutMs     int       `json:"timeout_ms,omitempty"`
 	RetryAttempts int       `json:"retry_attempts,omitempty"`
 	PathMatchMode string    `json:"path_match_mode,omitempty"` // "prefix"|"exact"|"regex"
-	RewriteTarget string    `json:"rewrite_target,omitempty"`  // rewrite target (e.g. /new$1)
-	RedirectCode  int       `json:"redirect_code,omitempty"`   // 301|302 for external redirects
+	HeaderName    string    `json:"header_name,omitempty"`     // match request header key
+	HeaderValue   string    `json:"header_value,omitempty"`    // match request header value
+	RewriteTarget string            `json:"rewrite_target,omitempty"`  // rewrite target (e.g. /new$1)
+	RedirectCode  int               `json:"redirect_code,omitempty"`   // 301|302 for external redirects
+	// Header manipulation (nil/empty = no-op)
+	SetRequestHeaders    map[string]string `json:"set_request_headers,omitempty"`    // add/overwrite before forwarding
+	RemoveRequestHeaders []string          `json:"remove_request_headers,omitempty"` // delete before forwarding
+	AddResponseHeaders   map[string]string `json:"add_response_headers,omitempty"`   // add to upstream response
+	RemoveResponseHeaders []string         `json:"remove_response_headers,omitempty"` // delete from upstream response
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -93,6 +100,71 @@ func ParseAuthConfig(s string) AuthConfig {
 	cfg.Username = strings.TrimSpace(cfg.Username)
 	cfg.LoginMode = strings.TrimSpace(cfg.LoginMode)
 	return cfg
+}
+
+// ApiKey represents a named API key for route-level authentication.
+// Multiple ApiKeys can exist per route, each with its own expiration and lifecycle.
+type ApiKey struct {
+	ID         string     `json:"id"`
+	RouteID    string     `json:"route_id"`
+	Name       string     `json:"name"`
+	KeyPrefix  string     `json:"key_prefix"`  // first 8 chars for display
+	Secret     string     `json:"-"`           // full secret, never serialized to JSON
+	ExpiresAt  *time.Time `json:"expires_at"`  // nil = never expires
+	Status     string     `json:"status"`      // active / expired / revoked
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// RouteAuthConfig holds the authentication configuration for a single route.
+// Each route has at most one config. Auth methods are toggled on/off independently;
+// when multiple methods are enabled, any one passing is sufficient (OR logic).
+type RouteAuthConfig struct {
+	ID      string `json:"id"`
+	RouteID string `json:"route_id" binding:"required"`
+
+	// API Key authentication toggle
+	ApiKeyEnabled bool   `json:"api_key_enabled"`
+	ApiKeyHeader  string `json:"api_key_header,omitempty"` // default "X-API-Key"
+
+	// Basic Auth toggle
+	BasicEnabled  bool   `json:"basic_enabled"`
+	BasicUsername string `json:"basic_username,omitempty"`
+	BasicPassword string `json:"basic_password,omitempty"` // stored as-is (hashed or plain)
+
+	// Gateway login toggle
+	GatewayEnabled   bool   `json:"gateway_enabled"`
+	GatewayLoginMode string `json:"gateway_login_mode,omitempty"` // "form"
+
+	// Shared runtime policy (applies to all enabled auth methods)
+	Whitelist            []string `json:"whitelist,omitempty"`
+	RateLimit            int      `json:"rate_limit"`
+	Burst                int      `json:"burst"`
+	CORSAllowedOrigins   string   `json:"cors_allowed_origins,omitempty"`
+	CORSAllowedMethods   string   `json:"cors_allowed_methods,omitempty"`
+	CORSAllowedHeaders   string   `json:"cors_allowed_headers,omitempty"`
+	CORSAllowCredentials bool     `json:"cors_allow_credentials"`
+	CORSMaxAge           int      `json:"cors_max_age"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// HasAuth returns true if any authentication method is enabled.
+func (c *RouteAuthConfig) HasAuth() bool {
+	return c.ApiKeyEnabled || c.BasicEnabled || c.GatewayEnabled
+}
+
+// IsApiKeyExpired returns true if the given ApiKey is expired or revoked.
+func IsApiKeyExpired(key *ApiKey) bool {
+	if key.Status != "active" {
+		return true
+	}
+	if key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now()) {
+		return true
+	}
+	return false
 }
 
 // Certificate represents an SSL certificate in the registry. Certificates may

@@ -43,31 +43,23 @@ function renderForm(rule: AuthRule | null, onSubmit?: (data: AuthRuleInput) => P
 }
 
 describe('AuthRuleForm', () => {
-  it('requires a JWT secret when creating a bearer rule', async () => {
-    const user = userEvent.setup()
-
-    await renderForm(null)
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'bearer')
-
-    expect(screen.getByLabelText('JWT Secret')).toBeInvalid()
-  })
-
-  it('submits only bearer config fields for bearer rules', async () => {
+  it('submits only apikey config fields for apikey rules', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'bearer')
-    await user.type(screen.getByLabelText('JWT Secret'), 'shared-secret')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await user.clear(screen.getByLabelText('Header Name'))
+    await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
         route_id: 'route-1',
-        type: 'bearer',
+        type: 'apikey',
         config: {
-          secret: 'shared-secret',
+          header_name: 'X-Custom-Key',
         },
       })
     })
@@ -79,8 +71,9 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'bearer')
-    await user.type(screen.getByLabelText('JWT Secret'), 'shared-secret')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
+    await user.type(screen.getByLabelText('Username'), 'test-user')
+    await user.type(screen.getByLabelText('Password'), 'test-pass')
     await user.type(screen.getByLabelText('Whitelist'), '127.0.0.1/32, 10.0.0.0/8')
     await user.type(screen.getByLabelText('Rate Limit'), '15')
     await user.type(screen.getByLabelText('Burst'), '30')
@@ -94,9 +87,10 @@ describe('AuthRuleForm', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
         route_id: 'route-1',
-        type: 'bearer',
+        type: 'basic',
         config: {
-          secret: 'shared-secret',
+          username: 'test-user',
+          password: 'test-pass',
         },
         whitelist: ['127.0.0.1/32', '10.0.0.0/8'],
         rate_limit: 15,
@@ -110,69 +104,7 @@ describe('AuthRuleForm', () => {
     })
   })
 
-  it('does not block bearer rule edits when the current secret is redacted', async () => {
-    await renderForm({
-      id: 'rule-1',
-      route_id: 'route-1',
-      type: 'bearer',
-      config: {},
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    })
-
-    expect(screen.getByLabelText('JWT Secret')).toBeValid()
-  })
-
-  it('omits an unchanged bearer secret when editing an existing bearer rule', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn()
-
-    await renderForm({
-      id: 'rule-1',
-      route_id: 'route-1',
-      type: 'bearer',
-      config: {},
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }, onSubmit)
-
-    await user.click(screen.getByRole('button', { name: 'Update Rule' }))
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith({
-        route_id: 'route-1',
-        type: 'bearer',
-        config: {},
-      })
-    })
-  })
-
-  it('omits a whitespace-only bearer secret when editing an existing bearer rule', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn()
-
-    await renderForm({
-      id: 'rule-1',
-      route_id: 'route-1',
-      type: 'bearer',
-      config: {},
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }, onSubmit)
-
-    await user.type(screen.getByLabelText('JWT Secret'), '   ')
-    await user.click(screen.getByRole('button', { name: 'Update Rule' }))
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith({
-        route_id: 'route-1',
-        type: 'bearer',
-        config: {},
-      })
-    })
-  })
-
-  it('does not block API key edits when the current secret is redacted', async () => {
+  it('does not block API key edits when no secret input exists', async () => {
     await renderForm({
       id: 'rule-3',
       route_id: 'route-1',
@@ -182,7 +114,7 @@ describe('AuthRuleForm', () => {
       updated_at: '2026-01-01T00:00:00Z',
     })
 
-    expect(screen.getByLabelText('Secret')).toBeValid()
+    expect(screen.getByLabelText('Header Name')).toBeValid()
   })
 
   it('omits an unchanged API key secret when editing an existing API key rule', async () => {
@@ -198,33 +130,6 @@ describe('AuthRuleForm', () => {
       updated_at: '2026-01-01T00:00:00Z',
     }, onSubmit)
 
-    await user.click(screen.getByRole('button', { name: 'Update Rule' }))
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith({
-        route_id: 'route-1',
-        type: 'apikey',
-        config: {
-          header_name: 'X-API-Key',
-        },
-      })
-    })
-  })
-
-  it('omits a whitespace-only API key secret when editing an existing API key rule', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn()
-
-    await renderForm({
-      id: 'rule-3',
-      route_id: 'route-1',
-      type: 'apikey',
-      config: { header_name: 'X-API-Key' },
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }, onSubmit)
-
-    await user.type(screen.getByLabelText('Secret'), '   ')
     await user.click(screen.getByRole('button', { name: 'Update Rule' }))
 
     await waitFor(() => {
@@ -316,8 +221,9 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'bearer')
-    await user.type(screen.getByLabelText('JWT Secret'), 'shared-secret')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
+    await user.type(screen.getByLabelText('Username'), 'test-user')
+    await user.type(screen.getByLabelText('Password'), 'test-pass')
 
     const submitButton = screen.getByRole('button', { name: 'Create Rule' })
     await user.click(submitButton)
@@ -339,8 +245,9 @@ describe('AuthRuleForm', () => {
     const user = userEvent.setup()
     const { container } = await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'bearer')
-    await user.type(screen.getByLabelText('JWT Secret'), 'shared-secret')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
+    await user.type(screen.getByLabelText('Username'), 'test-user')
+    await user.type(screen.getByLabelText('Password'), 'test-pass')
 
     const form = container.querySelector('form')
     expect(form).not.toBeNull()

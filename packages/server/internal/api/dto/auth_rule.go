@@ -8,6 +8,7 @@ import (
 
 type AuthRuleConfig struct {
 	HeaderName string `json:"header_name,omitempty"`
+	Secret     string `json:"secret,omitempty"`
 	Username   string `json:"username,omitempty"`
 	LoginMode  string `json:"login_mode,omitempty"`
 }
@@ -80,6 +81,7 @@ func AuthRuleResponse(rule store.AuthRule) AuthRule {
 		Type:    rule.Type,
 		Config: AuthRuleConfig{
 			HeaderName: rule.Config.HeaderName,
+			Secret:     rule.Config.Secret,
 			Username:   rule.Config.Username,
 			LoginMode:  rule.Config.LoginMode,
 		},

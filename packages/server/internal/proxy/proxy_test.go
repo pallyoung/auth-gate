@@ -184,8 +184,8 @@ func TestWriteUnauthorized_BasicSetsChallengeHeader(t *testing.T) {
 	writeUnauthorized(c, &router.Route{
 		Name:       "Cloud Console",
 		PathPrefix: "/cloud",
-		AuthRule: &router.AuthRule{
-			Type: "basic",
+		AuthConfig: &router.RouteAuthConfig{
+			BasicEnabled: true,
 		},
 	})
 
@@ -223,7 +223,7 @@ func TestProxyNormalizesLegacyStoredBasicAuthRuleType(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
 	resp := httptest.NewRecorder()
@@ -269,7 +269,7 @@ func TestProxyMatchesLegacyStoredAPIKeyConfigWithWhitespace(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
 	req.Header.Set("X-Route-Key", "shared-secret")
@@ -613,7 +613,7 @@ func TestProxyRegexInsensitiveRewriteTargetIsApplied(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/API/Users", nil)
 	resp := httptest.NewRecorder()
@@ -650,7 +650,7 @@ func TestProxyMatchesRouteWhenStoredPathMatchModeHasWhitespaceAndUppercase(t *te
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/API/Users", nil)
 	resp := httptest.NewRecorder()
@@ -686,7 +686,7 @@ func TestProxyMatchesRouteForIPv6HostWithPort(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "http://[2001:db8::1]/api/users", nil)
 	req.Host = "[2001:db8::1]:8443"
@@ -724,7 +724,7 @@ func TestProxyIgnoresWhitespaceOnlyRedirectTarget(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/billing/invoices", nil)
 	resp := httptest.NewRecorder()
@@ -764,7 +764,7 @@ func TestProxyIgnoresLegacyUnsupportedRedirectCode(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/legacy/dashboard", nil)
 	resp := httptest.NewRecorder()
@@ -802,7 +802,7 @@ func TestProxyForwardsHTTPSProtoToUpstream(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "https://example.com/secure", nil)
 	req.TLS = &tls.ConnectionState{}
@@ -836,7 +836,7 @@ func TestProxyLegacyInvalidBackendWeights_ReturnsStructuredErrorWithoutPanicking
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	resp := httptest.NewRecorder()
@@ -893,7 +893,7 @@ func TestProxySingleOpenBackend_StillProxiesWithoutPanicking(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	resp := httptest.NewRecorder()
@@ -938,7 +938,7 @@ func TestProxyPreservesForwardedHTTPSProtoFromReverseProxy(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*proxyPath", Handler(mgr))
+	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/secure", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -1089,7 +1089,7 @@ func TestProxyWebSocketResponse_Passes101Through(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.GET("/ws", Handler(mgr))
+	engine.GET("/ws", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Header.Set("Upgrade", "websocket")

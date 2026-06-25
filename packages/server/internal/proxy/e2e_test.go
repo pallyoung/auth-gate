@@ -52,7 +52,7 @@ func TestRateLimit_429(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*path", Handler(mgr))
+	engine.Any("/*path", Handler(mgr, nil))
 
 	// Send 5 requests as fast as possible from the same client IP.
 	// With a 1 req/sec refill rate, only the first two should fit in the
@@ -126,7 +126,7 @@ func TestAccessLog_Output(t *testing.T) {
 
 	mgr := router.NewManager(db)
 	engine := gin.New()
-	engine.Any("/*path", Handler(mgr))
+	engine.Any("/*path", Handler(mgr, nil))
 
 	// Capture stdout so we can inspect the access log output.
 	origStdout := os.Stdout
@@ -227,5 +227,129 @@ func TestMetrics_Endpoint(t *testing.T) {
 
 	if !strings.Contains(body, "auth_gate_requests_total") {
 		t.Errorf("metrics body missing expected metric auth_gate_requests_total")
+	}
+}
+
+// TestCustomRequestHeaders verifies that SetRequestHeaders and
+// RemoveRequestHeaders are applied to the request forwarded to the backend.
+func TestCustomRequestHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var receivedHeaders http.Header
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer backend.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "hdr-req",
+		Name:       "hdr-req",
+		PathPrefix: "/api",
+		Backend:    backend.URL,
+		Enabled:    true,
+		SetRequestHeaders:    map[string]string{"X-Custom-Token": "secret123", "X-Gateway": "auth-gate"},
+		RemoveRequestHeaders: []string{"X-Remove-Me", "X-Also-Remove"},
+	}); err != nil {
+		t.Fatalf("CreateRoute error: %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*path", Handler(mgr, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("X-Remove-Me", "should-be-gone")
+	req.Header.Set("X-Also-Remove", "also-gone")
+	req.Header.Set("X-Keep-Me", "stays")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Custom headers should be set on the forwarded request
+	if got := receivedHeaders.Get("X-Custom-Token"); got != "secret123" {
+		t.Errorf("backend X-Custom-Token = %q, want %q", got, "secret123")
+	}
+	if got := receivedHeaders.Get("X-Gateway"); got != "auth-gate" {
+		t.Errorf("backend X-Gateway = %q, want %q", got, "auth-gate")
+	}
+
+	// Removed headers should not reach the backend
+	if got := receivedHeaders.Get("X-Remove-Me"); got != "" {
+		t.Errorf("backend X-Remove-Me = %q, want empty", got)
+	}
+	if got := receivedHeaders.Get("X-Also-Remove"); got != "" {
+		t.Errorf("backend X-Also-Remove = %q, want empty", got)
+	}
+
+	// Unrelated headers should still be forwarded
+	if got := receivedHeaders.Get("X-Keep-Me"); got != "stays" {
+		t.Errorf("backend X-Keep-Me = %q, want %q", got, "stays")
+	}
+}
+
+// TestCustomResponseHeaders verifies that AddResponseHeaders and
+// RemoveResponseHeaders are applied to the response returned to the client.
+func TestCustomResponseHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Powered-By", "Express")
+		w.Header().Set("Server", "nginx/1.21")
+		w.Header().Set("X-Keep", "backend-value")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer backend.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "hdr-resp",
+		Name:       "hdr-resp",
+		PathPrefix: "/api",
+		Backend:    backend.URL,
+		Enabled:    true,
+		AddResponseHeaders:    map[string]string{"X-Request-Id": "req-42", "X-Response-From": "gateway"},
+		RemoveResponseHeaders: []string{"X-Powered-By", "Server"},
+	}); err != nil {
+		t.Fatalf("CreateRoute error: %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*path", Handler(mgr, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Added response headers should be present
+	if got := rec.Header().Get("X-Request-Id"); got != "req-42" {
+		t.Errorf("X-Request-Id = %q, want %q", got, "req-42")
+	}
+	if got := rec.Header().Get("X-Response-From"); got != "gateway" {
+		t.Errorf("X-Response-From = %q, want %q", got, "gateway")
+	}
+
+	// Removed response headers should be absent
+	if got := rec.Header().Get("X-Powered-By"); got != "" {
+		t.Errorf("X-Powered-By = %q, want empty", got)
+	}
+	if got := rec.Header().Get("Server"); got != "" {
+		t.Errorf("Server = %q, want empty", got)
+	}
+
+	// Unrelated response headers should still be present
+	if got := rec.Header().Get("X-Keep"); got != "backend-value" {
+		t.Errorf("X-Keep = %q, want %q", got, "backend-value")
 	}
 }

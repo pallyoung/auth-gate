@@ -1,16 +1,22 @@
 import React from 'react'
-import { KeyRound, LockKeyhole, Plus, Shield } from 'lucide-react'
+import { ChevronDown, ChevronRight, KeyRound, LockKeyhole, Pencil, Plus, Shield, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AuthRuleForm } from '../components/AuthRuleForm'
-import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
 import { Alert, Badge, Button, Card, EmptyState, MetricCard, Modal } from '../components/ui'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 import { ApiError } from '../lib/api/client'
 import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { authRulesApi } from '../lib/api/auth-rules'
 import { routesApi } from '../lib/api/routes'
 import { getSessionUser } from '../lib/session-store'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
+
+interface RouteGroup {
+  routeId: string
+  routeName: string
+  rules: AuthRule[]
+}
 
 export function AuthRulesPage() {
   const { t } = useTranslation(['authRules', 'routes'])
@@ -19,6 +25,8 @@ export function AuthRulesPage() {
   const [loading, setLoading] = React.useState(true)
   const [showForm, setShowForm] = React.useState(false)
   const [editingRule, setEditingRule] = React.useState<AuthRule | null>(null)
+  const [defaultRouteId, setDefaultRouteId] = React.useState<string | undefined>()
+  const [expandedRoutes, setExpandedRoutes] = React.useState<Set<string>>(new Set())
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [authRuleListUnavailable, setAuthRuleListUnavailable] = React.useState(false)
   const [authRuleDirectoryUnavailable, setAuthRuleDirectoryUnavailable] = React.useState(false)
@@ -50,12 +58,8 @@ export function AuthRulesPage() {
         return { translationKey: 'errors.invalidAuthRuleType' }
       case 'missing_apikey_secret':
         return { translationKey: 'errors.missingAPIKeySecret' }
-      case 'missing_bearer_secret':
-        return { translationKey: 'errors.missingBearerSecret' }
       case 'missing_basic_credentials':
         return { translationKey: 'errors.missingBasicCredentials' }
-      case 'duplicate_route_auth_rule':
-        return { translationKey: 'errors.duplicateRouteAuthRule' }
       case 'route_store_failure':
         return { translationKey: 'errors.routeStoreFailure' }
       case 'auth_rule_store_failure':
@@ -138,6 +142,7 @@ export function AuthRulesPage() {
     try {
       await authRulesApi.create(data)
       setShowForm(false)
+      setDefaultRouteId(undefined)
       await fetchData()
     } catch (err) {
       throw new LocalizedError(getErrorState(err))
@@ -156,10 +161,54 @@ export function AuthRulesPage() {
     }
   }
 
-  const getRouteName = (routeId: string) => {
-    const route = routes.find((item) => item.id === routeId)
-    return route?.name || route?.path_prefix || routeId
+  const openCreateForm = (routeId?: string) => {
+    setEditingRule(null)
+    setDefaultRouteId(routeId)
+    setShowForm(true)
   }
+
+  const openEditForm = (rule: AuthRule) => {
+    setEditingRule(rule)
+    setDefaultRouteId(undefined)
+    setShowForm(true)
+  }
+
+  const closeForm = () => {
+    setShowForm(false)
+    setEditingRule(null)
+    setDefaultRouteId(undefined)
+  }
+
+  const toggleRoute = (routeId: string) => {
+    setExpandedRoutes((prev) => {
+      const next = new Set(prev)
+      if (next.has(routeId)) {
+        next.delete(routeId)
+      } else {
+        next.add(routeId)
+      }
+      return next
+    })
+  }
+
+  // 按路由分组（包含无规则的路由）
+  const routeGroups: RouteGroup[] = React.useMemo(() => {
+    const ruleMap = new Map<string, AuthRule[]>()
+    for (const rule of rules) {
+      const existing = ruleMap.get(rule.route_id) || []
+      existing.push(rule)
+      ruleMap.set(rule.route_id, existing)
+    }
+    const groups: RouteGroup[] = []
+    for (const route of routes) {
+      groups.push({
+        routeId: route.id,
+        routeName: route.name || route.path_prefix,
+        rules: ruleMap.get(route.id) || [],
+      })
+    }
+    return groups
+  }, [routes, rules])
 
   const typeCounts = rules.reduce<Record<string, number>>((acc, rule) => {
     acc[rule.type] = (acc[rule.type] || 0) + 1
@@ -172,8 +221,6 @@ export function AuthRulesPage() {
         return t('types.none')
       case 'apikey':
         return t('types.apikey')
-      case 'bearer':
-        return t('types.bearer')
       case 'basic':
         return t('types.basic')
       case 'gateway':
@@ -183,57 +230,25 @@ export function AuthRulesPage() {
     }
   }
 
-  const columns = [
-    {
-      key: 'route_id',
-      header: t('table.protectedRoute'),
-      render: (value: string) => <span className="font-semibold text-[var(--text-primary)]">{getRouteName(value)}</span>,
-    },
-    {
-      key: 'type',
-      header: t('table.authType'),
-      className: 'w-40',
-      render: (value: string) => <Badge variant="primary" badgeSize="sm">{typeLabel(value)}</Badge>,
-    },
-    {
-      key: 'config',
-      header: t('table.credentialMapping'),
-      render: (value: any, row: AuthRule) => {
-        if (row.type === 'apikey') {
-          return value.header_name ? `${t('form.headerName')} ${value.header_name}` : t('page.headerBasedKey')
-        }
-        if (row.type === 'bearer') return t('page.bearerValidation')
-        if (row.type === 'basic') {
-          return value.username ? `${t('form.username')} ${value.username}` : t('page.basicCredentials')
-        }
-        if (row.type === 'gateway') return t('page.gatewayLogin')
-        return t('page.noCredentials')
-      },
-    },
-    {
-      key: 'id',
-      header: t('table.runtimePolicy'),
-      render: (_value: string, row: AuthRule) => {
-        const summaries = [
-          row.rate_limit || row.burst ? t('page.rateLimitSummary', { rate: row.rate_limit || 0, burst: row.burst || 0 }) : null,
-          row.whitelist?.length ? t('page.whitelistSummary', { count: row.whitelist.length }) : null,
-          row.cors_allowed_origins ? t('page.corsSummary', { origins: row.cors_allowed_origins }) : null,
-        ].filter(Boolean)
+  const getCredentialMapping = (rule: AuthRule) => {
+    if (rule.type === 'apikey') {
+      return rule.config?.header_name ? `${t('form.headerName')} ${rule.config.header_name}` : t('page.headerBasedKey')
+    }
+    if (rule.type === 'basic') {
+      return rule.config?.username ? `${t('form.username')} ${rule.config.username}` : t('page.basicCredentials')
+    }
+    if (rule.type === 'gateway') return t('page.gatewayLogin')
+    return t('page.noCredentials')
+  }
 
-        if (summaries.length === 0) {
-          return <span className="text-sm text-[var(--text-muted)]">{t('page.noRuntimePolicy')}</span>
-        }
-
-        return (
-          <div className="space-y-1 text-sm text-[var(--text-primary)]">
-            {summaries.map((summary) => (
-              <div key={summary}>{summary}</div>
-            ))}
-          </div>
-        )
-      },
-    },
-  ]
+  const getRuntimePolicySummary = (rule: AuthRule) => {
+    const summaries = [
+      rule.rate_limit || rule.burst ? t('page.rateLimitSummary', { rate: rule.rate_limit || 0, burst: rule.burst || 0 }) : null,
+      rule.whitelist?.length ? t('page.whitelistSummary', { count: rule.whitelist.length }) : null,
+      rule.cors_allowed_origins ? t('page.corsSummary', { origins: rule.cors_allowed_origins }) : null,
+    ].filter(Boolean)
+    return summaries.length > 0 ? summaries.join(' · ') : t('page.noRuntimePolicy')
+  }
 
   if (loading) {
     return (
@@ -266,10 +281,7 @@ export function AuthRulesPage() {
           canManageAuth && hasAvailableRoutes && !authRuleListUnavailable ? (
             <Button
               icon={<Plus className="h-4 w-4" />}
-              onClick={() => {
-                setEditingRule(null)
-                setShowForm(true)
-              }}
+              onClick={() => openCreateForm()}
             >
               {t('page.addRule')}
             </Button>
@@ -287,7 +299,7 @@ export function AuthRulesPage() {
         <div className="mb-6 grid gap-4 md:grid-cols-3">
           <MetricCard
             label={t('page.protectedRoutes')}
-            value={new Set(rules.map((rule) => rule.route_id)).size}
+            value={routeGroups.filter((g) => g.rules.length > 0).length}
             hint={t('page.protectedRoutesHint')}
             icon={<Shield className="h-5 w-5" />}
             tone="primary"
@@ -300,9 +312,9 @@ export function AuthRulesPage() {
             tone="accent"
           />
           <MetricCard
-            label={t('page.bearerAndBasic')}
-            value={(typeCounts.bearer || 0) + (typeCounts.basic || 0)}
-            hint={t('page.bearerAndBasicHint')}
+            label={t('page.basicAuthRules')}
+            value={typeCounts.basic || 0}
+            hint={t('page.basicAuthRulesHint')}
             icon={<LockKeyhole className="h-5 w-5" />}
           />
         </div>
@@ -321,7 +333,7 @@ export function AuthRulesPage() {
           </p>
         </div>
 
-        {rules.length === 0 ? (
+        {routeGroups.length === 0 ? (
           <EmptyState
             icon={<Shield className="h-8 w-8" />}
             title={
@@ -347,7 +359,7 @@ export function AuthRulesPage() {
             action={
               canManageAuth && !authRuleListUnavailable ? (
                 routeListUnavailable ? undefined : hasAvailableRoutes ? (
-                  <Button onClick={() => setShowForm(true)}>{t('page.createFirst')}</Button>
+                  <Button onClick={() => openCreateForm()}>{t('page.createFirst')}</Button>
                 ) : (
                   <Button onClick={() => { window.location.hash = '/' }}>
                     {t('routes:page.createFirst')}
@@ -357,38 +369,136 @@ export function AuthRulesPage() {
             }
           />
         ) : (
-          <DataTable
-            columns={columns}
-            data={rules}
-            onEdit={
-              canManageAuth && !routeListUnavailable
-                ? (rule) => {
-                    setEditingRule(rule)
-                    setShowForm(true)
-                  }
-                : undefined
-            }
-            onDelete={canManageAuth ? handleDelete : undefined}
-          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10" />
+                <TableHead>{t('table.protectedRoute')}</TableHead>
+                <TableHead>{t('table.authType')}</TableHead>
+                <TableHead className="hidden md:table-cell">{t('table.runtimePolicy')}</TableHead>
+                <TableHead className="w-24" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {routeGroups.map((group) => {
+                const isExpanded = expandedRoutes.has(group.routeId)
+                const hasRules = group.rules.length > 0
+
+                return (
+                  <React.Fragment key={group.routeId}>
+                    {/* 路由主行 */}
+                    <TableRow
+                      className="cursor-pointer"
+                      onClick={() => hasRules && toggleRoute(group.routeId)}
+                    >
+                      <TableCell className="w-10">
+                        {hasRules ? (
+                          isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-[var(--text-muted)]" />
+                          )
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-[var(--text-primary)]">{group.routeName}</span>
+                      </TableCell>
+                      <TableCell>
+                        {hasRules ? (
+                          <div className="flex flex-wrap gap-1">
+                            {group.rules.map((rule) => (
+                              <Badge key={rule.id} variant="primary" badgeSize="sm">
+                                {typeLabel(rule.type)}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-[var(--text-muted)]">{t('page.noAuthMethods')}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {hasRules ? (
+                          <span className="text-sm text-[var(--text-muted)]">
+                            {t('page.ruleCount', { count: group.rules.length })}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="w-24">
+                        {canManageAuth && !routeListUnavailable ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openCreateForm(group.routeId)
+                            }}
+                            title={t('page.addRuleForRoute')}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+
+                    {/* 展开的规则子行 */}
+                    {isExpanded && group.rules.map((rule) => (
+                      <TableRow key={rule.id} className="bg-[var(--bg-card-soft)]/50">
+                        <TableCell />
+                        <TableCell className="pl-10">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="primary" badgeSize="sm">{typeLabel(rule.type)}</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-[var(--text-muted)]">{getCredentialMapping(rule)}</span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <span className="text-sm text-[var(--text-muted)]">{getRuntimePolicySummary(rule)}</span>
+                        </TableCell>
+                        <TableCell>
+                          {canManageAuth ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditForm(rule)}
+                                title={t('common:actions.edit', 'Edit')}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDelete(rule)}
+                                className="text-[var(--text-error)]"
+                                title={t('common:actions.delete', 'Delete')}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
         )}
       </Card>
 
       <Modal
         open={canManageAuth && showForm}
-        onClose={() => {
-          setShowForm(false)
-          setEditingRule(null)
-        }}
+        onClose={closeForm}
         title={editingRule ? t('page.editModalTitle') : t('page.addModalTitle')}
       >
         <AuthRuleForm
           rule={editingRule}
           routes={routes}
+          defaultRouteId={defaultRouteId}
           onSubmit={editingRule ? handleUpdate : handleCreate}
-          onCancel={() => {
-            setShowForm(false)
-            setEditingRule(null)
-          }}
+          onCancel={closeForm}
         />
       </Modal>
     </div>

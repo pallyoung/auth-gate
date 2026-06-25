@@ -89,8 +89,15 @@ type CreateInput struct {
 	RetryAttempts int
 	Backends      []store.Backend
 	PathMatchMode string
+	HeaderName    string
+	HeaderValue   string
 	RewriteTarget string
 	RedirectCode  int
+	// Header manipulation
+	SetRequestHeaders     map[string]string
+	RemoveRequestHeaders  []string
+	AddResponseHeaders    map[string]string
+	RemoveResponseHeaders []string
 }
 
 type UpdateInput struct {
@@ -110,8 +117,15 @@ type UpdateInput struct {
 	RetryAttempts *int
 	Backends      *[]store.Backend
 	PathMatchMode *string
+	HeaderName    *string
+	HeaderValue   *string
 	RewriteTarget *string
 	RedirectCode  *int
+	// Header manipulation
+	SetRequestHeaders     *map[string]string
+	RemoveRequestHeaders  *[]string
+	AddResponseHeaders    *map[string]string
+	RemoveResponseHeaders *[]string
 }
 
 func NewService(db store.Store, reloader runtime.Reloader, certSvc CertService) *Service {
@@ -163,8 +177,15 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 		RetryAttempts: input.RetryAttempts,
 		Backends:      input.Backends,
 		PathMatchMode: normalizePathMatchMode(input.PathMatchMode),
+		HeaderName:    strings.TrimSpace(input.HeaderName),
+		HeaderValue:   strings.TrimSpace(input.HeaderValue),
 		RewriteTarget: strings.TrimSpace(input.RewriteTarget),
 		RedirectCode:  input.RedirectCode,
+		// Header manipulation
+		SetRequestHeaders:     normalizeHeaderMap(input.SetRequestHeaders),
+		RemoveRequestHeaders:  normalizeHeaderNames(input.RemoveRequestHeaders),
+		AddResponseHeaders:    normalizeHeaderMap(input.AddResponseHeaders),
+		RemoveResponseHeaders: normalizeHeaderNames(input.RemoveResponseHeaders),
 	}
 	if err := s.resolveCertificate(route); err != nil {
 		return nil, err
@@ -234,11 +255,30 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	if input.PathMatchMode != nil {
 		route.PathMatchMode = normalizePathMatchMode(*input.PathMatchMode)
 	}
+	if input.HeaderName != nil {
+		route.HeaderName = strings.TrimSpace(*input.HeaderName)
+	}
+	if input.HeaderValue != nil {
+		route.HeaderValue = strings.TrimSpace(*input.HeaderValue)
+	}
 	if input.RewriteTarget != nil {
 		route.RewriteTarget = strings.TrimSpace(*input.RewriteTarget)
 	}
 	if input.RedirectCode != nil {
 		route.RedirectCode = *input.RedirectCode
+	}
+	// Header manipulation
+	if input.SetRequestHeaders != nil {
+		route.SetRequestHeaders = normalizeHeaderMap(*input.SetRequestHeaders)
+	}
+	if input.RemoveRequestHeaders != nil {
+		route.RemoveRequestHeaders = normalizeHeaderNames(*input.RemoveRequestHeaders)
+	}
+	if input.AddResponseHeaders != nil {
+		route.AddResponseHeaders = normalizeHeaderMap(*input.AddResponseHeaders)
+	}
+	if input.RemoveResponseHeaders != nil {
+		route.RemoveResponseHeaders = normalizeHeaderNames(*input.RemoveResponseHeaders)
 	}
 	route.Backends = normalizeBackends(route.Backends)
 
@@ -416,4 +456,42 @@ func normalizeStoredRoute(route store.Route) store.Route {
 		route.RedirectCode = 0
 	}
 	return route
+}
+
+// normalizeHeaderMap trims whitespace from both keys and values and drops
+// entries whose key is empty after trimming.
+func normalizeHeaderMap(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// normalizeHeaderNames trims whitespace and drops empty strings.
+func normalizeHeaderNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

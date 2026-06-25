@@ -15,10 +15,12 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
 	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
+	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	accesslogservice "github.com/pallyoung/auth-gate/packages/server/internal/service/accesslog"
+	apikeyservice "github.com/pallyoung/auth-gate/packages/server/internal/service/apikeys"
+	routeauthservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routeauth"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
-	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
@@ -61,7 +63,6 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 
 	sessionSvc := sessionservice.NewService(db)
 	routeSvc := routesservice.NewService(db, routerMgr, certSvc)
-	authRuleSvc := authrulesservice.NewService(db, routerMgr)
 	userSvc := usersservice.NewService(db)
 	accessLogSvc := accesslogservice.NewService(accessLogStore)
 
@@ -70,8 +71,8 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 
 	group.GET("/routes", listRoutes(routeSvc))
 	group.GET("/routes/:id", getRoute(routeSvc))
-	group.GET("/auth-rules", listAuthRules(authRuleSvc))
-	group.GET("/auth-rules/:id", getAuthRule(authRuleSvc))
+	group.GET("/route-auth-config/:routeId", getRouteAuthConfig(db))
+	group.GET("/route-api-keys/:routeId", listApiKeys(db))
 
 	// Access log endpoints - available to any authenticated user
 	if accessLogStore != nil {
@@ -101,9 +102,14 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 		editor.PUT("/routes/:id", updateRoute(routeSvc))
 		editor.DELETE("/routes/:id", deleteRoute(routeSvc))
 
-		editor.POST("/auth-rules", createAuthRule(authRuleSvc))
-		editor.PUT("/auth-rules/:id", updateAuthRule(authRuleSvc))
-		editor.DELETE("/auth-rules/:id", deleteAuthRule(authRuleSvc))
+		editor.PUT("/route-auth-config/:routeId", updateRouteAuthConfig(db, routerMgr))
+		editor.DELETE("/route-auth-config/:routeId", deleteRouteAuthConfig(db, routerMgr))
+
+		editor.POST("/route-api-keys/:routeId", createApiKey(db, routerMgr))
+		editor.PUT("/api-keys/:id", updateApiKey(db))
+		editor.POST("/api-keys/:id/rotate", rotateApiKey(db))
+		editor.POST("/api-keys/:id/expire", expireApiKey(db))
+		editor.DELETE("/api-keys/:id", deleteApiKey(db))
 
 		editor.POST("/config/reload", reloadConfig(routerMgr))
 	}
@@ -295,8 +301,15 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
 			PathMatchMode: req.PathMatchMode,
+			HeaderName:    req.HeaderName,
+			HeaderValue:   req.HeaderValue,
 			RewriteTarget: req.RewriteTarget,
 			RedirectCode:  req.RedirectCode,
+			// Header manipulation
+			SetRequestHeaders:     req.SetRequestHeaders,
+			RemoveRequestHeaders:  req.RemoveRequestHeaders,
+			AddResponseHeaders:    req.AddResponseHeaders,
+			RemoveResponseHeaders: req.RemoveResponseHeaders,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -331,8 +344,15 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			RetryAttempts: req.RetryAttempts,
 			Backends:      req.Backends,
 			PathMatchMode: req.PathMatchMode,
+			HeaderName:    req.HeaderName,
+			HeaderValue:   req.HeaderValue,
 			RewriteTarget: req.RewriteTarget,
 			RedirectCode:  req.RedirectCode,
+			// Header manipulation
+			SetRequestHeaders:     req.SetRequestHeaders,
+			RemoveRequestHeaders:  req.RemoveRequestHeaders,
+			AddResponseHeaders:    req.AddResponseHeaders,
+			RemoveResponseHeaders: req.RemoveResponseHeaders,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -663,6 +683,8 @@ func writeServiceError(c *gin.Context, err error) {
 	case sessionServiceError(c, err):
 	case certServiceError(c, err):
 	case hostServiceError(c, err):
+	case apiKeyServiceError(c, err):
+	case routeAuthServiceError(c, err):
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
@@ -698,9 +720,7 @@ func authRuleServiceError(c *gin.Context, err error) bool {
 		authrulesservice.ErrCodeRouteIDRequired,
 		authrulesservice.ErrCodeInvalidAuthRuleType,
 		authrulesservice.ErrCodeMissingAPIKeySecret,
-		authrulesservice.ErrCodeMissingBearerSecret,
-		authrulesservice.ErrCodeMissingBasicCredentials,
-		authrulesservice.ErrCodeDuplicateRouteAuthRule:
+		authrulesservice.ErrCodeMissingBasicCredentials:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
@@ -954,4 +974,196 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 			TopIPs:            topIPs,
 		})
 	}
+}
+
+// ---- Route Auth Config handlers ----
+
+func getRouteAuthConfig(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		routeID := c.Param("routeId")
+		cfg, err := db.GetRouteAuthConfig(routeID)
+		if err != nil {
+			c.JSON(http.StatusOK, dto.RouteAuthConfigResponseFromStore(store.RouteAuthConfig{RouteID: routeID}))
+			return
+		}
+		c.JSON(http.StatusOK, dto.RouteAuthConfigResponseFromStore(*cfg))
+	}
+}
+
+func updateRouteAuthConfig(db store.Store, routerMgr *router.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		routeID := c.Param("routeId")
+		var req dto.RouteAuthConfigUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+
+		svc := routeauthservice.NewService(db, routerMgr)
+		cfg, err := svc.Update(routeID, routeauthservice.UpdateInput{
+			ApiKeyEnabled:        req.ApiKeyEnabled,
+			ApiKeyHeader:         req.ApiKeyHeader,
+			BasicEnabled:         req.BasicEnabled,
+			BasicUsername:        req.BasicUsername,
+			BasicPassword:        req.BasicPassword,
+			GatewayEnabled:       req.GatewayEnabled,
+			GatewayLoginMode:     req.GatewayLoginMode,
+			Whitelist:            req.Whitelist,
+			RateLimit:            req.RateLimit,
+			Burst:                req.Burst,
+			CORSAllowedOrigins:   req.CORSAllowedOrigins,
+			CORSAllowedMethods:   req.CORSAllowedMethods,
+			CORSAllowedHeaders:   req.CORSAllowedHeaders,
+			CORSAllowCredentials: req.CORSAllowCredentials,
+			CORSMaxAge:           req.CORSMaxAge,
+		})
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.RouteAuthConfigResponseFromStore(*cfg))
+	}
+}
+
+func deleteRouteAuthConfig(db store.Store, routerMgr *router.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		routeID := c.Param("routeId")
+		svc := routeauthservice.NewService(db, routerMgr)
+		if err := svc.Delete(routeID); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "deleted"})
+	}
+}
+
+// ---- API Key handlers ----
+
+func listApiKeys(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		routeID := c.Param("routeId")
+		svc := apikeyservice.NewService(db)
+		keys, err := svc.ListByRoute(routeID)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.ApiKeyListResponse(keys))
+	}
+}
+
+func createApiKey(db store.Store, routerMgr *router.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		routeID := c.Param("routeId")
+		var req dto.ApiKeyCreateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+
+		svc := apikeyservice.NewService(db)
+		key, secret, err := svc.Create(routeID, req.Name, req.ExpiresAt)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		routerMgr.Reload()
+
+		c.JSON(http.StatusCreated, dto.ApiKeyCreateResponse{
+			ApiKeyResponse: dto.ApiKeyResponseFromKey(*key),
+			Secret:         secret,
+		})
+	}
+}
+
+func updateApiKey(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var req dto.ApiKeyUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+
+		svc := apikeyservice.NewService(db)
+		if req.Name != nil {
+			if err := svc.UpdateName(id, *req.Name); err != nil {
+				writeServiceError(c, err)
+				return
+			}
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "updated"})
+	}
+}
+
+func rotateApiKey(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		svc := apikeyservice.NewService(db)
+		key, secret, err := svc.Rotate(id)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.ApiKeyCreateResponse{
+			ApiKeyResponse: dto.ApiKeyResponseFromKey(*key),
+			Secret:         secret,
+		})
+	}
+}
+
+func expireApiKey(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		svc := apikeyservice.NewService(db)
+		if err := svc.Expire(id); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "expired"})
+	}
+}
+
+func deleteApiKey(db store.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		svc := apikeyservice.NewService(db)
+		if err := svc.Delete(id); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "deleted"})
+	}
+}
+
+func apiKeyServiceError(c *gin.Context, err error) bool {
+	var target *apikeyservice.Error
+	if !errors.As(err, &target) {
+		return false
+	}
+	switch targetCode := apikeyservice.Code(err); targetCode {
+	case apikeyservice.ErrCodeAPIKeyNotFound:
+		writeError(c, http.StatusNotFound, targetCode, target.Error())
+	case apikeyservice.ErrCodeRouteNotFound, apikeyservice.ErrCodeNameRequired:
+		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+	default:
+		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+	}
+	return true
+}
+
+func routeAuthServiceError(c *gin.Context, err error) bool {
+	var target *routeauthservice.Error
+	if !errors.As(err, &target) {
+		return false
+	}
+	switch targetCode := routeauthservice.Code(err); targetCode {
+	case routeauthservice.ErrCodeRouteAuthNotFound:
+		writeError(c, http.StatusNotFound, targetCode, target.Error())
+	case routeauthservice.ErrCodeRouteNotFound:
+		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+	default:
+		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+	}
+	return true
 }

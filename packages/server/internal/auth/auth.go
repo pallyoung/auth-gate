@@ -3,90 +3,12 @@ package auth
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
-	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
-
-func Check(c *gin.Context, rule *router.AuthRule) bool {
-	switch rule.Type {
-	case "none":
-		return true
-	case "apikey":
-		return checkAPIKey(c, rule)
-	case "bearer":
-		return checkBearer(c, rule)
-	case "basic":
-		return checkBasic(c, rule)
-	case "gateway":
-		return true
-	default:
-		return false
-	}
-}
-
-func checkAPIKey(c *gin.Context, rule *router.AuthRule) bool {
-	headerName := rule.Config.HeaderName
-	if headerName == "" {
-		headerName = "X-API-Key"
-	}
-
-	key := c.GetHeader(headerName)
-	if key == "" {
-		// 也支持 query 参数
-		key = c.Query("api_key")
-	}
-
-	return key != "" && key == rule.Config.Secret
-}
-
-func checkBearer(c *gin.Context, rule *router.AuthRule) bool {
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		return false
-	}
-
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		return false
-	}
-
-	token := parts[1]
-	if token == "" {
-		return false
-	}
-
-	// Use the rule's secret as the JWT signing key for validation.
-	// If no secret is configured, reject all bearer tokens.
-	if rule.Config.Secret == "" {
-		return false
-	}
-
-	claims, err := ValidateTokenWithSecret(token, []byte(rule.Config.Secret))
-	if err != nil {
-		return false
-	}
-
-	// Store validated claims in context for downstream use.
-	c.Set("jwt_subject", claims.UserID)
-	c.Set("jwt_username", claims.Username)
-	c.Set("jwt_role", claims.Role)
-
-	return true
-}
-
-func checkBasic(c *gin.Context, rule *router.AuthRule) bool {
-	username, password, ok := c.Request.BasicAuth()
-	if !ok {
-		return false
-	}
-
-	return username == rule.Config.Username && password == rule.Config.Password
-}
 
 func RequireAuth(authType string) gin.HandlerFunc {
 	return func(c *gin.Context) {

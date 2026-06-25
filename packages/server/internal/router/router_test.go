@@ -42,7 +42,7 @@ func TestMatch_Basic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.host+tt.path, func(t *testing.T) {
-			r := m.Match(tt.host, tt.path)
+			r := m.Match(tt.host, tt.path, nil)
 			if tt.want == "" {
 				if r != nil {
 					t.Errorf("Match(%q, %q) = %v, want nil", tt.host, tt.path, r.ID)
@@ -80,7 +80,7 @@ func TestMatch_EmptyHostMatchesAll(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.host+tt.path, func(t *testing.T) {
-			r := m.Match(tt.host, tt.path)
+			r := m.Match(tt.host, tt.path, nil)
 			if r == nil || r.ID != tt.want {
 				t.Errorf("Match(%q, %q) = %v, want %q", tt.host, tt.path, r, tt.want)
 			}
@@ -99,7 +99,7 @@ func TestMatch_HostIsCaseInsensitive(t *testing.T) {
 	}
 	m.loadRoutes()
 
-	r := m.Match("API.EXAMPLE.COM", "/api/users")
+	r := m.Match("API.EXAMPLE.COM", "/api/users", nil)
 	if r == nil || r.ID != "1" {
 		t.Fatalf("Match(%q, %q) = %v, want route 1", "API.EXAMPLE.COM", "/api/users", r)
 	}
@@ -117,7 +117,7 @@ func TestMatch_DisabledRoutes(t *testing.T) {
 	}
 	m.loadRoutes()
 
-	r := m.Match("example.com", "/api/users")
+	r := m.Match("example.com", "/api/users", nil)
 	if r == nil || r.ID != "fallback" {
 		t.Errorf("Match returned %v, want fallback (disabled route skipped)", r)
 	}
@@ -136,7 +136,7 @@ func TestMatch_PriorityOrdering(t *testing.T) {
 	}
 	m.loadRoutes()
 
-	r := m.Match("example.com", "/api/users")
+	r := m.Match("example.com", "/api/users", nil)
 	if r == nil || r.ID != "high" {
 		t.Errorf("Match returned %v, want high priority route", r)
 	}
@@ -168,7 +168,7 @@ func TestMatch_LongestPathPrefixWins(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			r := m.Match("example.com", tt.path)
+			r := m.Match("example.com", tt.path, nil)
 			if r == nil || r.ID != tt.want {
 				t.Errorf("Match(%q) = %v, want %q", tt.path, r, tt.want)
 			}
@@ -188,7 +188,7 @@ func TestMatch_PriorityTieBrokenByPathLength(t *testing.T) {
 	}
 	m.loadRoutes()
 
-	r := m.Match("example.com", "/api/internal/users")
+	r := m.Match("example.com", "/api/internal/users", nil)
 	if r == nil || r.ID != "longer" {
 		t.Errorf("Match returned %v, want longer (same priority, longer path)", r)
 	}
@@ -208,7 +208,7 @@ func TestMatch_SkipsRouteWithUnsupportedStoredPathMatchMode(t *testing.T) {
 	}
 	m.loadRoutes()
 
-	r := m.Match("example.com", "/admin/users")
+	r := m.Match("example.com", "/admin/users", nil)
 	if r == nil || r.ID != "fallback" {
 		t.Fatalf("Match() = %v, want fallback route when stored path_match_mode is unsupported", r)
 	}
@@ -254,16 +254,16 @@ func TestMatch_NoRoute(t *testing.T) {
 	m.db.CreateRoute(&store.Route{ID: "1", Host: "example.com", PathPrefix: "/api", Backend: "http://x", Enabled: true, Priority: 0})
 	m.loadRoutes()
 
-	r := m.Match("other.com", "/other")
+	r := m.Match("other.com", "/other", nil)
 	if r != nil {
 		t.Errorf("Match for non-matching host/path = %v, want nil", r)
 	}
 }
 
-func TestRoute_AuthRule(t *testing.T) {
-	rule := &AuthRule{ID: "rule-1", Type: "apikey"}
-	r := Route{ID: "1", AuthRule: rule}
-	if r.AuthRule != rule {
-		t.Error("Route.AuthRule not set correctly")
+func TestRoute_AuthConfig(t *testing.T) {
+	cfg := &RouteAuthConfig{ApiKeyEnabled: true, ApiKeyHeader: "X-API-Key"}
+	r := Route{ID: "1", AuthConfig: cfg}
+	if r.AuthConfig == nil || !r.AuthConfig.ApiKeyEnabled {
+		t.Error("Route.AuthConfig not set correctly")
 	}
 }

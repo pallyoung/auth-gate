@@ -1,7 +1,9 @@
 package authrules
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -15,9 +17,7 @@ const (
 	ErrCodeRouteIDRequired         = "route_id_required"
 	ErrCodeInvalidAuthRuleType     = "invalid_auth_rule_type"
 	ErrCodeMissingAPIKeySecret     = "missing_apikey_secret"
-	ErrCodeMissingBearerSecret     = "missing_bearer_secret"
 	ErrCodeMissingBasicCredentials = "missing_basic_credentials"
-	ErrCodeDuplicateRouteAuthRule  = "duplicate_route_auth_rule"
 	ErrCodeAuthRuleStoreFailure    = "auth_rule_store_failure"
 )
 
@@ -136,9 +136,6 @@ func (s *Service) Create(input CreateInput) (*store.AuthRule, error) {
 		return nil, err
 	}
 	if err := s.db.CreateAuthRule(rule); err != nil {
-		if isUniqueViolation(err) {
-			return nil, newError(ErrCodeDuplicateRouteAuthRule, "route already has an auth rule", err)
-		}
 		return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to create auth rule", err)
 	}
 	s.reload()
@@ -158,9 +155,6 @@ func (s *Service) Update(id string, input UpdateInput) (*store.AuthRule, error) 
 	if err := s.db.UpdateAuthRule(rule); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newError(ErrCodeAuthRuleNotFound, "auth rule not found", err)
-		}
-		if isUniqueViolation(err) {
-			return nil, newError(ErrCodeDuplicateRouteAuthRule, "route already has an auth rule", err)
 		}
 		return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to update auth rule", err)
 	}
@@ -204,6 +198,14 @@ func (s *Service) buildCreate(input CreateInput) (*store.AuthRule, error) {
 	}
 	if ruleType == "gateway" && config.LoginMode == "" {
 		config.LoginMode = "form"
+	}
+	// apikey 类型自动生成密钥，忽略用户传入值
+	if ruleType == "apikey" {
+		key, err := generateAPIKey()
+		if err != nil {
+			return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to generate api key", err)
+		}
+		config.Secret = key
 	}
 	if err := validate(ruleType, config); err != nil {
 		return nil, err
@@ -256,7 +258,8 @@ func (s *Service) buildUpdate(input UpdateInput, existing *store.AuthRule) (*sto
 	if input.Config.HeaderName != nil {
 		config.HeaderName = strings.TrimSpace(*input.Config.HeaderName)
 	}
-	if input.Config.Secret != nil {
+	// apikey 的密钥由后端自动生成，忽略用户传入值
+	if input.Config.Secret != nil && ruleType != "apikey" {
 		config.Secret = strings.TrimSpace(*input.Config.Secret)
 	}
 	if input.Config.Username != nil {
@@ -316,6 +319,14 @@ func (s *Service) buildUpdate(input UpdateInput, existing *store.AuthRule) (*sto
 	if ruleType == "gateway" && config.LoginMode == "" {
 		config.LoginMode = "form"
 	}
+	// 切换到 apikey 类型时自动生成密钥
+	if ruleType == "apikey" && config.Secret == "" {
+		key, err := generateAPIKey()
+		if err != nil {
+			return nil, newError(ErrCodeAuthRuleStoreFailure, "failed to generate api key", err)
+		}
+		config.Secret = key
+	}
 	if err := validate(ruleType, config); err != nil {
 		return nil, err
 	}
@@ -350,11 +361,6 @@ func validate(ruleType string, config store.AuthConfig) error {
 			return newError(ErrCodeMissingAPIKeySecret, "apikey secret required", nil)
 		}
 		return nil
-	case "bearer":
-		if config.Secret == "" {
-			return newError(ErrCodeMissingBearerSecret, "bearer secret required", nil)
-		}
-		return nil
 	case "basic":
 		if config.Username == "" || strings.TrimSpace(config.Password) == "" {
 			return newError(ErrCodeMissingBasicCredentials, "basic username and password required", nil)
@@ -365,10 +371,6 @@ func validate(ruleType string, config store.AuthConfig) error {
 	default:
 		return newError(ErrCodeInvalidAuthRuleType, "invalid auth rule type", nil)
 	}
-}
-
-func isUniqueViolation(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "unique")
 }
 
 func normalizeStoredAuthRule(rule store.AuthRule) store.AuthRule {
@@ -410,4 +412,12 @@ func normalizeCommaSeparated(value string) string {
 		normalized = append(normalized, trimmed)
 	}
 	return strings.Join(normalized, ",")
+}
+
+func generateAPIKey() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }

@@ -55,8 +55,15 @@ export interface Route {
   timeout_ms?: number
   retry_attempts?: number
   path_match_mode?: string
+  header_name?: string
+  header_value?: string
   rewrite_target?: string
   redirect_code?: number
+  // Header manipulation
+  set_request_headers?: Record<string, string>
+  remove_request_headers?: string[]
+  add_response_headers?: Record<string, string>
+  remove_response_headers?: string[]
   created_at: string
   updated_at: string
 }
@@ -89,12 +96,20 @@ export interface RouteInput {
   timeout_ms?: number
   retry_attempts?: number
   path_match_mode?: string
+  header_name?: string
+  header_value?: string
   rewrite_target?: string
   redirect_code?: number
+  // Header manipulation
+  set_request_headers?: Record<string, string>
+  remove_request_headers?: string[]
+  add_response_headers?: Record<string, string>
+  remove_response_headers?: string[]
 }
 
 export interface AuthRuleConfig {
   header_name?: string
+  secret?: string
   username?: string
   login_mode?: string
 }
@@ -107,7 +122,7 @@ export interface AuthRuleSecretConfig extends AuthRuleConfig {
 export interface AuthRule {
   id: string
   route_id: string
-  type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
+  type: 'none' | 'apikey' | 'basic' | 'gateway'
   config: AuthRuleConfig
   whitelist?: string[]
   rate_limit?: number
@@ -123,7 +138,7 @@ export interface AuthRule {
 
 export interface AuthRuleInput {
   route_id: string
-  type: 'none' | 'apikey' | 'bearer' | 'basic' | 'gateway'
+  type: 'none' | 'apikey' | 'basic' | 'gateway'
   config: AuthRuleSecretConfig
   whitelist?: string[]
   rate_limit?: number
@@ -133,6 +148,66 @@ export interface AuthRuleInput {
   cors_allowed_headers?: string
   cors_allow_credentials?: boolean
   cors_max_age?: number
+}
+
+// ---- New: Route Auth Config ----
+
+export interface RouteAuthConfig {
+  route_id: string
+  api_key_enabled: boolean
+  api_key_header?: string
+  basic_enabled: boolean
+  basic_username?: string
+  gateway_enabled: boolean
+  gateway_login_mode?: string
+  whitelist?: string[]
+  rate_limit?: number
+  burst?: number
+  cors_allowed_origins?: string
+  cors_allowed_methods?: string
+  cors_allowed_headers?: string
+  cors_allow_credentials?: boolean
+  cors_max_age?: number
+}
+
+export interface RouteAuthConfigInput {
+  api_key_enabled?: boolean
+  api_key_header?: string
+  basic_enabled?: boolean
+  basic_username?: string
+  basic_password?: string
+  gateway_enabled?: boolean
+  gateway_login_mode?: string
+  whitelist?: string[]
+  rate_limit?: number
+  burst?: number
+  cors_allowed_origins?: string
+  cors_allowed_methods?: string
+  cors_allowed_headers?: string
+  cors_allow_credentials?: boolean
+  cors_max_age?: number
+}
+
+// ---- New: API Keys ----
+
+export interface ApiKey {
+  id: string
+  route_id: string
+  name: string
+  key_prefix: string
+  expires_at?: string
+  status: 'active' | 'expired' | 'revoked'
+  last_used_at?: string
+  created_at: string
+}
+
+export interface ApiKeyCreateResponse extends ApiKey {
+  secret: string
+}
+
+export interface ApiKeyCreateInput {
+  name: string
+  expires_at?: string
 }
 
 export interface LoginResponse {

@@ -4,7 +4,7 @@ import { SetupPage } from './pages/SetupPage'
 import { AccessLoginPage } from './pages/AccessLoginPage'
 import { Layout } from './components/Layout'
 import { RoutesPage } from './pages/RoutesPage'
-import { AuthRulesPage } from './pages/AuthRulesPage'
+import { RouteAuthPage } from './pages/RouteAuthPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import { CertificatesPage } from './pages/CertificatesPage'
@@ -88,7 +88,7 @@ export default function App() {
 
   const renderPage = () => {
     switch (effectivePathname) {
-      case '/auth': return <AuthRulesPage />
+      case '/auth': return <RouteAuthPage />
       case '/users': return <UsersPage />
       case '/certificates': return <CertificatesPage />
       case '/settings': return <SettingsPage />

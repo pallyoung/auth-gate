@@ -373,4 +373,72 @@ describe('RouteForm', () => {
     expect(screen.getByRole('checkbox', { name: /strip prefix/i, hidden: true })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: /enabled/i, hidden: true })).not.toBeChecked()
   })
+
+  it('renders the Header Rules section with empty state text', async () => {
+    await renderWithI18n(
+      <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { locale: 'en' }
+    )
+
+    // The header rules section should be visible
+    expect(screen.getByText('Header Rules')).toBeInTheDocument()
+    expect(screen.getByText('Set Request Headers')).toBeInTheDocument()
+    expect(screen.getByText('Remove Request Headers')).toBeInTheDocument()
+    expect(screen.getByText('Add Response Headers')).toBeInTheDocument()
+    expect(screen.getByText('Remove Response Headers')).toBeInTheDocument()
+
+    // All should show empty state
+    const emptyStates = screen.getAllByText('No headers configured.')
+    expect(emptyStates.length).toBe(4)
+  })
+
+  it('hydrates header manipulation fields from an existing route', async () => {
+    const routeWithHeaders: Route = {
+      ...billingRoute,
+      set_request_headers: { 'X-Custom-Token': 'secret123' },
+      remove_request_headers: ['Cookie'],
+      add_response_headers: { 'X-Request-Id': 'req-42' },
+      remove_response_headers: ['X-Powered-By'],
+    }
+
+    await renderWithI18n(
+      <RouteForm route={routeWithHeaders} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { locale: 'en' }
+    )
+
+    // The header values should be rendered in inputs
+    expect(screen.getByDisplayValue('X-Custom-Token')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('secret123')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Cookie')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('X-Request-Id')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('req-42')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('X-Powered-By')).toBeInTheDocument()
+  })
+
+  it('submits cleaned header manipulation fields on save', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const routeWithHeaders: Route = {
+      ...billingRoute,
+      set_request_headers: { 'X-Token': 'my-secret' },
+    }
+
+    await renderWithI18n(
+      <RouteForm route={routeWithHeaders} certificates={[]} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { locale: 'en' }
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Update Route' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          set_request_headers: { 'X-Token': 'my-secret' },
+          remove_request_headers: undefined,
+          add_response_headers: undefined,
+          remove_response_headers: undefined,
+        })
+      )
+    })
+  })
 })

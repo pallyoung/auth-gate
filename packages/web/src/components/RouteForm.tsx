@@ -44,8 +44,15 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     timeout_ms: route?.timeout_ms || 0,
     retry_attempts: route?.retry_attempts || 0,
     path_match_mode: route?.path_match_mode || '',
+    header_name: route?.header_name || '',
+    header_value: route?.header_value || '',
     rewrite_target: route?.rewrite_target || '',
     redirect_code: route?.redirect_code || 0,
+    // Header manipulation
+    set_request_headers: route?.set_request_headers || {},
+    remove_request_headers: route?.remove_request_headers || [],
+    add_response_headers: route?.add_response_headers || {},
+    remove_response_headers: route?.remove_response_headers || [],
   }
 }
 
@@ -55,6 +62,149 @@ function normalizeHost(host: string | undefined) {
     return trimmed.slice(1, -1)
   }
   return trimmed
+}
+
+/** Remove entries with empty keys from a header map, or return undefined if empty. */
+function cleanHeaderMap(m: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!m) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(m)) {
+    if (k.trim() !== '') out[k.trim()] = v
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/** Trim and drop empty strings from a header name list, or return undefined if empty. */
+function cleanHeaderList(arr: string[] | undefined): string[] | undefined {
+  if (!arr) return undefined
+  const out = arr.map((s) => s.trim()).filter((s) => s !== '')
+  return out.length > 0 ? out : undefined
+}
+
+// ---- Header editor sub-components ----
+
+interface HeaderMapSectionProps {
+  label: string
+  hint: string
+  entries: Record<string, string>
+  addLabel: string
+  keyPlaceholder: string
+  valuePlaceholder: string
+  removeLabel: string
+  emptyText: string
+  onChange: (entries: Record<string, string>) => void
+  idPrefix?: string
+}
+
+function HeaderMapSection({
+  label, hint, entries, addLabel, keyPlaceholder, valuePlaceholder, removeLabel, emptyText, onChange, idPrefix,
+}: HeaderMapSectionProps) {
+  const pairs = Object.entries(entries)
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-[var(--text-muted)]">{label}</div>
+      <p className="text-xs text-[var(--text-muted)]">{hint}</p>
+      {pairs.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[var(--border-default)] px-4 py-3 text-xs text-[var(--text-muted)]">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {pairs.map(([k, v], i) => (
+            <div key={`${k}-${i}`} className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input
+                  id={idPrefix ? `${idPrefix}-key-${i}` : undefined}
+                  label={keyPlaceholder}
+                  value={k}
+                  onChange={(e) => {
+                    const next = { ...entries }
+                    delete next[k]
+                    next[e.target.value] = v
+                    onChange(next)
+                  }}
+                  placeholder={keyPlaceholder}
+                />
+              </div>
+              <div className="flex-1">
+                <Input
+                  id={idPrefix ? `${idPrefix}-val-${i}` : undefined}
+                  label={valuePlaceholder}
+                  value={v}
+                  onChange={(e) => onChange({ ...entries, [k]: e.target.value })}
+                  placeholder={valuePlaceholder}
+                />
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => {
+                const next = { ...entries }
+                delete next[k]
+                onChange(next)
+              }}>
+                {removeLabel}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button variant="secondary" size="sm" onClick={() => onChange({ ...entries, '': '' })}>
+        {addLabel}
+      </Button>
+    </div>
+  )
+}
+
+interface HeaderListSectionProps {
+  label: string
+  hint: string
+  entries: string[]
+  addLabel: string
+  placeholder: string
+  removeLabel: string
+  emptyText: string
+  onChange: (entries: string[]) => void
+  idPrefix?: string
+}
+
+function HeaderListSection({
+  label, hint, entries, addLabel, placeholder, removeLabel, emptyText, onChange, idPrefix,
+}: HeaderListSectionProps) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-[var(--text-muted)]">{label}</div>
+      <p className="text-xs text-[var(--text-muted)]">{hint}</p>
+      {entries.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[var(--border-default)] px-4 py-3 text-xs text-[var(--text-muted)]">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((name, i) => (
+            <div key={`${name}-${i}`} className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input
+                  id={idPrefix ? `${idPrefix}-${i}` : undefined}
+                  label={placeholder}
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...entries]
+                    next[i] = e.target.value
+                    onChange(next)
+                  }}
+                  placeholder={placeholder}
+                />
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => onChange(entries.filter((_, j) => j !== i))}>
+                {removeLabel}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button variant="secondary" size="sm" onClick={() => onChange([...entries, ''])}>
+        {addLabel}
+      </Button>
+    </div>
+  )
 }
 
 export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteFormProps) {
@@ -186,6 +336,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         tls_key: (form.tls_key || '').trim(),
         rewrite_target: (form.rewrite_target || '').trim(),
         certificate_id: certificateId,
+        // Header manipulation — strip empty entries
+        set_request_headers: cleanHeaderMap(form.set_request_headers),
+        remove_request_headers: cleanHeaderList(form.remove_request_headers),
+        add_response_headers: cleanHeaderMap(form.add_response_headers),
+        remove_response_headers: cleanHeaderList(form.remove_response_headers),
       })
     } catch (err) {
       setError(getLocalizedTextState(err))
@@ -326,6 +481,23 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Input
+            label={t('form.headerName')}
+            value={form.header_name || ''}
+            onChange={(event) => setForm({ ...form, header_name: event.target.value })}
+            placeholder={t('form.headerNamePlaceholder')}
+            hint={t('form.headerNameHint')}
+          />
+          <Input
+            label={t('form.headerValue')}
+            value={form.header_value || ''}
+            onChange={(event) => setForm({ ...form, header_value: event.target.value })}
+            placeholder={t('form.headerValuePlaceholder')}
+            hint={t('form.headerValueHint')}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Select
             label={t('form.redirectCode')}
             value={String(form.redirect_code || 0)}
@@ -458,6 +630,71 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
             ))}
           </div>
         )}
+      </Card>
+
+      <Card tone="soft" className="space-y-5">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+            {t('form.headersEyebrow')}
+          </div>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            {t('form.headersDescription')}
+          </p>
+        </div>
+
+        {/* Set Request Headers — key-value map */}
+        <HeaderMapSection
+          label={t('form.setRequestHeaders')}
+          hint={t('form.setRequestHeadersHint')}
+          entries={form.set_request_headers || {}}
+          addLabel={t('form.addHeader')}
+          keyPlaceholder={t('form.headerEntryKeyPlaceholder')}
+          valuePlaceholder={t('form.headerEntryValuePlaceholder')}
+          removeLabel={t('form.removeHeader')}
+          emptyText={t('form.noHeadersConfigured')}
+          onChange={(updated) => setForm({ ...form, set_request_headers: updated })}
+          idPrefix="set-req-hdr"
+        />
+
+        {/* Remove Request Headers — string list */}
+        <HeaderListSection
+          label={t('form.removeRequestHeaders')}
+          hint={t('form.removeRequestHeadersHint')}
+          entries={form.remove_request_headers || []}
+          addLabel={t('form.addHeaderName')}
+          placeholder={t('form.headerEntryKeyPlaceholder')}
+          removeLabel={t('form.removeHeader')}
+          emptyText={t('form.noHeadersConfigured')}
+          onChange={(updated) => setForm({ ...form, remove_request_headers: updated })}
+          idPrefix="rm-req-hdr"
+        />
+
+        {/* Add Response Headers — key-value map */}
+        <HeaderMapSection
+          label={t('form.addResponseHeaders')}
+          hint={t('form.addResponseHeadersHint')}
+          entries={form.add_response_headers || {}}
+          addLabel={t('form.addHeader')}
+          keyPlaceholder={t('form.headerEntryKeyPlaceholder')}
+          valuePlaceholder={t('form.headerEntryValuePlaceholder')}
+          removeLabel={t('form.removeHeader')}
+          emptyText={t('form.noHeadersConfigured')}
+          onChange={(updated) => setForm({ ...form, add_response_headers: updated })}
+          idPrefix="add-resp-hdr"
+        />
+
+        {/* Remove Response Headers — string list */}
+        <HeaderListSection
+          label={t('form.removeResponseHeaders')}
+          hint={t('form.removeResponseHeadersHint')}
+          entries={form.remove_response_headers || []}
+          addLabel={t('form.addHeaderName')}
+          placeholder={t('form.headerEntryKeyPlaceholder')}
+          removeLabel={t('form.removeHeader')}
+          emptyText={t('form.noHeadersConfigured')}
+          onChange={(updated) => setForm({ ...form, remove_response_headers: updated })}
+          idPrefix="rm-resp-hdr"
+        />
       </Card>
 
       <Card tone="soft" className="space-y-4">

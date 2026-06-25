@@ -11,13 +11,26 @@ type Store interface {
 	UpdateRoute(r *Route) error
 	DeleteRoute(id string) error
 
-	// Auth rules
+	// Auth rules (legacy, kept for migration)
 	ListAuthRules() ([]AuthRule, error)
 	GetAuthRule(id string) (*AuthRule, error)
 	GetAuthRuleByRouteID(routeID string) (*AuthRule, error)
 	CreateAuthRule(r *AuthRule) error
 	UpdateAuthRule(r *AuthRule) error
 	DeleteAuthRule(id string) error
+
+	// Route Auth Config
+	GetRouteAuthConfig(routeID string) (*RouteAuthConfig, error)
+	CreateOrUpdateRouteAuthConfig(c *RouteAuthConfig) error
+	DeleteRouteAuthConfig(routeID string) error
+
+	// API Keys
+	ListApiKeysByRoute(routeID string) ([]ApiKey, error)
+	GetApiKey(id string) (*ApiKey, error)
+	FindApiKeyBySecret(secret string) (*ApiKey, error)
+	CreateApiKey(k *ApiKey) error
+	UpdateApiKey(k *ApiKey) error
+	DeleteApiKey(id string) error
 
 	// Users
 	ListUsers() ([]User, error)

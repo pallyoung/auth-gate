@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/routehost"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
@@ -85,17 +86,24 @@ func matchPriority(mode string) int {
 	}
 }
 
-func compileRoutes(routes []store.Route, authRules []store.AuthRule) []Route {
-	authMap := make(map[string]AuthRule, len(authRules))
-	for _, rule := range authRules {
-		authMap[rule.RouteID] = compileAuthRule(rule)
+func compileRoutes(routes []store.Route, authConfigs map[string]store.RouteAuthConfig, apiKeys map[string]store.ApiKey) []Route {
+	// Group API keys by route
+	apiKeysByRoute := make(map[string][]ApiKeyEntry)
+	for _, key := range apiKeys {
+		if key.Status == "active" {
+			apiKeysByRoute[key.RouteID] = append(apiKeysByRoute[key.RouteID], ApiKeyEntry{
+				ID:        key.ID,
+				Secret:    key.Secret,
+				ExpiresAt: timePtrToStringPtr(key.ExpiresAt),
+				Status:    key.Status,
+			})
+		}
 	}
 
 	compiled := make([]Route, 0, len(routes))
 	for _, route := range routes {
 		effectiveMode, ok := normalizeStoredPathMatchMode(route.PathMatchMode)
 		if !ok {
-			// Skip malformed legacy rows so unsupported stored modes never capture traffic.
 			continue
 		}
 
@@ -115,8 +123,15 @@ func compileRoutes(routes []store.Route, authRules []store.AuthRule) []Route {
 			TimeoutMs:     route.TimeoutMs,
 			RetryAttempts: route.RetryAttempts,
 			PathMatchMode: route.PathMatchMode,
+			HeaderName:    route.HeaderName,
+			HeaderValue:   route.HeaderValue,
 			RewriteTarget: strings.TrimSpace(route.RewriteTarget),
 			RedirectCode:  normalizeStoredRedirectCode(route.RedirectCode),
+			// Header manipulation
+			SetRequestHeaders:     route.SetRequestHeaders,
+			RemoveRequestHeaders:  route.RemoveRequestHeaders,
+			AddResponseHeaders:    route.AddResponseHeaders,
+			RemoveResponseHeaders: route.RemoveResponseHeaders,
 		}
 
 		if effectiveMode == "" {
@@ -140,15 +155,53 @@ func compileRoutes(routes []store.Route, authRules []store.AuthRule) []Route {
 			}
 		}
 
-		if rule, ok := authMap[route.ID]; ok {
-			ruleCopy := rule
-			compiledRoute.AuthRule = &ruleCopy
+		// Attach auth config
+		if cfg, ok := authConfigs[route.ID]; ok {
+			header := cfg.ApiKeyHeader
+			if header == "" {
+				header = "X-API-Key"
+			}
+			loginMode := cfg.GatewayLoginMode
+			if loginMode == "" {
+				loginMode = "form"
+			}
+			compiledRoute.AuthConfig = &RouteAuthConfig{
+				ApiKeyEnabled:    cfg.ApiKeyEnabled,
+				ApiKeyHeader:     header,
+				BasicEnabled:     cfg.BasicEnabled,
+				BasicUsername:    cfg.BasicUsername,
+				BasicPassword:    cfg.BasicPassword,
+				GatewayEnabled:   cfg.GatewayEnabled,
+				GatewayLoginMode: loginMode,
+				Whitelist:        cfg.Whitelist,
+				RateLimit:        cfg.RateLimit,
+				Burst:            cfg.Burst,
+				CORSAllowedOrigins:   cfg.CORSAllowedOrigins,
+				CORSAllowedMethods:   cfg.CORSAllowedMethods,
+				CORSAllowedHeaders:   cfg.CORSAllowedHeaders,
+				CORSAllowCredentials: cfg.CORSAllowCredentials,
+				CORSMaxAge:           cfg.CORSMaxAge,
+			}
 		}
+
+		// Attach API keys
+		if keys, ok := apiKeysByRoute[route.ID]; ok {
+			compiledRoute.ApiKeys = keys
+		}
+
 		compiled = append(compiled, compiledRoute)
 	}
 
 	sortRoutes(compiled)
 	return compiled
+}
+
+func timePtrToStringPtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.Format(time.RFC3339)
+	return &s
 }
 
 // sortRoutes sorts routes so Match() returns the correct nginx priority result.
@@ -220,33 +273,6 @@ func pathLenCmp(a, b Route) int {
 		return -1
 	}
 	return 0
-}
-
-func compileAuthRule(rule store.AuthRule) AuthRule {
-	return AuthRule{
-		ID:      rule.ID,
-		RouteID: rule.RouteID,
-		Type:    normalizeStoredAuthRuleType(rule.Type),
-		Config: AuthConfig{
-			HeaderName: rule.Config.HeaderName,
-			Secret:     rule.Config.Secret,
-			Username:   rule.Config.Username,
-			Password:   rule.Config.Password,
-			LoginMode:  rule.Config.LoginMode,
-		},
-		Whitelist:            rule.Whitelist,
-		RateLimit:            rule.RateLimit,
-		Burst:                rule.Burst,
-		CORSAllowedOrigins:   rule.CORSAllowedOrigins,
-		CORSAllowedMethods:   rule.CORSAllowedMethods,
-		CORSAllowedHeaders:   rule.CORSAllowedHeaders,
-		CORSAllowCredentials: rule.CORSAllowCredentials,
-		CORSMaxAge:           rule.CORSMaxAge,
-	}
-}
-
-func normalizeStoredAuthRuleType(ruleType string) string {
-	return strings.ToLower(strings.TrimSpace(ruleType))
 }
 
 func normalizeStoredRedirectCode(code int) int {

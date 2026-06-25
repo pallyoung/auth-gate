@@ -59,6 +59,10 @@ func UserHasRouteAccess(user *User, routeID string) bool {
 	if user == nil || !user.Enabled {
 		return false
 	}
+	// 管理员默认拥有所有项目的访问权限
+	if user.Role == RoleAdmin {
+		return true
+	}
 	for _, allowedRouteID := range user.RouteIDs {
 		if allowedRouteID == routeID {
 			return true

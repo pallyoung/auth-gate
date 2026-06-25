@@ -76,9 +76,9 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
       },
       {
         path: '/auth',
-        icon: KeyRound,
-        label: t('sections.auth.label'),
-        description: t('sections.auth.description'),
+        icon: Shield,
+        label: '鉴权配置',
+        description: '配置路由级认证方式和 API Key',
         visible: true,
       },
       {

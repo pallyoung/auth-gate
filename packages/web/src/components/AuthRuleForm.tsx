@@ -7,6 +7,7 @@ import { Alert, Button, Card, Input, Select, Switch } from './ui'
 interface AuthRuleFormProps {
   rule: AuthRule | null
   routes: Route[]
+  defaultRouteId?: string
   onSubmit: (data: AuthRuleInput) => Promise<void> | void
   onCancel: () => void
 }
@@ -26,9 +27,9 @@ function normalizeOptionalNumber(value: number | undefined): number | undefined 
   return value && value > 0 ? value : undefined
 }
 
-function getInitialAuthRuleForm(rule: AuthRule | null, routes: Route[]): AuthRuleInput {
+function getInitialAuthRuleForm(rule: AuthRule | null, routes: Route[], defaultRouteId?: string): AuthRuleInput {
   return {
-    route_id: rule?.route_id || routes[0]?.id || '',
+    route_id: rule?.route_id || defaultRouteId || routes[0]?.id || '',
     type: rule?.type || 'none',
     config: {
       header_name: rule?.config?.header_name || 'X-API-Key',
@@ -48,9 +49,9 @@ function getInitialAuthRuleForm(rule: AuthRule | null, routes: Route[]): AuthRul
   }
 }
 
-export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormProps) {
+export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel }: AuthRuleFormProps) {
   const { t } = useTranslation('authRules')
-  const initialForm = getInitialAuthRuleForm(rule, routes)
+  const initialForm = getInitialAuthRuleForm(rule, routes, defaultRouteId)
   const [form, setForm] = React.useState<AuthRuleInput>(() => initialForm)
   const [whitelistText, setWhitelistText] = React.useState(() => (initialForm.whitelist || []).join(', '))
   const [error, setError] = React.useState<LocalizedTextState>(null)
@@ -68,8 +69,6 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
   const type = form.type || 'none'
   const config = form.config || {}
   const isEditingSameType = rule?.type === type
-  const shouldRequireAPIKeySecret = type === 'apikey' && !isEditingSameType
-  const shouldRequireBearerSecret = type === 'bearer' && !isEditingSameType
   const shouldRequireBasicPassword = type === 'basic' && !isEditingSameType
 
   const updateConfig = (next: Partial<AuthRuleInput['config']>) => {
@@ -92,7 +91,6 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
   const buildSubmitPayload = (): AuthRuleInput => {
     const routeID = form.route_id.trim()
     const headerName = (config.header_name || '').trim()
-    const secret = (config.secret || '').trim()
     const username = (config.username || '').trim()
     const password = config.password || ''
     const hasPassword = password.trim() !== ''
@@ -131,15 +129,7 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
           type,
           config: {
             header_name: headerName || 'X-API-Key',
-            ...(secret ? { secret } : {}),
           },
-          ...runtimePolicy,
-        }
-      case 'bearer':
-        return {
-          route_id: routeID,
-          type,
-          config: secret ? { secret } : {},
           ...runtimePolicy,
         }
       case 'basic':
@@ -196,7 +186,6 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
   const ruleTypeOptions = [
     { value: 'none', label: t('types.none') },
     { value: 'apikey', label: t('types.apikey') },
-    { value: 'bearer', label: t('types.bearer') },
     { value: 'basic', label: t('types.basic') },
     { value: 'gateway', label: t('types.gateway') },
   ]
@@ -223,6 +212,7 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             value: route.id,
             label: route.name || route.path_prefix,
           }))}
+          disabled={!!defaultRouteId && !rule}
           required
         />
 
@@ -236,7 +226,7 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
       </Card>
 
       {type === 'apikey' && (
-        <Card tone="soft" className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card tone="soft" className="space-y-4">
           <Input
             label={t('form.headerName')}
             value={config.header_name || ''}
@@ -244,27 +234,25 @@ export function AuthRuleForm({ rule, routes, onSubmit, onCancel }: AuthRuleFormP
             placeholder="X-API-Key"
             required
           />
-          <Input
-            label={t('form.secret')}
-            value={config.secret || ''}
-            onChange={(event) => updateConfig({ secret: event.target.value })}
-            placeholder="secret-value"
-            hint={isEditingSameType ? t('form.secretRetainedHint') : undefined}
-            required={shouldRequireAPIKeySecret}
-          />
-        </Card>
-      )}
-
-      {type === 'bearer' && (
-        <Card tone="soft">
-          <Input
-            label={t('form.jwtSecret')}
-            value={config.secret || ''}
-            onChange={(event) => updateConfig({ secret: event.target.value })}
-            placeholder="jwt-signing-secret"
-            hint={isEditingSameType ? t('form.jwtSecretRetainedHint') : t('form.jwtSecretHint')}
-            required={shouldRequireBearerSecret}
-          />
+          {rule?.config?.secret && (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-[var(--text-muted)]">{t('form.apiKey')}</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded bg-[var(--surface-inset)] px-3 py-2 text-xs break-all text-[var(--text-primary)]">
+                  {rule.config.secret}
+                </code>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(rule.config.secret!)}
+                  className="shrink-0"
+                >
+                  {t('form.copyKey')}
+                </Button>
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">{t('form.apiKeyHint')}</p>
+            </div>
+          )}
         </Card>
       )}
 

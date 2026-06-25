@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,13 +25,15 @@ type JSONStore struct {
 }
 
 type storeData struct {
-	Routes         map[string]Route         `json:"routes"`
-	AuthRules      map[string]AuthRule      `json:"auth_rules"`
-	Users          map[string]User          `json:"users"`
-	Certificates   map[string]Certificate   `json:"certificates"`
-	CACertificates map[string]CACertificate `json:"ca_certificates"`
-	HostProfiles   map[string]HostProfile   `json:"host_profiles"`
-	HostEntries    map[string]HostEntry     `json:"host_entries"`
+	Routes           map[string]Route           `json:"routes"`
+	AuthRules        map[string]AuthRule        `json:"auth_rules"`
+	RouteAuthConfigs map[string]RouteAuthConfig `json:"route_auth_configs"`
+	ApiKeys          map[string]ApiKey          `json:"api_keys"`
+	Users            map[string]User            `json:"users"`
+	Certificates     map[string]Certificate     `json:"certificates"`
+	CACertificates   map[string]CACertificate   `json:"ca_certificates"`
+	HostProfiles     map[string]HostProfile     `json:"host_profiles"`
+	HostEntries      map[string]HostEntry       `json:"host_entries"`
 }
 
 // NewJSONStore creates or loads a JSON-backed store from the given directory.
@@ -50,13 +53,15 @@ func (s *JSONStore) load() error {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		s.data = storeData{
-			Routes:         make(map[string]Route),
-			AuthRules:      make(map[string]AuthRule),
-			Users:          make(map[string]User),
-			Certificates:   make(map[string]Certificate),
-			CACertificates: make(map[string]CACertificate),
-			HostProfiles:   make(map[string]HostProfile),
-			HostEntries:    make(map[string]HostEntry),
+			Routes:           make(map[string]Route),
+			AuthRules:        make(map[string]AuthRule),
+			RouteAuthConfigs: make(map[string]RouteAuthConfig),
+			ApiKeys:          make(map[string]ApiKey),
+			Users:            make(map[string]User),
+			Certificates:     make(map[string]Certificate),
+			CACertificates:   make(map[string]CACertificate),
+			HostProfiles:     make(map[string]HostProfile),
+			HostEntries:      make(map[string]HostEntry),
 		}
 		return nil
 	}
@@ -65,6 +70,17 @@ func (s *JSONStore) load() error {
 	}
 	if err := json.Unmarshal(raw, &s.data); err != nil {
 		return fmt.Errorf("store: parse data: %w", err)
+	}
+	// Initialize new maps if missing (first load after upgrade)
+	if s.data.RouteAuthConfigs == nil {
+		s.data.RouteAuthConfigs = make(map[string]RouteAuthConfig)
+	}
+	if s.data.ApiKeys == nil {
+		s.data.ApiKeys = make(map[string]ApiKey)
+	}
+	// Migrate old AuthRules to RouteAuthConfigs + ApiKeys
+	if len(s.data.AuthRules) > 0 {
+		s.migrateAuthRules()
 	}
 	return nil
 }
@@ -145,6 +161,12 @@ func (s *JSONStore) DeleteRoute(id string) error {
 			delete(s.data.AuthRules, rid)
 		}
 	}
+	delete(s.data.RouteAuthConfigs, id)
+	for kid, k := range s.data.ApiKeys {
+		if k.RouteID == id {
+			delete(s.data.ApiKeys, kid)
+		}
+	}
 	return s.save()
 }
 
@@ -187,12 +209,6 @@ func (s *JSONStore) CreateAuthRule(r *AuthRule) error {
 	if r.ID == "" {
 		r.ID = uuid.New().String()
 	}
-	// Enforce unique route_id (replaces SQLite UNIQUE INDEX)
-	for _, existing := range s.data.AuthRules {
-		if existing.RouteID == r.RouteID && existing.ID != r.ID {
-			return fmt.Errorf("UNIQUE constraint failed: auth_rules.route_id")
-		}
-	}
 	// Enforce foreign key: route must exist
 	if _, ok := s.data.Routes[r.RouteID]; !ok {
 		return sql.ErrNoRows
@@ -221,6 +237,221 @@ func (s *JSONStore) DeleteAuthRule(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.data.AuthRules, id)
+	return s.save()
+}
+
+// ---- Migration: AuthRules → RouteAuthConfigs + ApiKeys ----
+
+func (s *JSONStore) migrateAuthRules() {
+	log.Println("store: migrating auth_rules to route_auth_configs + api_keys")
+
+	// Group rules by route_id
+	type ruleGroup struct {
+		config  RouteAuthConfig
+		apiKeys []ApiKey
+	}
+	groups := make(map[string]*ruleGroup)
+
+	for _, rule := range s.data.AuthRules {
+		g, ok := groups[rule.RouteID]
+		if !ok {
+			g = &ruleGroup{
+				config: RouteAuthConfig{
+					ID:       uuid.New().String(),
+					RouteID:  rule.RouteID,
+					Whitelist: rule.Whitelist,
+					RateLimit: rule.RateLimit,
+					Burst:     rule.Burst,
+					CORSAllowedOrigins:   rule.CORSAllowedOrigins,
+					CORSAllowedMethods:   rule.CORSAllowedMethods,
+					CORSAllowedHeaders:   rule.CORSAllowedHeaders,
+					CORSAllowCredentials: rule.CORSAllowCredentials,
+					CORSMaxAge:           rule.CORSMaxAge,
+				},
+			}
+			groups[rule.RouteID] = g
+		}
+
+		switch rule.Type {
+		case "apikey":
+			g.config.ApiKeyEnabled = true
+			if rule.Config.HeaderName != "" {
+				g.config.ApiKeyHeader = rule.Config.HeaderName
+			}
+			if rule.Config.Secret != "" {
+				now := time.Now()
+				secret := rule.Config.Secret
+				prefix := secret
+				if len(prefix) > 8 {
+					prefix = prefix[:8]
+				}
+				g.apiKeys = append(g.apiKeys, ApiKey{
+					ID:        uuid.New().String(),
+					RouteID:   rule.RouteID,
+					Name:      "Migrated Key",
+					KeyPrefix: prefix,
+					Secret:    secret,
+					Status:    "active",
+					CreatedAt: now,
+					UpdatedAt: now,
+				})
+			}
+		case "basic":
+			g.config.BasicEnabled = true
+			g.config.BasicUsername = rule.Config.Username
+			g.config.BasicPassword = rule.Config.Password
+		case "gateway":
+			g.config.GatewayEnabled = true
+			if rule.Config.LoginMode != "" {
+				g.config.GatewayLoginMode = rule.Config.LoginMode
+			} else {
+				g.config.GatewayLoginMode = "form"
+			}
+		}
+	}
+
+	now := time.Now()
+	for _, g := range groups {
+		g.config.CreatedAt = now
+		g.config.UpdatedAt = now
+		s.data.RouteAuthConfigs[g.config.RouteID] = g.config
+		for _, key := range g.apiKeys {
+			s.data.ApiKeys[key.ID] = key
+		}
+	}
+
+	// Clear old auth rules
+	s.data.AuthRules = make(map[string]AuthRule)
+	if err := s.save(); err != nil {
+		log.Printf("store: warning: failed to save migration: %v", err)
+	} else {
+		log.Printf("store: migrated %d route auth configs, %d api keys", len(groups), len(s.data.ApiKeys))
+	}
+}
+
+// ---- Route Auth Config ----
+
+func (s *JSONStore) GetRouteAuthConfig(routeID string) (*RouteAuthConfig, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cfg, ok := s.data.RouteAuthConfigs[routeID]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	return &cfg, nil
+}
+
+func (s *JSONStore) CreateOrUpdateRouteAuthConfig(c *RouteAuthConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c.ID == "" {
+		c.ID = uuid.New().String()
+	}
+	// Verify route exists
+	if _, ok := s.data.Routes[c.RouteID]; !ok {
+		return sql.ErrNoRows
+	}
+	now := time.Now()
+	if existing, ok := s.data.RouteAuthConfigs[c.RouteID]; ok {
+		c.ID = existing.ID
+		c.CreatedAt = existing.CreatedAt
+	} else {
+		c.CreatedAt = now
+	}
+	c.UpdatedAt = now
+	s.data.RouteAuthConfigs[c.RouteID] = *c
+	return s.save()
+}
+
+func (s *JSONStore) DeleteRouteAuthConfig(routeID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data.RouteAuthConfigs, routeID)
+	// Also delete all API keys for this route
+	for id, key := range s.data.ApiKeys {
+		if key.RouteID == routeID {
+			delete(s.data.ApiKeys, id)
+		}
+	}
+	return s.save()
+}
+
+// ---- API Keys ----
+
+func (s *JSONStore) ListApiKeysByRoute(routeID string) ([]ApiKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var keys []ApiKey
+	for _, k := range s.data.ApiKeys {
+		if k.RouteID == routeID {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].CreatedAt.After(keys[j].CreatedAt)
+	})
+	return keys, nil
+}
+
+func (s *JSONStore) GetApiKey(id string) (*ApiKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	k, ok := s.data.ApiKeys[id]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	return &k, nil
+}
+
+func (s *JSONStore) FindApiKeyBySecret(secret string) (*ApiKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, k := range s.data.ApiKeys {
+		if k.Secret == secret {
+			return &k, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (s *JSONStore) CreateApiKey(k *ApiKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if k.ID == "" {
+		k.ID = uuid.New().String()
+	}
+	// Verify route exists
+	if _, ok := s.data.Routes[k.RouteID]; !ok {
+		return sql.ErrNoRows
+	}
+	now := time.Now()
+	k.CreatedAt = now
+	k.UpdatedAt = now
+	if k.Status == "" {
+		k.Status = "active"
+	}
+	s.data.ApiKeys[k.ID] = *k
+	return s.save()
+}
+
+func (s *JSONStore) UpdateApiKey(k *ApiKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.ApiKeys[k.ID]; !ok {
+		return sql.ErrNoRows
+	}
+	k.UpdatedAt = time.Now()
+	s.data.ApiKeys[k.ID] = *k
+	return s.save()
+}
+
+func (s *JSONStore) DeleteApiKey(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.ApiKeys[id]; !ok {
+		return sql.ErrNoRows
+	}
+	delete(s.data.ApiKeys, id)
 	return s.save()
 }
 
