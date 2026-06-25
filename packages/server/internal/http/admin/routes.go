@@ -13,6 +13,8 @@ import (
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/api/dto"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/config"
+	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
 	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	accesslogservice "github.com/pallyoung/auth-gate/packages/server/internal/service/accesslog"
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
@@ -31,7 +33,7 @@ import (
 type CertService interface {
 	List() ([]store.Certificate, error)
 	Get(id string) (*store.Certificate, error)
-	ProvisionLocal(ctx context.Context, name, domain string) (*store.Certificate, error)
+	ProvisionLocal(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error)
 	Import(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
 	Resign(id string) (*store.Certificate, error)
 	Delete(id string) error
@@ -54,7 +56,7 @@ type HostService interface {
 	DeleteEntry(profileID, entryID string) error
 }
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService, accessLogStore *store.AccessLogStore) {
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
@@ -109,6 +111,8 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	adminOnly := group.Group("")
 	adminOnly.Use(auth.RequireRole(store.RoleAdmin))
 	{
+		adminOnly.GET("/config", getConfig(cfg))
+		adminOnly.PUT("/config", updateConfig(cfg))
 		adminOnly.GET("/users", listUsers(userSvc))
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
@@ -285,6 +289,7 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			HTTPSRedirect: req.HTTPSRedirect,
 			CertificateID: req.CertificateID,
 			TimeoutMs:     req.TimeoutMs,
 			RetryAttempts: req.RetryAttempts,
@@ -320,6 +325,7 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
+			HTTPSRedirect: req.HTTPSRedirect,
 			CertificateID: req.CertificateID,
 			TimeoutMs:     req.TimeoutMs,
 			RetryAttempts: req.RetryAttempts,
@@ -566,7 +572,17 @@ func createCertificate(certSvc CertService) gin.HandlerFunc {
 		var err error
 		switch req.Source {
 		case "", dto.CertificateSourceLocalCA:
-			cert, err = certSvc.ProvisionLocal(context.Background(), req.Name, req.Domain)
+			var info *localca.SubjectInfo
+			if req.Organization != "" || req.OrganizationalUnit != "" || req.Country != "" || req.Province != "" || req.Locality != "" {
+				info = &localca.SubjectInfo{
+					Organization:       req.Organization,
+					OrganizationalUnit: req.OrganizationalUnit,
+					Country:            req.Country,
+					Province:           req.Province,
+					Locality:           req.Locality,
+				}
+			}
+			cert, err = certSvc.ProvisionLocal(context.Background(), req.Name, req.Domain, info)
 		case dto.CertificateSourceImported:
 			cert, err = certSvc.Import(context.Background(), req.Name, req.Domain, req.CertPEM, req.KeyPEM)
 		default:

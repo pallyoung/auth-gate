@@ -348,7 +348,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
           </div>
         </header>
 
-        <div className="mx-auto flex min-h-screen w-full max-w-[calc(var(--page-max-width)+4rem)] flex-col px-4 pb-[calc(var(--bottom-nav-height)+1rem)] pt-5 md:px-8 md:pb-10 md:pt-5">
+        <div className="flex min-h-screen w-full flex-col px-4 pb-[calc(var(--bottom-nav-height)+1rem)] pt-5 md:px-8 md:pb-10 md:pt-5">
           {children}
         </div>
 

@@ -45,7 +45,7 @@ if (-not (Test-Path $nodeModules)) {
     Write-Host "[1/3] Web dependencies already installed." -ForegroundColor Gray
 }
 
-Write-Host "[2/3] Starting Go backend (port 8080)..." -ForegroundColor Yellow
+Write-Host "[2/3] Starting Go backend (port 80)..." -ForegroundColor Yellow
 
 # Start Go backend in background via a separate PowerShell process.
 # Avoid Start-Process -Environment which replaces all env vars in PS 5.1.
@@ -79,7 +79,7 @@ if ($goProcess.HasExited) {
 
 Write-Host "[3/3] Starting Vite dev server (port 5174)..." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Backend:  http://localhost:8080/_authgate" -ForegroundColor Gray
+Write-Host "  Backend:  http://localhost:80/_authgate" -ForegroundColor Gray
 Write-Host "  Frontend: http://localhost:5174/_authgate/" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Gray

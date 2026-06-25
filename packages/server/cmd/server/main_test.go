@@ -46,7 +46,7 @@ func TestBuildEngine_ServesIndexWithoutSwallowingProxyPaths(t *testing.T) {
 		t.Fatalf("WriteFile(favicon.ico) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil, config.DefaultConfig())
 
 	controlPlaneReq := httptest.NewRequest(http.MethodGet, controlPlaneBasePath, nil)
 	controlPlaneResp := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestBuildEngine_RegistersConfigReloadAsPostOnly(t *testing.T) {
 		t.Fatalf("WriteFile(index.html) error = %v", err)
 	}
 
-	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil)
+	engine := buildEngine(router.NewManager(db), webRoot, db, nil, nil, nil, config.DefaultConfig())
 
 	token, err := auth.GenerateToken("admin-1", "admin", store.RoleAdmin)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestBuildEngine_LoginResponseReportsCertificateFeatureAvailability(t *testi
 				t.Fatalf("WriteFile(index.html) error = %v", err)
 			}
 
-			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc, nil, nil)
+			engine := buildEngine(router.NewManager(db), webRoot, db, tc.certSvc, nil, nil, config.DefaultConfig())
 
 			req := httptest.NewRequest(http.MethodPost, controlPlaneAPIBasePath+"/auth/login", strings.NewReader(`{"username":"admin","password":"password123"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -210,13 +210,13 @@ func TestBuildTLSHostGroups_FormatsIPv6ListenHost(t *testing.T) {
 			TLSCert:    "/tmp/site.pem",
 			TLSKey:     "/tmp/site.key",
 		},
-	})
+	}, 443)
 
 	if len(groups) != 1 {
 		t.Fatalf("len(groups) = %d, want 1", len(groups))
 	}
-	if groups[0].Host != "[2001:db8::1]:443" {
-		t.Fatalf("groups[0].Host = %q, want %q", groups[0].Host, "[2001:db8::1]:443")
+	if groups[0].Host != ":443" {
+		t.Fatalf("groups[0].Host = %q, want %q", groups[0].Host, ":443")
 	}
 }
 

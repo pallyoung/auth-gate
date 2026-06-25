@@ -250,7 +250,7 @@ describe('RoutesPage i18n', () => {
 
     const table = await screen.findByRole('table')
     expect(within(table).getByText('2 backends')).toBeInTheDocument()
-    expect(within(table).getByText('TLS enabled')).toBeInTheDocument()
+    expect(within(table).getByText('HTTPS enabled')).toBeInTheDocument()
     expect(within(table).getByText('Timeout 4500ms')).toBeInTheDocument()
     expect(within(table).getByText('Retries 3')).toBeInTheDocument()
     expect(within(table).getByText('Backend 1 dial 1500ms')).toBeInTheDocument()
@@ -552,7 +552,7 @@ describe('RoutesPage i18n', () => {
     await user.type(screen.getByLabelText('Backend URL 1'), 'http://backend-a.example.com')
     await user.clear(screen.getByLabelText('Weight 1'))
     await user.type(screen.getByLabelText('Weight 1'), '2')
-    await user.click(screen.getByLabelText('TLS Termination'))
+    await user.click(screen.getByLabelText('Enable HTTPS'))
     await user.click(screen.getByRole('button', { name: 'Create Route' }))
 
     await waitFor(() => {

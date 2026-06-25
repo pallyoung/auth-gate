@@ -18,6 +18,11 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
   const [domain, setDomain] = React.useState('')
   const [certPem, setCertPem] = React.useState('')
   const [keyPem, setKeyPem] = React.useState('')
+  const [organization, setOrganization] = React.useState('')
+  const [organizationalUnit, setOrganizationalUnit] = React.useState('')
+  const [country, setCountry] = React.useState('')
+  const [province, setProvince] = React.useState('')
+  const [locality, setLocality] = React.useState('')
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const activeSubmitRef = React.useRef<symbol | null>(null)
@@ -63,6 +68,17 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
         input.source = 'imported'
         input.cert_pem = certPem.trim()
         input.key_pem = keyPem.trim()
+      } else {
+        const trimmedOrg = organization.trim()
+        const trimmedOU = organizationalUnit.trim()
+        const trimmedCountry = country.trim()
+        const trimmedProvince = province.trim()
+        const trimmedLocality = locality.trim()
+        if (trimmedOrg) input.organization = trimmedOrg
+        if (trimmedOU) input.organizational_unit = trimmedOU
+        if (trimmedCountry) input.country = trimmedCountry
+        if (trimmedProvince) input.province = trimmedProvince
+        if (trimmedLocality) input.locality = trimmedLocality
       }
 
       await onSubmit(input)
@@ -134,6 +150,60 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
           />
         </div>
       </Card>
+
+      {mode === 'local_ca' && (
+        <Card tone="soft" className="space-y-5">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              {t('form.subjectEyebrow')}
+            </div>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              {t('form.subjectDescription')}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input
+              label={t('form.organization')}
+              value={organization}
+              onChange={(event) => setOrganization(event.target.value)}
+              placeholder={t('form.organizationPlaceholder')}
+              hint={t('form.subjectHint')}
+            />
+            <Input
+              label={t('form.organizationalUnit')}
+              value={organizationalUnit}
+              onChange={(event) => setOrganizationalUnit(event.target.value)}
+              placeholder={t('form.organizationalUnitPlaceholder')}
+              hint={t('form.subjectHint')}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Input
+              label={t('form.country')}
+              value={country}
+              onChange={(event) => setCountry(event.target.value)}
+              placeholder={t('form.countryPlaceholder')}
+              maxLength={2}
+              hint={t('form.subjectHint')}
+            />
+            <Input
+              label={t('form.province')}
+              value={province}
+              onChange={(event) => setProvince(event.target.value)}
+              placeholder={t('form.provincePlaceholder')}
+              hint={t('form.subjectHint')}
+            />
+            <Input
+              label={t('form.locality')}
+              value={locality}
+              onChange={(event) => setLocality(event.target.value)}
+              placeholder={t('form.localityPlaceholder')}
+              hint={t('form.subjectHint')}
+            />
+          </div>
+        </Card>
+      )}
 
       {mode === 'imported' && (
         <Card tone="soft" className="space-y-4">

@@ -62,8 +62,10 @@ func NewService(db store.Store, cfg Config, reloader runtime.Reloader) (*Service
 	}, nil
 }
 
-// ProvisionLocal signs a new certificate with the local CA. Synchronous.
-func (s *Service) ProvisionLocal(_ context.Context, name, domain string) (*store.Certificate, error) {
+// ProvisionLocal signs a new certificate with the local CA. If info is
+// non-nil its non-empty fields are embedded in the certificate Subject.
+// Synchronous.
+func (s *Service) ProvisionLocal(_ context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error) {
 	var err error
 	name, err = normalizeCertificateName(name)
 	if err != nil {
@@ -80,7 +82,7 @@ func (s *Service) ProvisionLocal(_ context.Context, name, domain string) (*store
 		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+domain, nil)
 	}
 
-	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(domain, defaultLeafDays)
+	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(domain, defaultLeafDays, info)
 	if err != nil {
 		return nil, newError(ErrCodeLocalCA, "sign certificate: "+err.Error(), err)
 	}
@@ -104,6 +106,13 @@ func (s *Service) ProvisionLocal(_ context.Context, name, domain string) (*store
 		RenewAt:   na.AddDate(0, 0, -renewOffsetDays),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+	}
+	if info != nil {
+		cert.Organization = info.Organization
+		cert.OrganizationalUnit = info.OrganizationalUnit
+		cert.Country = info.Country
+		cert.Province = info.Province
+		cert.Locality = info.Locality
 	}
 	if err := s.db.CreateCertificate(cert); err != nil {
 		s.removeCertFiles(certPath, keyPath)
@@ -183,7 +192,18 @@ func (s *Service) Resign(id string) (*store.Certificate, error) {
 			"imported certificates cannot be auto-renewed; re-import the certificate instead", nil)
 	}
 
-	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(cert.Domain, defaultLeafDays)
+	// Rebuild subject info from stored fields so re-signed certs preserve org.
+	var info *localca.SubjectInfo
+	if cert.Organization != "" || cert.OrganizationalUnit != "" || cert.Country != "" || cert.Province != "" || cert.Locality != "" {
+		info = &localca.SubjectInfo{
+			Organization:       cert.Organization,
+			OrganizationalUnit: cert.OrganizationalUnit,
+			Country:            cert.Country,
+			Province:           cert.Province,
+			Locality:           cert.Locality,
+		}
+	}
+	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(cert.Domain, defaultLeafDays, info)
 	if err != nil {
 		return nil, newError(ErrCodeLocalCA, "re-sign certificate: "+err.Error(), err)
 	}

@@ -43,7 +43,7 @@ func TestSignCertificateProducesValidLeaf(t *testing.T) {
 	}
 
 	domain := "*.example.com"
-	certPEM, keyPEM, nb, na, err := ca.SignCertificate(domain, 90)
+	certPEM, keyPEM, nb, na, err := ca.SignCertificate(domain, 90, nil)
 	if err != nil {
 		t.Fatalf("SignCertificate: %v", err)
 	}
@@ -91,7 +91,78 @@ func TestSignCertificateProducesValidLeaf(t *testing.T) {
 func TestSignCertificateRejectsEmptyDomain(t *testing.T) {
 	dir := t.TempDir()
 	ca, _ := LoadOrCreate(dir)
-	if _, _, _, _, err := ca.SignCertificate("", 30); err == nil {
+	if _, _, _, _, err := ca.SignCertificate("", 30, nil); err == nil {
 		t.Fatal("expected error for empty domain")
+	}
+}
+
+func TestSignCertificateWithSubjectInfo(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := LoadOrCreate(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+
+	info := &SubjectInfo{
+		Organization:       "Acme Corp",
+		OrganizationalUnit: "Engineering",
+		Country:            "US",
+		Province:           "California",
+		Locality:           "San Francisco",
+	}
+	certPEM, _, _, _, err := ca.SignCertificate("app.example.com", 30, info)
+	if err != nil {
+		t.Fatalf("SignCertificate: %v", err)
+	}
+
+	cb, _ := pem.Decode(certPEM)
+	if cb == nil {
+		t.Fatal("cert PEM decode failed")
+	}
+	leaf, err := x509.ParseCertificate(cb.Bytes)
+	if err != nil {
+		t.Fatalf("parse leaf: %v", err)
+	}
+
+	if len(leaf.Subject.Organization) != 1 || leaf.Subject.Organization[0] != "Acme Corp" {
+		t.Fatalf("Organization: got %v, want [Acme Corp]", leaf.Subject.Organization)
+	}
+	if len(leaf.Subject.OrganizationalUnit) != 1 || leaf.Subject.OrganizationalUnit[0] != "Engineering" {
+		t.Fatalf("OU: got %v, want [Engineering]", leaf.Subject.OrganizationalUnit)
+	}
+	if len(leaf.Subject.Country) != 1 || leaf.Subject.Country[0] != "US" {
+		t.Fatalf("Country: got %v, want [US]", leaf.Subject.Country)
+	}
+	if len(leaf.Subject.Province) != 1 || leaf.Subject.Province[0] != "California" {
+		t.Fatalf("Province: got %v, want [California]", leaf.Subject.Province)
+	}
+	if len(leaf.Subject.Locality) != 1 || leaf.Subject.Locality[0] != "San Francisco" {
+		t.Fatalf("Locality: got %v, want [San Francisco]", leaf.Subject.Locality)
+	}
+}
+
+func TestSignCertificateWithNilSubjectInfoHasNoOrgFields(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := LoadOrCreate(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+
+	certPEM, _, _, _, err := ca.SignCertificate("plain.example.com", 30, nil)
+	if err != nil {
+		t.Fatalf("SignCertificate: %v", err)
+	}
+
+	cb, _ := pem.Decode(certPEM)
+	leaf, err := x509.ParseCertificate(cb.Bytes)
+	if err != nil {
+		t.Fatalf("parse leaf: %v", err)
+	}
+
+	if len(leaf.Subject.Organization) != 0 {
+		t.Fatalf("Organization should be empty, got %v", leaf.Subject.Organization)
+	}
+	if len(leaf.Subject.OrganizationalUnit) != 0 {
+		t.Fatalf("OU should be empty, got %v", leaf.Subject.OrganizationalUnit)
 	}
 }

@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/_authgate/api': 'http://localhost:8080',
+      '/_authgate/api': 'http://localhost:80',
     },
   },
   optimizeDeps: {

@@ -37,6 +37,18 @@ export const settingsEn = {
     aboutVersion: 'Version: {{version}}',
     aboutRole: 'Active role: {{role}}',
   },
+  config: {
+    eyebrow: 'Server Configuration',
+    title: 'Listen Ports',
+    description: 'Configure which ports the server listens on. Toggle HTTPS to enable TLS for a port. Changes take effect after restart.',
+    addPort: 'Add Port',
+    save: 'Save & Restart',
+    saving: 'Saving...',
+    saved: 'Configuration saved. The server will restart shortly.',
+    saveFailed: 'Failed to save configuration.',
+    atLeastOneAddr: 'At least one listen address is required.',
+    restartHint: 'Saving will trigger a server restart to apply the new port configuration.',
+  },
 } as const
 
 export const settingsZhCN = {
@@ -76,5 +88,17 @@ export const settingsZhCN = {
     aboutProduct: 'Auth Gate 控制台',
     aboutVersion: '版本：{{version}}',
     aboutRole: '当前角色：{{role}}',
+  },
+  config: {
+    eyebrow: '服务器配置',
+    title: '监听端口',
+    description: '配置服务器监听的端口。开启 HTTPS 为端口启用 TLS。更改将在重启后生效。',
+    addPort: '添加端口',
+    save: '保存并重启',
+    saving: '保存中...',
+    saved: '配置已保存，服务器即将重启。',
+    saveFailed: '保存配置失败。',
+    atLeastOneAddr: '至少需要一个监听地址。',
+    restartHint: '保存后会触发服务器重启以应用新的端口配置。',
   },
 } as const

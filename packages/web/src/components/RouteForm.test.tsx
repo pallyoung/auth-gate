@@ -269,7 +269,7 @@ describe('RouteForm', () => {
     await user.type(screen.getByLabelText('Timeout (ms)'), '4500')
     await user.clear(screen.getByLabelText('Retry Attempts'))
     await user.type(screen.getByLabelText('Retry Attempts'), '3')
-    await user.click(screen.getByLabelText('TLS Termination'))
+    await user.click(screen.getByLabelText('Enable HTTPS'))
     await user.selectOptions(screen.getByRole('combobox', { name: 'System Certificate' }), 'cert-1')
     await user.click(screen.getByRole('button', { name: 'Create Route' }))
 
@@ -308,7 +308,7 @@ describe('RouteForm', () => {
     expect(screen.getByLabelText('Max Idle Conns 1')).toHaveValue(10)
     expect(screen.getByLabelText('Backend URL 2')).toHaveValue('https://backend-b.example.com')
     expect(screen.getByLabelText('Weight 2')).toHaveValue(1)
-    expect(screen.getByLabelText('TLS Termination')).toBeChecked()
+    expect(screen.getByLabelText('Enable HTTPS')).toBeChecked()
     expect(screen.getByLabelText('Timeout (ms)')).toHaveValue(4500)
     expect(screen.getByLabelText('Retry Attempts')).toHaveValue(3)
     expect(screen.getByText(/This route uses a custom certificate path/)).toBeInTheDocument()

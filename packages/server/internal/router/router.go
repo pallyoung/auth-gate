@@ -44,6 +44,7 @@ type Route struct {
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool
+	HTTPSRedirect bool
 	TimeoutMs     int
 	RetryAttempts int
 	PathMatchMode  string // "prefix"|"exact"|"regex"

@@ -1,6 +1,7 @@
 package routehost
 
 import (
+	"fmt"
 	"net/netip"
 	"strings"
 )
@@ -41,17 +42,16 @@ func IsValid(host string) bool {
 }
 
 func TLSListenHost(host string) string {
-	host = Normalize(host)
-	if host == "" {
-		return ":443"
-	}
-	if addr, err := netip.ParseAddr(host); err == nil && addr.Is6() {
-		return "[" + host + "]:443"
-	}
-	if strings.Contains(host, ":") {
-		return host
-	}
-	return host + ":443"
+	return TLSListenHostPort(host, 443)
+}
+
+// TLSListenHostPort returns the listen address for a TLS server.
+// Always binds to all interfaces (0.0.0.0) so the server is reachable
+// from external clients. The host parameter is used for route matching,
+// not for binding.
+func TLSListenHostPort(host string, port int) string {
+	portStr := fmt.Sprintf("%d", port)
+	return ":" + portStr
 }
 
 func isHostname(host string) bool {

@@ -50,6 +50,7 @@ export interface Route {
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean
+  https_redirect?: boolean
   certificate_id?: string
   timeout_ms?: number
   retry_attempts?: number
@@ -83,6 +84,7 @@ export interface RouteInput {
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean
+  https_redirect?: boolean
   certificate_id?: string
   timeout_ms?: number
   retry_attempts?: number
@@ -177,6 +179,11 @@ export interface CertificateInput {
   source?: string
   cert_pem?: string
   key_pem?: string
+  organization?: string
+  organizational_unit?: string
+  country?: string
+  province?: string
+  locality?: string
 }
 
 export interface HostProfile {
@@ -289,4 +296,13 @@ export interface AccessLogQueryParams {
   end_time?: string
   page?: number
   per_page?: number
+}
+
+export interface ListenEntry {
+  addr: string
+  tls: boolean
+}
+
+export interface ServerConfig {
+  listen: ListenEntry[]
 }

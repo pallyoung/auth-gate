@@ -10,12 +10,18 @@ import { setSessionUser } from '../lib/session-store'
 vi.mock('../lib/api/config', () => ({
   configApi: {
     reload: vi.fn(),
+    get: vi.fn(),
+    update: vi.fn(),
   },
 }))
 
 beforeEach(() => {
   vi.mocked(configApi.reload).mockReset()
   vi.mocked(configApi.reload).mockResolvedValue({ message: 'reloaded' })
+  vi.mocked(configApi.get).mockReset()
+  vi.mocked(configApi.get).mockResolvedValue({ listen: [{ addr: ':80', tls: false }] })
+  vi.mocked(configApi.update).mockReset()
+  vi.mocked(configApi.update).mockResolvedValue({ message: 'saved' })
 })
 
 afterEach(() => {

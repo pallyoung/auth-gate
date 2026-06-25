@@ -111,7 +111,7 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -127,7 +127,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg)
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr, accessLogStore)
@@ -135,7 +135,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 	return engine
 }
 
-func buildTLSHostGroups(routes []router.Route) []TLSHost {
+func buildTLSHostGroups(routes []router.Route, httpsPort int) []TLSHost {
 	groupMap := make(map[string]*TLSHost)
 
 	for _, r := range routes {
@@ -151,7 +151,7 @@ func buildTLSHostGroups(routes []router.Route) []TLSHost {
 			g.RouteCount++
 			g.RouteNames = append(g.RouteNames, r.Name)
 		} else {
-			listenHost := routehost.TLSListenHost(r.Host)
+			listenHost := routehost.TLSListenHostPort(r.Host, httpsPort)
 			groupMap[key] = &TLSHost{
 				Host:       listenHost,
 				CertPath:   r.TLSCert,
@@ -169,61 +169,72 @@ func buildTLSHostGroups(routes []router.Route) []TLSHost {
 	return result
 }
 
-func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router.Manager, cfg config.ServerConfig) []*http.Server {
-	// Collect routes and group by TLS config
-	allRoutes := routerMgr.GetRoutes()
-	tlsGroups := buildTLSHostGroups(allRoutes)
-
+func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router.Manager, cfg *config.Config) []*http.Server {
 	var servers []*http.Server
 
-	// Start HTTP server (existing behavior)
-	httpAddr := cfg.Addr
-	if httpAddr == "" {
-		httpAddr = ":8080"
-	}
-	srv := &http.Server{
-		Addr:    httpAddr,
-		Handler: engine,
-	}
-	go func() {
-		log.Printf("HTTP server listening on %s", httpAddr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP server error: %v", err)
+	// Start HTTP servers for each non-TLS listen address
+	for _, addr := range cfg.EffectiveListenAddrs() {
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: engine,
 		}
-	}()
-	servers = append(servers, srv)
+		go func(a string) {
+			log.Printf("HTTP server listening on %s", a)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTP server error on %s: %v", a, err)
+			}
+		}(addr)
+		servers = append(servers, srv)
+	}
 
-	// Start per-route HTTPS servers
-	for _, g := range tlsGroups {
+	// Start HTTPS servers for each TLS listen address
+	httpsAddrs := cfg.EffectiveHTTPSAddrs()
+	if len(httpsAddrs) > 0 {
+		// Collect all TLS certificates from routes
+		allRoutes := routerMgr.GetRoutes()
 		tlsCfg := &tls.Config{
 			Certificates: make([]tls.Certificate, 0, 1),
 		}
-		cert, err := tls.LoadX509KeyPair(g.CertPath, g.KeyPath)
-		if err != nil {
-			log.Printf("Failed to load TLS certificate for %s (cert=%s): %v", g.Host, g.CertPath, err)
-			continue
-		}
-		tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
-
-		httpsSrv := &http.Server{
-			Addr:    g.Host,
-			Handler: engine,
-		}
-		ln, err := tls.Listen("tcp", g.Host, tlsCfg)
-		if err != nil {
-			log.Printf("Failed to listen on %s: %v", g.Host, err)
-			continue
-		}
-
-		go func(srv *http.Server, ln net.Listener, grp TLSHost) {
-			routeNames := strings.Join(grp.RouteNames, ", ")
-			log.Printf("HTTPS server listening on %s (cert=%s, key=%s, routes=%d: %s)",
-				grp.Host, grp.CertPath, grp.KeyPath, grp.RouteCount, routeNames)
-			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-				log.Printf("HTTPS server error on %s: %v", grp.Host, err)
+		seen := make(map[string]bool)
+		for _, r := range allRoutes {
+			if !r.Enabled || !r.TLSEnabled || r.TLSCert == "" || r.TLSKey == "" {
+				continue
 			}
-		}(httpsSrv, ln, g)
-		servers = append(servers, httpsSrv)
+			key := r.TLSCert + "|" + r.TLSKey
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			cert, err := tls.LoadX509KeyPair(r.TLSCert, r.TLSKey)
+			if err != nil {
+				log.Printf("Failed to load TLS certificate (cert=%s): %v", r.TLSCert, err)
+				continue
+			}
+			tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
+		}
+
+		if len(tlsCfg.Certificates) > 0 {
+			for _, addr := range httpsAddrs {
+				ln, err := tls.Listen("tcp", addr, tlsCfg)
+				if err != nil {
+					log.Printf("Failed to listen on TLS %s: %v", addr, err)
+					continue
+				}
+				httpsSrv := &http.Server{
+					Addr:    addr,
+					Handler: engine,
+				}
+				go func(a string, l net.Listener) {
+					log.Printf("HTTPS server listening on %s (certs=%d)", a, len(tlsCfg.Certificates))
+					if err := httpsSrv.Serve(l); err != nil && err != http.ErrServerClosed {
+						log.Printf("HTTPS server error on %s: %v", a, err)
+					}
+				}(addr, ln)
+				servers = append(servers, httpsSrv)
+			}
+		} else {
+			log.Printf("Warning: TLS listen addresses configured but no valid certificates found")
+		}
 	}
 
 	return servers
@@ -328,13 +339,13 @@ func startForeground() {
 	log.Printf("Serving web from: %s", webRoot)
 	log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore)
+	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	log.Printf("Auth Gate starting...")
-	servers := startHTTPServers(ctx, engine, routerMgr, cfg.Server)
+	servers := startHTTPServers(ctx, engine, routerMgr, cfg)
 
 	// Wait for shutdown signal
 	<-ctx.Done()

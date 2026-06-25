@@ -279,4 +279,90 @@ describe('CertificateForm', () => {
       screen.queryByText('Invalid domain format. Use something like "example.com" or "*.example.com".')
     ).not.toBeInTheDocument()
   })
+
+  it('shows subject fields in local CA mode', async () => {
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('Organization (O)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Organizational Unit (OU)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Country (C)')).toBeInTheDocument()
+    expect(screen.getByLabelText('State / Province (ST)')).toBeInTheDocument()
+    expect(screen.getByLabelText('City / Locality (L)')).toBeInTheDocument()
+  })
+
+  it('hides subject fields in import mode', async () => {
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('Organization (O)')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Import PEM'))
+
+    expect(screen.queryByLabelText('Organization (O)')).not.toBeInTheDocument()
+  })
+
+  it('submits subject fields when filled in local CA mode', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await user.type(screen.getByLabelText('Certificate Name'), 'My Cert')
+    await user.type(screen.getByLabelText('Domain'), 'example.com')
+    await user.type(screen.getByLabelText('Organization (O)'), 'Acme Corp')
+    await user.type(screen.getByLabelText('Organizational Unit (OU)'), 'Engineering')
+    await user.type(screen.getByLabelText('Country (C)'), 'US')
+    await user.type(screen.getByLabelText('State / Province (ST)'), 'California')
+    await user.type(screen.getByLabelText('City / Locality (L)'), 'San Francisco')
+    await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'My Cert',
+      domain: 'example.com',
+      organization: 'Acme Corp',
+      organizational_unit: 'Engineering',
+      country: 'US',
+      province: 'California',
+      locality: 'San Francisco',
+    })
+  })
+
+  it('omits empty subject fields from submission', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+
+    await renderWithI18n(
+      <CertificateForm
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await user.type(screen.getByLabelText('Certificate Name'), 'My Cert')
+    await user.type(screen.getByLabelText('Domain'), 'example.com')
+    await user.type(screen.getByLabelText('Organization (O)'), 'Acme Corp')
+    await user.click(screen.getByRole('button', { name: 'Provision Certificate' }))
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'My Cert',
+      domain: 'example.com',
+      organization: 'Acme Corp',
+    })
+  })
 })

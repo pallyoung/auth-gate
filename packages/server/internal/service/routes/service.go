@@ -83,6 +83,7 @@ type CreateInput struct {
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool
+	HTTPSRedirect bool
 	CertificateID string
 	TimeoutMs     int
 	RetryAttempts int
@@ -103,6 +104,7 @@ type UpdateInput struct {
 	TLSCert       *string
 	TLSKey        *string
 	TLSEnabled    *bool
+	HTTPSRedirect *bool
 	CertificateID *string
 	TimeoutMs     *int
 	RetryAttempts *int
@@ -155,6 +157,7 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 		TLSCert:       strings.TrimSpace(input.TLSCert),
 		TLSKey:        strings.TrimSpace(input.TLSKey),
 		TLSEnabled:    input.TLSEnabled,
+		HTTPSRedirect: input.HTTPSRedirect,
 		CertificateID: strings.TrimSpace(input.CertificateID),
 		TimeoutMs:     input.TimeoutMs,
 		RetryAttempts: input.RetryAttempts,
@@ -212,6 +215,9 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	}
 	if input.TLSEnabled != nil {
 		route.TLSEnabled = *input.TLSEnabled
+	}
+	if input.HTTPSRedirect != nil {
+		route.HTTPSRedirect = *input.HTTPSRedirect
 	}
 	if input.CertificateID != nil {
 		route.CertificateID = strings.TrimSpace(*input.CertificateID)

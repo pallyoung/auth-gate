@@ -31,6 +31,7 @@ type Route struct {
 	TLSCert       string    `json:"tls_cert,omitempty"`
 	TLSKey        string    `json:"tls_key,omitempty"`
 	TLSEnabled    bool      `json:"tls_enabled"`
+	HTTPSRedirect bool      `json:"https_redirect,omitempty"` // auto redirect HTTP -> HTTPS
 	CertificateID string    `json:"certificate_id,omitempty"` // references Certificate.ID
 	TimeoutMs     int       `json:"timeout_ms,omitempty"`
 	RetryAttempts int       `json:"retry_attempts,omitempty"`
@@ -98,19 +99,24 @@ func ParseAuthConfig(s string) AuthConfig {
 // be issued by the bundled local CA (Source = "local_ca") or imported from
 // external PEM files (Source = "imported").
 type Certificate struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Domain    string    `json:"domain"` // e.g., "*.example.com" or "example.com"
-	CertPath  string    `json:"cert_path"`
-	KeyPath   string    `json:"key_path"`
-	Source    string    `json:"source"`   // "local_ca" or "imported"
-	CAID      string    `json:"ca_id"`    // empty when Source = "imported"
-	Status    string    `json:"status"`   // "active" or "failed"
-	NotBefore time.Time `json:"not_before"`
-	NotAfter  time.Time `json:"not_after"`
-	RenewAt   time.Time `json:"renew_at"` // NotAfter - 30 days; zero for imported
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	Domain             string    `json:"domain"` // e.g., "*.example.com" or "example.com"
+	CertPath           string    `json:"cert_path"`
+	KeyPath            string    `json:"key_path"`
+	Source             string    `json:"source"`   // "local_ca" or "imported"
+	CAID               string    `json:"ca_id"`    // empty when Source = "imported"
+	Status             string    `json:"status"`   // "active" or "failed"
+	Organization       string    `json:"organization,omitempty"`
+	OrganizationalUnit string    `json:"organizational_unit,omitempty"`
+	Country            string    `json:"country,omitempty"`
+	Province           string    `json:"province,omitempty"`
+	Locality           string    `json:"locality,omitempty"`
+	NotBefore          time.Time `json:"not_before"`
+	NotAfter           time.Time `json:"not_after"`
+	RenewAt            time.Time `json:"renew_at"` // NotAfter - 30 days; zero for imported
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 const (

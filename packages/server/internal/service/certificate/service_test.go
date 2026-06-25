@@ -56,7 +56,7 @@ func newTestSetup(t *testing.T) (*Service, *localca.CA, store.Store, *fakeReload
 func TestService_ProvisionLocal(t *testing.T) {
 	svc, _, db, rel := newTestSetup(t)
 
-	cert, err := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com")
+	cert, err := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com", nil)
 	if err != nil {
 		t.Fatalf("ProvisionLocal: %v", err)
 	}
@@ -94,10 +94,10 @@ func TestService_ProvisionLocal(t *testing.T) {
 
 func TestService_ProvisionLocal_DuplicateDomain(t *testing.T) {
 	svc, _, _, _ := newTestSetup(t)
-	if _, err := svc.ProvisionLocal(context.Background(), "first", "foo.example.com"); err != nil {
+	if _, err := svc.ProvisionLocal(context.Background(), "first", "foo.example.com", nil); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	_, err := svc.ProvisionLocal(context.Background(), "second", "foo.example.com")
+	_, err := svc.ProvisionLocal(context.Background(), "second", "foo.example.com", nil)
 	if err == nil || Code(err) != ErrCodeDomainExists {
 		t.Fatalf("expected domain_exists, got %v", err)
 	}
@@ -156,7 +156,7 @@ func TestService_Import_KeyMismatch(t *testing.T) {
 
 func TestService_Resign_LocalCA(t *testing.T) {
 	svc, _, db, rel := newTestSetup(t)
-	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com")
+	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com", nil)
 	originalNotAfter := cert.NotAfter
 	row, _ := db.GetCertificate(cert.ID)
 
@@ -198,7 +198,7 @@ func TestService_Resign_ImportedRejected(t *testing.T) {
 
 func TestService_DeleteRemovesFiles(t *testing.T) {
 	svc, _, db, _ := newTestSetup(t)
-	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com")
+	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com", nil)
 
 	if _, err := os.Stat(cert.CertPath); err != nil {
 		t.Fatalf("cert file should exist: %v", err)
@@ -216,7 +216,7 @@ func TestService_DeleteRemovesFiles(t *testing.T) {
 
 func TestService_RenewerPicksUpExpiring(t *testing.T) {
 	svc, _, db, _ := newTestSetup(t)
-	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com")
+	cert, _ := svc.ProvisionLocal(context.Background(), "wildcard", "*.example.com", nil)
 
 	// Force the renew_at into the past and trigger a manual scan via Resign
 	// to simulate what the renewer would do.

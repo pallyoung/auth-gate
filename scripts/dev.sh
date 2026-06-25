@@ -49,7 +49,7 @@ trap cleanup EXIT INT TERM
 
 echo "[3/3] Starting Vite dev server (port 5174)..."
 echo ""
-echo "  Backend:  http://localhost:8080/_authgate"
+echo "  Backend:  http://localhost:80/_authgate"
 echo "  Frontend: http://localhost:5174/_authgate/"
 echo ""
 echo "Press Ctrl+C to stop"

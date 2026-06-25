@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
+	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
@@ -69,7 +70,7 @@ func seedRoute(t *testing.T, db store.Store) {
 type stubCertService struct {
 	listFn        func() ([]store.Certificate, error)
 	getFn         func(id string) (*store.Certificate, error)
-	provisionFn   func(ctx context.Context, name, domain string) (*store.Certificate, error)
+	provisionFn   func(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error)
 	importFn      func(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
 	resignFn      func(id string) (*store.Certificate, error)
 	deleteFn      func(id string) error
@@ -90,9 +91,9 @@ func (s *stubCertService) Get(id string) (*store.Certificate, error) {
 	return nil, nil
 }
 
-func (s *stubCertService) ProvisionLocal(ctx context.Context, name, domain string) (*store.Certificate, error) {
+func (s *stubCertService) ProvisionLocal(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error) {
 	if s.provisionFn != nil {
-		return s.provisionFn(ctx, name, domain)
+		return s.provisionFn(ctx, name, domain, info)
 	}
 	return nil, nil
 }
@@ -828,7 +829,7 @@ func TestRegisterRoutes_RejectsCertificateCreateWhenNameIsMissing(t *testing.T) 
 	db := newTestDB(t)
 	user := seedUser(t, db, "editor", "password123", store.RoleEditor)
 	stub := &stubCertService{
-		provisionFn: func(ctx context.Context, name, domain string) (*store.Certificate, error) {
+		provisionFn: func(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error) {
 			return nil, certservice.NewError(certservice.ErrCodeInvalidName, "certificate name required", nil)
 		},
 	}

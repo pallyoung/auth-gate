@@ -13,6 +13,16 @@ import (
 	"time"
 )
 
+// SubjectInfo carries optional X.509 subject fields for leaf certificates.
+// When a field is empty the corresponding pkix.Name attribute is omitted.
+type SubjectInfo struct {
+	Organization       string
+	OrganizationalUnit string
+	Country            string
+	Province           string
+	Locality           string
+}
+
 // CA is a self-signed certificate authority stored on disk.
 // Use LoadOrCreate to obtain one rooted at the data directory.
 type CA struct {
@@ -131,8 +141,9 @@ func parseCA(certPEM, keyPEM []byte) (*CA, error) {
 
 // SignCertificate issues a leaf certificate for the given domain, valid for
 // the given number of days. Returns PEM-encoded cert and key, plus NotBefore
-// and NotAfter.
-func (c *CA) SignCertificate(domain string, days int) (certPEM, keyPEM []byte, notBefore, notAfter time.Time, err error) {
+// and NotAfter. If info is non-nil its non-empty fields are added to the
+// certificate Subject.
+func (c *CA) SignCertificate(domain string, days int, info *SubjectInfo) (certPEM, keyPEM []byte, notBefore, notAfter time.Time, err error) {
 	if domain == "" {
 		return nil, nil, time.Time{}, time.Time{}, fmt.Errorf("domain is required")
 	}
@@ -154,11 +165,30 @@ func (c *CA) SignCertificate(domain string, days int) (certPEM, keyPEM []byte, n
 	notBefore = now.Add(-time.Hour)
 	notAfter = now.Add(time.Duration(days) * 24 * time.Hour)
 
+	subject := pkix.Name{
+		CommonName: domain,
+	}
+	if info != nil {
+		if info.Organization != "" {
+			subject.Organization = []string{info.Organization}
+		}
+		if info.OrganizationalUnit != "" {
+			subject.OrganizationalUnit = []string{info.OrganizationalUnit}
+		}
+		if info.Country != "" {
+			subject.Country = []string{info.Country}
+		}
+		if info.Province != "" {
+			subject.Province = []string{info.Province}
+		}
+		if info.Locality != "" {
+			subject.Locality = []string{info.Locality}
+		}
+	}
+
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject: pkix.Name{
-			CommonName: domain,
-		},
+		Subject:      subject,
 		NotBefore:   notBefore,
 		NotAfter:    notAfter,
 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,

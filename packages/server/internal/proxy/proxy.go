@@ -455,6 +455,14 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		}
 		log.Printf("proxy match route_id=%s host=%s path=%s", route.ID, host, path)
 
+		// HTTP -> HTTPS redirect
+		if route.HTTPSRedirect && forwardedProto(c.Request) == "http" {
+			target := "https://" + c.Request.Host + c.Request.URL.RequestURI()
+			c.Redirect(http.StatusMovedPermanently, target)
+			c.Abort()
+			return
+		}
+
 		// 外跳重定向（301/302）
 		if route.RedirectCode > 0 && route.RewriteTarget != "" {
 			c.Redirect(route.RedirectCode, route.RewriteTarget)
@@ -551,7 +559,6 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		// 超时：优先用 per-backend 配置，否则用 route 级别
 		dialTimeout := 5 * time.Second
 		readTimeout := 30 * time.Second
-		writeTimeout := 30 * time.Second
 		if picked.DialTimeoutMs > 0 {
 			dialTimeout = time.Duration(picked.DialTimeoutMs) * time.Millisecond
 		} else if route.TimeoutMs > 0 {
@@ -562,10 +569,15 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		} else if route.TimeoutMs > 0 {
 			readTimeout = time.Duration(route.TimeoutMs) * time.Millisecond
 		}
-		if picked.WriteTimeoutMs > 0 {
-			writeTimeout = time.Duration(picked.WriteTimeoutMs) * time.Millisecond
+		if picked.DialTimeoutMs > 0 {
+			dialTimeout = time.Duration(picked.DialTimeoutMs) * time.Millisecond
 		} else if route.TimeoutMs > 0 {
-			writeTimeout = time.Duration(route.TimeoutMs) * time.Millisecond
+			dialTimeout = time.Duration(route.TimeoutMs) * time.Millisecond
+		}
+		if picked.ReadTimeoutMs > 0 {
+			readTimeout = time.Duration(picked.ReadTimeoutMs) * time.Millisecond
+		} else if route.TimeoutMs > 0 {
+			readTimeout = time.Duration(route.TimeoutMs) * time.Millisecond
 		}
 
 		proxy := httputil.NewSingleHostReverseProxy(backendURL)
@@ -576,10 +588,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			MaxIdleConns: picked.MaxIdleConns,
 		})
 
-		proxy.Transport = newWriteTimeoutTransport(
-			newRetryTransport(baseTransport, maxRetries),
-			writeTimeout,
-		)
+		proxy.Transport = newRetryTransport(baseTransport, maxRetries)
 
 		// 修改请求
 		originalDirector := proxy.Director
@@ -655,7 +664,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			StatusCode:       finalStatus,
 			ClientIP:         c.ClientIP(),
 			UserAgent:        c.Request.UserAgent(),
-			Username:         username.(string),
+			Username:         safeString(username),
 			AuthResult:       authResult,
 		}
 		if accessLogBytes, err := json.Marshal(accessLog); err == nil {
@@ -804,6 +813,16 @@ func (w *proxyResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // statusLabel returns a short label for HTTP status codes for use in metrics.
+func safeString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
 func statusLabel(code int) string {
 	switch {
 	case code >= 500:

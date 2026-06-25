@@ -39,6 +39,7 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     tls_cert: route?.tls_cert || '',
     tls_key: route?.tls_key || '',
     tls_enabled: route?.tls_enabled ?? false,
+    https_redirect: route?.https_redirect ?? false,
     certificate_id: route?.certificate_id || '',
     timeout_ms: route?.timeout_ms || 0,
     retry_attempts: route?.retry_attempts || 0,
@@ -478,6 +479,13 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
 
         {form.tls_enabled && (
           <>
+            <Switch
+              label={t('form.httpsRedirect')}
+              checked={form.https_redirect ?? false}
+              onChange={(event) => setForm({ ...form, https_redirect: event.target.checked })}
+              aria-label={t('form.httpsRedirect')}
+            />
+
             <div className="flex gap-2">
               <button
                 type="button"
