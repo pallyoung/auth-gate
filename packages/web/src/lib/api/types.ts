@@ -47,6 +47,10 @@ export interface Route {
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  // Route type: "proxy" (default) or "static"
+  type?: 'proxy' | 'static'
+  static_root?: string
+  static_spa?: boolean
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean
@@ -88,6 +92,10 @@ export interface RouteInput {
   strip_prefix: boolean
   enabled: boolean
   priority: number
+  // Route type: "proxy" (default) or "static"
+  type?: 'proxy' | 'static'
+  static_root?: string
+  static_spa?: boolean
   tls_cert?: string
   tls_key?: string
   tls_enabled?: boolean

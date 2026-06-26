@@ -48,6 +48,10 @@ type Route struct {
 	StripPrefix   bool
 	Enabled       bool
 	Priority      int
+	// RouteType: "proxy" (default) or "static"
+	Type       string
+	StaticRoot string // local directory for static file serving
+	StaticSPA  bool   // SPA fallback to index.html on 404
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool

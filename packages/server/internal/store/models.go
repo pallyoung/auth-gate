@@ -28,6 +28,11 @@ type Route struct {
 	StripPrefix   bool      `json:"strip_prefix"`
 	Enabled       bool      `json:"enabled"`
 	Priority      int       `json:"priority"`
+	// RouteType determines how requests are handled: "proxy" (default) forwards to
+	// a backend server, while "static" serves files from a local directory.
+	Type       string `json:"type,omitempty"`        // "proxy" (default) or "static"
+	StaticRoot string `json:"static_root,omitempty"` // local directory path for static serving
+	StaticSPA  bool   `json:"static_spa,omitempty"`  // SPA fallback: serve index.html on 404
 	TLSCert       string    `json:"tls_cert,omitempty"`
 	TLSKey        string    `json:"tls_key,omitempty"`
 	TLSEnabled    bool      `json:"tls_enabled"`

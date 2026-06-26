@@ -80,6 +80,10 @@ type CreateInput struct {
 	StripPrefix   bool
 	Enabled       bool
 	Priority      int
+	// RouteType: "proxy" (default) or "static"
+	Type       string
+	StaticRoot string
+	StaticSPA  bool
 	TLSCert       string
 	TLSKey        string
 	TLSEnabled    bool
@@ -108,6 +112,10 @@ type UpdateInput struct {
 	StripPrefix   *bool
 	Enabled       *bool
 	Priority      *int
+	// RouteType: "proxy" (default) or "static"
+	Type       *string
+	StaticRoot *string
+	StaticSPA  *bool
 	TLSCert       *string
 	TLSKey        *string
 	TLSEnabled    *bool
@@ -168,6 +176,9 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 		StripPrefix:   input.StripPrefix,
 		Enabled:       input.Enabled,
 		Priority:      input.Priority,
+		Type:          normalizeRouteType(input.Type),
+		StaticRoot:    strings.TrimSpace(input.StaticRoot),
+		StaticSPA:     input.StaticSPA,
 		TLSCert:       strings.TrimSpace(input.TLSCert),
 		TLSKey:        strings.TrimSpace(input.TLSKey),
 		TLSEnabled:    input.TLSEnabled,
@@ -227,6 +238,15 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	}
 	if input.Priority != nil {
 		route.Priority = *input.Priority
+	}
+	if input.Type != nil {
+		route.Type = normalizeRouteType(*input.Type)
+	}
+	if input.StaticRoot != nil {
+		route.StaticRoot = strings.TrimSpace(*input.StaticRoot)
+	}
+	if input.StaticSPA != nil {
+		route.StaticSPA = *input.StaticSPA
 	}
 	if input.TLSCert != nil {
 		route.TLSCert = strings.TrimSpace(*input.TLSCert)
@@ -317,8 +337,16 @@ func (s *Service) reload() {
 }
 
 func validate(route *store.Route) error {
-	if route.Backend == "" && len(route.Backends) == 0 {
-		return newError(ErrCodeMissingRouteFields, "backend or backends required", nil)
+	if route.Type == "static" {
+		// Static routes require a root directory, no backend needed
+		if route.StaticRoot == "" {
+			return newError(ErrCodeMissingRouteFields, "static_root is required for static routes", nil)
+		}
+	} else {
+		// Proxy routes require a backend
+		if route.Backend == "" && len(route.Backends) == 0 {
+			return newError(ErrCodeMissingRouteFields, "backend or backends required", nil)
+		}
 	}
 	if !isValidPathMatchMode(route.PathMatchMode) {
 		return newError(ErrCodeInvalidRoutePathMatchMode, "path_match_mode must be one of prefix, exact, stop, regex, or regex_i", nil)
@@ -337,17 +365,20 @@ func validate(route *store.Route) error {
 	if !routehost.IsValid(route.Host) {
 		return newError(ErrCodeInvalidRouteHost, routehost.InvalidMessage, nil)
 	}
-	if route.Backend != "" {
-		if err := validateBackendURL(route.Backend); err != nil {
-			return err
+	// Backend validation only applies to proxy routes
+	if route.Type != "static" {
+		if route.Backend != "" {
+			if err := validateBackendURL(route.Backend); err != nil {
+				return err
+			}
 		}
-	}
-	for _, backend := range route.Backends {
-		if err := validateBackendURL(backend.URL); err != nil {
-			return err
-		}
-		if backend.Weight <= 0 {
-			return newError(ErrCodeInvalidRouteBackendWeight, "backend weight must be greater than 0", nil)
+		for _, backend := range route.Backends {
+			if err := validateBackendURL(backend.URL); err != nil {
+				return err
+			}
+			if backend.Weight <= 0 {
+				return newError(ErrCodeInvalidRouteBackendWeight, "backend weight must be greater than 0", nil)
+			}
 		}
 	}
 	if !isValidRedirectCode(route.RedirectCode) {
@@ -421,6 +452,16 @@ func normalizePathMatchMode(pathMatchMode string) string {
 		return ""
 	default:
 		return pathMatchMode
+	}
+}
+
+func normalizeRouteType(routeType string) string {
+	routeType = strings.ToLower(strings.TrimSpace(routeType))
+	switch routeType {
+	case "static":
+		return "static"
+	default:
+		return "" // "proxy" is the default, stored as empty
 	}
 }
 

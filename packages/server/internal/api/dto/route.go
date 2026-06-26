@@ -15,6 +15,10 @@ type Route struct {
 	StripPrefix   bool            `json:"strip_prefix"`
 	Enabled       bool            `json:"enabled"`
 	Priority      int             `json:"priority"`
+	// RouteType: "proxy" (default) or "static"
+	Type       string `json:"type,omitempty"`
+	StaticRoot string `json:"static_root,omitempty"`
+	StaticSPA  bool   `json:"static_spa,omitempty"`
 	TLSCert       string          `json:"tls_cert,omitempty"`
 	TLSKey        string          `json:"tls_key,omitempty"`
 	TLSEnabled    bool            `json:"tls_enabled"`
@@ -45,6 +49,10 @@ type RouteCreateRequest struct {
 	StripPrefix   bool            `json:"strip_prefix"`
 	Enabled       bool            `json:"enabled"`
 	Priority      int             `json:"priority"`
+	// RouteType: "proxy" (default) or "static"
+	Type       string `json:"type"`
+	StaticRoot string `json:"static_root"`
+	StaticSPA  bool   `json:"static_spa"`
 	TLSCert       string          `json:"tls_cert"`
 	TLSKey        string          `json:"tls_key"`
 	TLSEnabled    bool            `json:"tls_enabled"`
@@ -73,6 +81,10 @@ type RouteUpdateRequest struct {
 	StripPrefix   *bool            `json:"strip_prefix,omitempty"`
 	Enabled       *bool            `json:"enabled,omitempty"`
 	Priority      *int             `json:"priority,omitempty"`
+	// RouteType: "proxy" (default) or "static"
+	Type       *string `json:"type,omitempty"`
+	StaticRoot *string `json:"static_root,omitempty"`
+	StaticSPA  *bool   `json:"static_spa,omitempty"`
 	TLSCert       *string          `json:"tls_cert,omitempty"`
 	TLSKey        *string          `json:"tls_key,omitempty"`
 	TLSEnabled    *bool            `json:"tls_enabled,omitempty"`
@@ -103,6 +115,9 @@ func RouteResponse(route store.Route) Route {
 		StripPrefix:   route.StripPrefix,
 		Enabled:       route.Enabled,
 		Priority:      route.Priority,
+		Type:          route.Type,
+		StaticRoot:    route.StaticRoot,
+		StaticSPA:     route.StaticSPA,
 		TLSCert:       route.TLSCert,
 		TLSKey:        route.TLSKey,
 		TLSEnabled:    route.TLSEnabled,

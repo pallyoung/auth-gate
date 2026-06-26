@@ -36,6 +36,9 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     strip_prefix: route?.strip_prefix ?? true,
     enabled: route?.enabled ?? true,
     priority: route?.priority || 0,
+    type: route?.type || 'proxy',
+    static_root: route?.static_root || '',
+    static_spa: route?.static_spa ?? false,
     tls_cert: route?.tls_cert || '',
     tls_key: route?.tls_key || '',
     tls_enabled: route?.tls_enabled ?? false,
@@ -332,6 +335,9 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         host: normalizeHost(form.host),
         backend: (form.backend || '').trim(),
         backends: normalizedBackends,
+        type: form.type || 'proxy',
+        static_root: (form.static_root || '').trim(),
+        static_spa: form.static_spa ?? false,
         tls_cert: (form.tls_cert || '').trim(),
         tls_key: (form.tls_key || '').trim(),
         rewrite_target: (form.rewrite_target || '').trim(),
@@ -400,12 +406,25 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Select
+            label={t('form.routeType')}
+            value={form.type || 'proxy'}
+            onChange={(event) => setForm({ ...form, type: event.target.value as 'proxy' | 'static' })}
+            options={[
+              { value: 'proxy', label: t('form.routeTypeProxy') },
+              { value: 'static', label: t('form.routeTypeStatic') },
+            ]}
+            hint={form.type === 'static' ? t('form.routeTypeStaticHint') : t('form.routeTypeProxyHint')}
+          />
           <Input
             label={t('form.name')}
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
             placeholder={t('form.namePlaceholder')}
           />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
             label={t('form.host')}
             value={form.host}
@@ -413,9 +432,6 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
             placeholder={t('form.hostPlaceholder')}
             hint={t('form.hostHint')}
           />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
             label={t('form.pathPrefix')}
             value={form.path_prefix}
@@ -427,14 +443,39 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
             }
             hint={isRegexPathMatchMode ? t('form.pathPrefixRegexHint') : t('form.pathPrefixHint')}
           />
-          <Input
-            label={t('form.backend')}
-            value={form.backend}
-            onChange={(event) => setForm({ ...form, backend: event.target.value })}
-            placeholder={t('form.backendPlaceholder')}
-            hint={t('form.backendHint')}
-          />
         </div>
+
+        {form.type === 'static' ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input
+                label={t('form.staticRoot')}
+                value={form.static_root || ''}
+                onChange={(event) => setForm({ ...form, static_root: event.target.value })}
+                placeholder={t('form.staticRootPlaceholder')}
+                hint={t('form.staticRootHint')}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Switch
+                label={t('form.staticSPA')}
+                description={t('form.staticSPADescription')}
+                checked={form.static_spa ?? false}
+                onChange={(event) => setForm({ ...form, static_spa: event.target.checked })}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input
+              label={t('form.backend')}
+              value={form.backend}
+              onChange={(event) => setForm({ ...form, backend: event.target.value })}
+              placeholder={t('form.backendPlaceholder')}
+              hint={t('form.backendHint')}
+            />
+          </div>
+        )}
 
         <Input
           label={t('form.priority')}
@@ -508,6 +549,8 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         </div>
       </Card>
 
+      {/* Backend pool — only for proxy routes */}
+      {form.type !== 'static' && (
       <Card tone="soft" className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -631,6 +674,7 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
           </div>
         )}
       </Card>
+      )}
 
       <Card tone="soft" className="space-y-5">
         <div>

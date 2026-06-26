@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -575,6 +576,12 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			}
 		}
 
+		// 静态文件服务：当路由类型为 "static" 时，直接从本地目录提供文件
+		if route.Type == "static" {
+			serveStaticFile(c, route)
+			return
+		}
+
 		requestID := uuid.New().String()
 
 		// WebSocket detection: before backend URL parsing so empty-backend routes work
@@ -1089,4 +1096,58 @@ func originMatches(origin, allowed string) bool {
 		}
 	}
 	return false
+}
+
+// spaFileSystem wraps http.FileSystem to serve index.html for missing files (SPA fallback).
+type spaFileSystem struct {
+	fs http.FileSystem
+}
+
+func (s *spaFileSystem) Open(name string) (http.File, error) {
+	f, err := s.fs.Open(name)
+	if err == nil {
+		return f, nil
+	}
+	// Fallback: serve index.html for SPA routing
+	indexFile, indexErr := s.fs.Open("/index.html")
+	if indexErr != nil {
+		return nil, err // return original error if index.html also missing
+	}
+	return indexFile, nil
+}
+
+// serveStaticFile serves files from the route's StaticRoot directory.
+// When StripPrefix is enabled, the route's PathPrefix is removed before
+// looking up the file. When StaticSPA is enabled, missing files fall back
+// to index.html (SPA routing).
+func serveStaticFile(c *gin.Context, route *router.Route) {
+	root := route.StaticRoot
+	if root == "" {
+		log.Printf("static route_id=%s: static_root is empty", route.ID)
+		c.JSON(http.StatusInternalServerError, httpresponse.ErrorEnvelope{
+			Error: httpresponse.ErrorDetail{
+				Code:    "static_root_empty",
+				Message: "static root directory not configured",
+			},
+		})
+		return
+	}
+
+	// Prevent directory traversal attacks
+	cleanRoot := filepath.Clean(root)
+
+	var fs http.FileSystem = http.Dir(cleanRoot)
+	if route.StaticSPA {
+		fs = &spaFileSystem{fs: fs}
+	}
+
+	fileServer := http.FileServer(fs)
+
+	// Strip prefix if configured
+	if route.StripPrefix && route.PathPrefix != "" {
+		fileServer = http.StripPrefix(route.PathPrefix, fileServer)
+	}
+
+	fileServer.ServeHTTP(c.Writer, c.Request)
+	c.Abort()
 }
