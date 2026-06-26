@@ -27,6 +27,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
+	systemservice "github.com/pallyoung/auth-gate/packages/server/internal/service/system"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 	"github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 
@@ -114,7 +115,7 @@ func hasIndexFile(path string) bool {
 
 // buildEngine constructs a single unified engine (compatibility mode).
 // Used when admin.addr is not configured.
-func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) *gin.Engine {
+func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config, systemSvc *systemservice.Service) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -135,7 +136,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 	// Protected API routes
 	apiGroup := engine.Group(controlPlaneAPIBasePath)
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg, systemSvc)
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr, accessLogStore)
@@ -146,7 +147,7 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 // buildAdminEngine constructs the admin/control-plane engine.
 // Serves the management UI (SPA) and admin API only — no proxy, no NoRoute.
 // In dual-engine mode the admin has its own port, so no /_authgate prefix is needed.
-func buildAdminEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) *gin.Engine {
+func buildAdminEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config, systemSvc *systemservice.Service) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -166,7 +167,7 @@ func buildAdminEngine(routerMgr *router.Manager, webRoot string, db store.Store,
 	// Protected admin API routes
 	apiGroup := engine.Group("/api")
 	apiGroup.Use(auth.AuthMiddleware(db))
-	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg)
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg, systemSvc)
 
 	return engine
 }
@@ -322,6 +323,7 @@ func generateCredential(size int) (string, error) {
 // startForeground runs the Auth Gate server in the foreground (blocking).
 // This is the original main() logic, now callable from the CLI "start --foreground" command.
 func startForeground() {
+	startTime := time.Now()
 	os.MkdirAll(dataDir, 0755)
 
 	// Write PID file so stop/status can find us.
@@ -385,6 +387,7 @@ func startForeground() {
 	hostsDataDir := certDataDir
 	renderer := syshosts.NewRenderer(hostsDataDir)
 	hostSvc := hostservice.NewService(db, renderer)
+	systemSvc := systemservice.NewService(startTime, routerMgr)
 
 	gin.SetMode(gin.ReleaseMode)
 	if os.Getenv("DEBUG") == "true" {
@@ -403,7 +406,7 @@ func startForeground() {
 		log.Printf("Serving web from: %s", webRoot)
 		log.Printf("Admin server: %s", adminAddr)
 
-		adminEngine := buildAdminEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
+		adminEngine := buildAdminEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg, systemSvc)
 		proxyEngine := buildProxyEngine(routerMgr, db, accessLogStore)
 
 		// Start admin server (HTTP only, typically localhost)
@@ -426,7 +429,7 @@ func startForeground() {
 		log.Printf("Serving web from: %s", webRoot)
 		log.Printf("Control plane available at: %s", controlPlaneBasePath)
 
-		engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
+		engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg, systemSvc)
 
 		log.Printf("Auth Gate starting...")
 		servers = startHTTPServers(ctx, engine, routerMgr, cfg)

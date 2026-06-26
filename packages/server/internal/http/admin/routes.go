@@ -25,6 +25,7 @@ import (
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
 	sessionservice "github.com/pallyoung/auth-gate/packages/server/internal/service/session"
+	systemservice "github.com/pallyoung/auth-gate/packages/server/internal/service/system"
 	usersservice "github.com/pallyoung/auth-gate/packages/server/internal/service/users"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
@@ -58,7 +59,7 @@ type HostService interface {
 	DeleteEntry(profileID, entryID string) error
 }
 
-func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) {
+func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.Store, certSvc CertService, hostSvc HostService, accessLogStore *store.AccessLogStore, cfg *config.Config, systemSvc *systemservice.Service) {
 	group.Use(requestLogger())
 
 	sessionSvc := sessionservice.NewService(db)
@@ -68,6 +69,11 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 
 	group.POST("/auth/logout", logoutHandler())
 	group.GET("/auth/me", meHandler(db, certSvc))
+
+	// System stats - available to any authenticated user
+	if systemSvc != nil {
+		group.GET("/system/stats", getSystemStats(systemSvc))
+	}
 
 	group.GET("/routes", listRoutes(routeSvc))
 	group.GET("/routes/:id", getRoute(routeSvc))

@@ -2,6 +2,7 @@ import React from 'react'
 import {
   FileKey,
   KeyRound,
+  LayoutDashboard,
   LogOut,
   Menu,
   Monitor,
@@ -63,6 +64,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
     return [
       {
         path: '/',
+        icon: LayoutDashboard,
+        label: t('sections.dashboard.label'),
+        description: t('sections.dashboard.description'),
+        visible: true,
+      },
+      {
+        path: '/routes',
         icon: RouteIcon,
         label: t('sections.routes.label'),
         description: t('sections.routes.description'),

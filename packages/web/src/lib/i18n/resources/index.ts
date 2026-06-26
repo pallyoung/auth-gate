@@ -4,6 +4,7 @@ import { accessLogsZhCN } from './accessLogsZhCN'
 import { authRulesEn, authRulesZhCN } from './authRules'
 import { certificatesEn, certificatesZhCN } from './certificates'
 import { commonEn, commonZhCN } from './common'
+import { dashboardEn, dashboardZhCN } from './dashboard'
 import { hostsEn, hostsZhCN } from './hosts'
 import { layoutEn, layoutZhCN } from './layout'
 import { loginEn, loginZhCN } from './login'
@@ -20,6 +21,7 @@ export const resources = {
     setup: setupEn,
     accessLogin: accessLoginEn,
     accessLogs: accessLogsEn,
+    dashboard: dashboardEn,
     routes: routesEn,
     authRules: authRulesEn,
     users: usersEn,
@@ -34,6 +36,7 @@ export const resources = {
     setup: setupZhCN,
     accessLogin: accessLoginZhCN,
     accessLogs: accessLogsZhCN,
+    dashboard: dashboardZhCN,
     routes: routesZhCN,
     authRules: authRulesZhCN,
     users: usersZhCN,

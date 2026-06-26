@@ -386,3 +386,28 @@ export interface ListenEntry {
 export interface ServerConfig {
   listen: ListenEntry[]
 }
+
+export interface SystemStats {
+  uptime_seconds: number
+  hostname: string
+  os: string
+  arch: string
+  platform: string
+  kernel_version: string
+  cpu_cores: number
+  cpu_usage_percent: number
+  mem_total_bytes: number
+  mem_used_bytes: number
+  mem_usage_percent: number
+  disk_total_bytes: number
+  disk_used_bytes: number
+  disk_usage_percent: number
+  goroutines: number
+  heap_alloc_bytes: number
+  heap_inuse_bytes: number
+  gc_count: number
+  gc_pause_total_ms: number
+  active_routes: number
+  total_routes: number
+  go_version: string
+}

@@ -3,6 +3,7 @@ import { LoginPage } from './pages/LoginPage'
 import { SetupPage } from './pages/SetupPage'
 import { AccessLoginPage } from './pages/AccessLoginPage'
 import { Layout } from './components/Layout'
+import { DashboardPage } from './pages/DashboardPage'
 import { RoutesPage } from './pages/RoutesPage'
 import { RouteAuthPage } from './pages/RouteAuthPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -19,6 +20,7 @@ const knownControlPlanePaths = new Set([
   '/access-login',
   '/auth',
   '/certificates',
+  '/routes',
   '/settings',
   '/users',
   '/hosts',
@@ -122,12 +124,13 @@ export default function App() {
   const renderPage = () => {
     switch (effectivePathname) {
       case '/auth': return <RouteAuthPage />
+      case '/routes': return <RoutesPage />
       case '/users': return <UsersPage />
       case '/certificates': return <CertificatesPage />
       case '/settings': return <SettingsPage />
       case '/hosts': return <HostsPage />
       case '/logs': return <AccessLogsPage />
-      default: return <RoutesPage />
+      default: return <DashboardPage />
     }
   }
 

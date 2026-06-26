@@ -14,6 +14,10 @@ export const layoutEn = {
     logout: 'Logout',
   },
   sections: {
+    dashboard: {
+      label: 'Dashboard',
+      description: 'System overview',
+    },
     routes: {
       label: 'Routes',
       description: 'Traffic orchestration',
@@ -61,6 +65,10 @@ export const layoutZhCN = {
     logout: '退出登录',
   },
   sections: {
+    dashboard: {
+      label: '仪表盘',
+      description: '系统概览',
+    },
     routes: {
       label: '路由',
       description: '流量编排',
