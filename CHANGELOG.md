@@ -7,36 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- (new features go here)
-
-### Changed
-- (changes to existing features go here)
-
-### Deprecated
-- (soon-to-be removed features go here)
-
-### Removed
-- (removed features go here)
-
-### Fixed
-- (bug fixes go here)
-
-### Security
-- (vulnerability fixes go here)
-
-## [1.0.0] - 2026-06-24
+## [0.0.1] - 2026-06-26
 
 ### Added
-- Initial release
 - Route management with Host + PathPrefix matching
-- Authentication middleware (API Key, Bearer Token, Basic Auth)
+- Authentication middleware (API Key, Bearer Token)
 - Web UI for configuration
 - Hot reload configuration
 - SQLite storage with auto-migration
 - Access logs with visualization
 - Certificate management with local CA
 - Multi-language support (English, Chinese)
+- Per-route custom request/response header manipulation
+- Configurable listen ports, HTTPS toggle
+- CLI setup flow and dev tooling
+- Cross-platform installation scripts (Linux, macOS, Windows)
+- Docker support
+- GitHub Actions CI/CD pipeline
 
-[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/pallyoung/auth-gate/releases/tag/v1.0.0
+[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/pallyoung/auth-gate/releases/tag/v0.0.1
