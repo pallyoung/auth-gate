@@ -713,12 +713,16 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("proxy upstream error route_id=%s backend=%s err=%v", route.ID, backendHostForError, err)
 			cs.recordFailure(backendHostForError)
-			c.JSON(http.StatusBadGateway, httpresponse.ErrorEnvelope{
-				Error: httpresponse.ErrorDetail{
-					Code:    "backend_error",
-					Message: "upstream request failed",
-				},
-			})
+			if wantsHTML(r) {
+				c.Data(http.StatusBadGateway, "text/html; charset=utf-8", []byte(badGatewayPageHTML))
+			} else {
+				c.JSON(http.StatusBadGateway, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "backend_error",
+						Message: "upstream request failed",
+					},
+				})
+			}
 		}
 
 		proxyWriter := &proxyResponseWriter{ResponseWriter: c.Writer}
