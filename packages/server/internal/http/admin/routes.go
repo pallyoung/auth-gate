@@ -76,7 +76,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 
 	// Access log endpoints - available to any authenticated user
 	if accessLogStore != nil {
-		group.GET("/access-logs", listAccessLogs(accessLogSvc))
+		group.GET("/access-logs", listAccessLogs(accessLogSvc, routerMgr))
 		group.GET("/access-logs/stats", getAccessLogStats(accessLogSvc))
 	}
 
@@ -832,7 +832,7 @@ func requestLogger() gin.HandlerFunc {
 	}
 }
 
-func listAccessLogs(svc *accesslogservice.Service) gin.HandlerFunc {
+func listAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var params dto.AccessLogQueryParams
 		if err := c.ShouldBindQuery(&params); err != nil {
@@ -884,12 +884,30 @@ func listAccessLogs(svc *accesslogservice.Service) gin.HandlerFunc {
 			return
 		}
 
+		// Build route name lookup from router manager
+		routeNameMap := make(map[string]string)
+		if routerMgr != nil {
+			for _, r := range routerMgr.GetRoutes() {
+				if r.Name != "" {
+					routeNameMap[r.ID] = r.Name
+				} else if r.Host != "" {
+					routeNameMap[r.ID] = r.Host + r.PathPrefix
+				} else {
+					routeNameMap[r.ID] = r.PathPrefix
+				}
+			}
+		}
+
 		entries := make([]dto.AccessLogEntry, len(result.Entries))
 		for i, entry := range result.Entries {
+			routeName := entry.RouteName
+			if routeName == "" {
+				routeName = routeNameMap[entry.RouteID]
+			}
 			entries[i] = dto.AccessLogEntry{
 				RequestID:        entry.RequestID,
 				RouteID:          entry.RouteID,
-				RouteName:        entry.RouteName,
+				RouteName:        routeName,
 				Method:           entry.Method,
 				Path:             entry.Path,
 				BackendURL:       entry.BackendURL,

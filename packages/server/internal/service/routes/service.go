@@ -24,6 +24,7 @@ const (
 	ErrCodeInvalidRouteBackend       = "invalid_route_backend"
 	ErrCodeInvalidRouteBackendWeight = "invalid_route_backend_weight"
 	ErrCodeInvalidRouteRedirectCode  = "invalid_route_redirect_code"
+	ErrCodeDuplicateRouteName        = "duplicate_route_name"
 	ErrCodeRouteStoreFailure         = "route_store_failure"
 	ErrCodeCertificateNotFound       = "certificate_not_found"
 )
@@ -205,6 +206,9 @@ func (s *Service) Create(input CreateInput) (*store.Route, error) {
 	if err := validate(route); err != nil {
 		return nil, err
 	}
+	if err := s.checkNameUnique(route.Name, ""); err != nil {
+		return nil, err
+	}
 	if err := s.db.CreateRoute(route); err != nil {
 		return nil, newError(ErrCodeRouteStoreFailure, "failed to create route", err)
 	}
@@ -309,6 +313,9 @@ func (s *Service) Update(id string, input UpdateInput) (*store.Route, error) {
 	if err := validate(route); err != nil {
 		return nil, err
 	}
+	if err := s.checkNameUnique(route.Name, route.ID); err != nil {
+		return nil, err
+	}
 	if err := s.db.UpdateRoute(route); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newError(ErrCodeRouteNotFound, "route not found", err)
@@ -389,6 +396,24 @@ func validate(route *store.Route) error {
 
 func isValidRedirectCode(code int) bool {
 	return code == 0 || code == http.StatusMovedPermanently || code == http.StatusFound
+}
+
+// checkNameUnique verifies that no other route shares the given name.
+// excludeID is the route to skip (used during updates); pass "" for creates.
+func (s *Service) checkNameUnique(name string, excludeID string) error {
+	if name == "" {
+		return nil
+	}
+	routes, err := s.db.ListRoutes()
+	if err != nil {
+		return newError(ErrCodeRouteStoreFailure, "failed to list routes for name check", err)
+	}
+	for _, r := range routes {
+		if r.ID != excludeID && strings.EqualFold(r.Name, name) {
+			return newError(ErrCodeDuplicateRouteName, "route name already exists: "+name, nil)
+		}
+	}
+	return nil
 }
 
 func isValidPathMatchMode(pathMatchMode string) bool {
