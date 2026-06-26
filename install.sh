@@ -55,7 +55,7 @@ install() {
 
     # Download package
     info "Downloading package..."
-    local url="https://github.com/$REPO/releases/download/$version/auth-gate-${version#v}-linux-amd64.tar.gz"
+    local url="https://github.com/$REPO/releases/download/$version/auth-gate-${version}-linux-amd64.tar.gz"
     if ! curl -fsSL "$url" -o "$tmp_dir/auth-gate.tar.gz"; then
         error "Failed to download $url"
     fi
