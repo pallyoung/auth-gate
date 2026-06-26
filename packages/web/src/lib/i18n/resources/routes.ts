@@ -38,6 +38,7 @@ export const routesEn = {
   },
   table: {
     route: 'Route',
+    name: 'Name',
     hostMatch: 'Host Match',
     backendTarget: 'Backend Target',
     noBackend: 'No backend configured',
@@ -251,6 +252,7 @@ export const routesZhCN = {
   },
   table: {
     route: '路由',
+    name: '名称',
     hostMatch: 'Host 匹配',
     backendTarget: '后端目标',
     noBackend: '未配置后端',

@@ -213,6 +213,15 @@ export function RoutesPage() {
 
   const columns = [
     {
+      key: 'name',
+      header: t('table.name'),
+      render: (value: string) => (
+        <span className="font-semibold text-[var(--text-primary)]">
+          {value || t('page.untitled')}
+        </span>
+      ),
+    },
+    {
       key: 'host',
       header: t('table.host'),
       render: (value: string) => (
