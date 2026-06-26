@@ -168,9 +168,6 @@ func compileRoutes(routes []store.Route, authConfigs map[string]store.RouteAuthC
 			compiledRoute.AuthConfig = &RouteAuthConfig{
 				ApiKeyEnabled:    cfg.ApiKeyEnabled,
 				ApiKeyHeader:     header,
-				BasicEnabled:     cfg.BasicEnabled,
-				BasicUsername:    cfg.BasicUsername,
-				BasicPassword:    cfg.BasicPassword,
 				GatewayEnabled:   cfg.GatewayEnabled,
 				GatewayLoginMode: loginMode,
 				Whitelist:        cfg.Whitelist,

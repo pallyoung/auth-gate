@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronDown, ChevronRight, KeyRound, LockKeyhole, Pencil, Plus, Shield, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, KeyRound, Pencil, Plus, Shield, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AuthRuleForm } from '../components/AuthRuleForm'
 import { PageHeader } from '../components/PageHeader'
@@ -58,8 +58,6 @@ export function AuthRulesPage() {
         return { translationKey: 'errors.invalidAuthRuleType' }
       case 'missing_apikey_secret':
         return { translationKey: 'errors.missingAPIKeySecret' }
-      case 'missing_basic_credentials':
-        return { translationKey: 'errors.missingBasicCredentials' }
       case 'route_store_failure':
         return { translationKey: 'errors.routeStoreFailure' }
       case 'auth_rule_store_failure':
@@ -221,8 +219,6 @@ export function AuthRulesPage() {
         return t('types.none')
       case 'apikey':
         return t('types.apikey')
-      case 'basic':
-        return t('types.basic')
       case 'gateway':
         return t('types.gateway')
       default:
@@ -233,9 +229,6 @@ export function AuthRulesPage() {
   const getCredentialMapping = (rule: AuthRule) => {
     if (rule.type === 'apikey') {
       return rule.config?.header_name ? `${t('form.headerName')} ${rule.config.header_name}` : t('page.headerBasedKey')
-    }
-    if (rule.type === 'basic') {
-      return rule.config?.username ? `${t('form.username')} ${rule.config.username}` : t('page.basicCredentials')
     }
     if (rule.type === 'gateway') return t('page.gatewayLogin')
     return t('page.noCredentials')
@@ -310,12 +303,6 @@ export function AuthRulesPage() {
             hint={t('page.apiKeyRulesHint')}
             icon={<KeyRound className="h-5 w-5" />}
             tone="accent"
-          />
-          <MetricCard
-            label={t('page.basicAuthRules')}
-            value={typeCounts.basic || 0}
-            hint={t('page.basicAuthRulesHint')}
-            icon={<LockKeyhole className="h-5 w-5" />}
           />
         </div>
       ) : null}

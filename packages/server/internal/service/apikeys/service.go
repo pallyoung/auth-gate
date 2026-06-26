@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -54,10 +55,43 @@ func (s *Service) ListByRoute(routeID string) ([]store.ApiKey, error) {
 	return keys, nil
 }
 
+// ListWithSecrets returns all API keys for a route WITH their secrets populated.
+// Used by admin endpoints that need to display/copy the full key.
+func (s *Service) ListWithSecrets(routeID string) ([]store.ApiKey, error) {
+	keys, err := s.db.ListApiKeysByRoute(routeID)
+	if err != nil {
+		return nil, newError(ErrCodeAPIKeyStoreFailure, "failed to list api keys", err)
+	}
+	for i := range keys {
+		full, err := s.db.GetApiKey(keys[i].ID)
+		if err == nil {
+			keys[i].Secret = full.Secret
+		}
+	}
+	return keys, nil
+}
+
+// GetSecret returns the full secret for a single API key.
+func (s *Service) GetSecret(id string) (string, error) {
+	key, err := s.db.GetApiKey(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", newError(ErrCodeAPIKeyNotFound, "api key not found", err)
+		}
+		return "", newError(ErrCodeAPIKeyStoreFailure, "failed to get api key", err)
+	}
+	return key.Secret, nil
+}
+
 func (s *Service) Create(routeID, name string, expiresAt *time.Time) (*store.ApiKey, string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, "", newError(ErrCodeNameRequired, "api key name required", nil)
+		// Auto-generate name: Key-1, Key-2, ...
+		keys, err := s.db.ListApiKeysByRoute(routeID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, "", newError(ErrCodeAPIKeyStoreFailure, "failed to list api keys", err)
+		}
+		name = fmt.Sprintf("Key-%d", len(keys)+1)
 	}
 	// Verify route exists
 	if _, err := s.db.GetRoute(routeID); err != nil {

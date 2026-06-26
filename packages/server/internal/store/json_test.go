@@ -252,8 +252,8 @@ func TestCreateAuthRule_AllowsMultipleRulesPerRoute(t *testing.T) {
 	if err := db.CreateAuthRule(&AuthRule{
 		ID:      "rule-2",
 		RouteID: route.ID,
-		Type:    "basic",
-		Config:  AuthConfig{Username: "user", Password: "pass"},
+		Type:    "gateway",
+		Config:  AuthConfig{LoginMode: "form"},
 	}); err != nil {
 		t.Fatalf("CreateAuthRule(second) error = %v, want nil", err)
 	}

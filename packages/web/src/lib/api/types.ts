@@ -122,7 +122,7 @@ export interface AuthRuleSecretConfig extends AuthRuleConfig {
 export interface AuthRule {
   id: string
   route_id: string
-  type: 'none' | 'apikey' | 'basic' | 'gateway'
+  type: 'none' | 'apikey' | 'gateway'
   config: AuthRuleConfig
   whitelist?: string[]
   rate_limit?: number
@@ -138,7 +138,7 @@ export interface AuthRule {
 
 export interface AuthRuleInput {
   route_id: string
-  type: 'none' | 'apikey' | 'basic' | 'gateway'
+  type: 'none' | 'apikey' | 'gateway'
   config: AuthRuleSecretConfig
   whitelist?: string[]
   rate_limit?: number
@@ -156,8 +156,6 @@ export interface RouteAuthConfig {
   route_id: string
   api_key_enabled: boolean
   api_key_header?: string
-  basic_enabled: boolean
-  basic_username?: string
   gateway_enabled: boolean
   gateway_login_mode?: string
   whitelist?: string[]
@@ -173,9 +171,6 @@ export interface RouteAuthConfig {
 export interface RouteAuthConfigInput {
   api_key_enabled?: boolean
   api_key_header?: string
-  basic_enabled?: boolean
-  basic_username?: string
-  basic_password?: string
   gateway_enabled?: boolean
   gateway_login_mode?: string
   whitelist?: string[]
@@ -195,6 +190,7 @@ export interface ApiKey {
   route_id: string
   name: string
   key_prefix: string
+  secret?: string
   expires_at?: string
   status: 'active' | 'expired' | 'revoked'
   last_used_at?: string
@@ -206,7 +202,7 @@ export interface ApiKeyCreateResponse extends ApiKey {
 }
 
 export interface ApiKeyCreateInput {
-  name: string
+  name?: string
   expires_at?: string
 }
 

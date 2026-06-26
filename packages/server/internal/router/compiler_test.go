@@ -17,9 +17,8 @@ func TestCompileRoutes_AttachesAuthConfig(t *testing.T) {
 	authConfigs := map[string]store.RouteAuthConfig{
 		"route-1": {
 			RouteID:      "route-1",
-			BasicEnabled: true,
-			BasicUsername: "service",
-			BasicPassword: "secret",
+			ApiKeyEnabled: true,
+			ApiKeyHeader:  "X-API-Key",
 		},
 	}
 
@@ -30,11 +29,11 @@ func TestCompileRoutes_AttachesAuthConfig(t *testing.T) {
 	if compiled[0].AuthConfig == nil {
 		t.Fatal("compiled[0].AuthConfig = nil, want auth config")
 	}
-	if !compiled[0].AuthConfig.BasicEnabled {
-		t.Fatal("compiled[0].AuthConfig.BasicEnabled = false, want true")
+	if !compiled[0].AuthConfig.ApiKeyEnabled {
+		t.Fatal("compiled[0].AuthConfig.ApiKeyEnabled = false, want true")
 	}
-	if compiled[0].AuthConfig.BasicUsername != "service" {
-		t.Fatalf("compiled auth username = %q, want %q", compiled[0].AuthConfig.BasicUsername, "service")
+	if compiled[0].AuthConfig.ApiKeyHeader != "X-API-Key" {
+		t.Fatalf("compiled auth header = %q, want %q", compiled[0].AuthConfig.ApiKeyHeader, "X-API-Key")
 	}
 }
 

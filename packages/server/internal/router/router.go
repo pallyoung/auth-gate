@@ -13,9 +13,6 @@ import (
 type RouteAuthConfig struct {
 	ApiKeyEnabled    bool
 	ApiKeyHeader     string // default "X-API-Key"
-	BasicEnabled     bool
-	BasicUsername    string
-	BasicPassword    string
 	GatewayEnabled   bool
 	GatewayLoginMode string
 	Whitelist        []string
@@ -30,7 +27,7 @@ type RouteAuthConfig struct {
 
 // HasAuth returns true if any authentication method is enabled.
 func (c *RouteAuthConfig) HasAuth() bool {
-	return c.ApiKeyEnabled || c.BasicEnabled || c.GatewayEnabled
+	return c.ApiKeyEnabled || c.GatewayEnabled
 }
 
 // ApiKeyEntry is the compiled runtime representation of an API key.

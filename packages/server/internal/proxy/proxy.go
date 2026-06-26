@@ -470,13 +470,13 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			return
 		}
 
-		// 鉴权（OR 逻辑：任一启用的认证方式通过即放行）
+		// 鉴权
 		authenticated := false
 		if route.AuthConfig != nil && route.AuthConfig.HasAuth() {
 			cfg := route.AuthConfig
 
-			// 1. API Key 认证
-			if !authenticated && cfg.ApiKeyEnabled {
+			// API Key 认证
+			if cfg.ApiKeyEnabled {
 				keyValue := c.GetHeader(cfg.ApiKeyHeader)
 				if keyValue == "" {
 					keyValue = c.Query("api_key")
@@ -507,37 +507,37 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 				}
 			}
 
-			// 2. Basic Auth 认证
-			if !authenticated && cfg.BasicEnabled {
-				username, password, ok := c.Request.BasicAuth()
-				if ok && username == cfg.BasicUsername && password == cfg.BasicPassword {
-					authenticated = true
-				}
-			}
-
-			// 3. 网关登录认证
+			// Gateway 登录认证
 			if !authenticated && cfg.GatewayEnabled {
 				if claims, ok := routeAccessClaims(c, routerMgr.DB()); ok && routeAllowedByClaims(claims, route.ID) {
-					c.Set("jwt_subject", claims.UserID)
-					c.Set("jwt_username", claims.Username)
-					c.Set("jwt_role", claims.Role)
 					authenticated = true
 				}
 			}
 
-			// 全部未通过
+			// 未通过
 			if !authenticated {
+				// Gateway 登录：重定向到登录页
 				if cfg.GatewayEnabled {
-					recordAuthFailure(c, route, http.StatusFound)
-					c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
+					loginURL := buildAccessLoginURL(route, c.Request.URL.RequestURI())
+					c.Redirect(http.StatusFound, loginURL)
 					c.Abort()
-				} else {
-					writeUnauthorized(c, route)
+					return
 				}
+				recordAuthFailure(c, route, http.StatusUnauthorized)
+				c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "unauthorized",
+						Message: "unauthorized",
+					},
+				})
+				c.Abort()
 				return
 			}
+		}
 
-			// 速率限制（使用路由级共享策略）
+		// 速率限制（独立于鉴权，即使无认证方式也可配置限流）
+		if route.AuthConfig != nil {
+			cfg := route.AuthConfig
 			if cfg.RateLimit > 0 || cfg.Burst > 0 {
 				allowed, retryAfter := middleware.Check(route.ID, c.ClientIP(), cfg.RateLimit, cfg.Burst, cfg.Whitelist)
 				if !allowed {
@@ -929,12 +929,12 @@ func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
 	if claims == nil {
 		return false
 	}
-	// 管理员默认拥有所有项目的访问权限
-	if claims.Role == store.RoleAdmin {
+	// Admin users have access to all routes
+	if claims.Role == "admin" {
 		return true
 	}
-	for _, allowedRouteID := range claims.RouteIDs {
-		if allowedRouteID == routeID {
+	for _, id := range claims.RouteIDs {
+		if id == routeID {
 			return true
 		}
 	}
@@ -970,25 +970,6 @@ func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
 
 func writeUnauthorized(c *gin.Context, route *router.Route) {
 	recordAuthFailure(c, route, http.StatusUnauthorized)
-
-	if route.AuthConfig != nil {
-		// 优先返回 Basic Auth 的 WWW-Authenticate 头
-		if route.AuthConfig.BasicEnabled {
-			realm := route.Name
-			if strings.TrimSpace(realm) == "" {
-				realm = route.PathPrefix
-			}
-			realm = strings.ReplaceAll(realm, `"`, `'`)
-			auth.RequireAuth(fmt.Sprintf(`Basic realm="%s"`, realm))(c)
-			return
-		}
-		// 有网关登录时重定向
-		if route.AuthConfig.GatewayEnabled {
-			c.Redirect(http.StatusFound, buildAccessLoginURL(route, c.Request.URL.RequestURI()))
-			c.Abort()
-			return
-		}
-	}
 
 	c.JSON(http.StatusUnauthorized, httpresponse.ErrorEnvelope{
 		Error: httpresponse.ErrorDetail{

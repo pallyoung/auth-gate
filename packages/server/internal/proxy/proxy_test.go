@@ -176,7 +176,7 @@ func TestBackendURLParsing(t *testing.T) {
 	}
 }
 
-func TestWriteUnauthorized_BasicSetsChallengeHeader(t *testing.T) {
+func TestWriteUnauthorized_Returns401JSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/cloud", nil)
@@ -185,37 +185,43 @@ func TestWriteUnauthorized_BasicSetsChallengeHeader(t *testing.T) {
 		Name:       "Cloud Console",
 		PathPrefix: "/cloud",
 		AuthConfig: &router.RouteAuthConfig{
-			BasicEnabled: true,
+			ApiKeyEnabled: true,
 		},
 	})
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
-	if got := w.Header().Get("WWW-Authenticate"); got != `Basic realm="Cloud Console"` {
-		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Basic realm="Cloud Console"`)
+	if got := w.Body.String(); !strings.Contains(got, "unauthorized") {
+		t.Fatalf("body = %q, want it to contain 'unauthorized'", got)
 	}
 }
 
-func TestProxyNormalizesLegacyStoredBasicAuthRuleType(t *testing.T) {
+func TestProxyNormalizesLegacyStoredAPIKeyAuthRuleType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("upstream-ok"))
+	}))
+	defer upstream.Close()
 
 	db := newProxyTestDB(t)
 	if err := db.CreateRoute(&store.Route{
 		ID:         "route-1",
 		Name:       "Cloud Console",
 		PathPrefix: "/cloud",
-		Backend:    "http://example.com",
+		Backend:    upstream.URL,
 		Enabled:    true,
 	}); err != nil {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 	if err := db.CreateAuthRule(&store.AuthRule{
 		RouteID: "route-1",
-		Type:    " BASIC ",
+		Type:    " APIKEY ",
 		Config: store.AuthConfig{
-			Username: "admin",
-			Password: "supersecret",
+			HeaderName: "X-API-Key",
+			Secret:     "test-secret",
 		},
 	}); err != nil {
 		t.Fatalf("CreateAuthRule() error = %v", err)
@@ -226,14 +232,15 @@ func TestProxyNormalizesLegacyStoredBasicAuthRuleType(t *testing.T) {
 	engine.Any("/*proxyPath", Handler(mgr, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/cloud", nil)
+	req.Header.Set("X-API-Key", "test-secret")
 	resp := httptest.NewRecorder()
 	engine.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.Code, http.StatusUnauthorized)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
 	}
-	if got := resp.Header().Get("WWW-Authenticate"); got != `Basic realm="Cloud Console"` {
-		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Basic realm="Cloud Console"`)
+	if resp.Body.String() != "upstream-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "upstream-ok")
 	}
 }
 
@@ -381,7 +388,7 @@ func TestRouteAllowedByClaims_UsesCurrentRouteAssignments(t *testing.T) {
 
 func TestRouteAllowedByClaims_DoesNotGrantUnassignedOperatorAccess(t *testing.T) {
 	claims := &auth.Claims{
-		Role:     store.RoleAdmin,
+		Role:     store.RoleMember,
 		RouteIDs: nil,
 	}
 

@@ -41,13 +41,12 @@ func TestRateLimit_429(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateRoute error: %v", err)
 	}
-	if err := db.CreateAuthRule(&store.AuthRule{
+	if err := db.CreateOrUpdateRouteAuthConfig(&store.RouteAuthConfig{
 		RouteID:   "rl-route",
-		Type:      "none",
 		RateLimit: 1, // one request per second after the initial burst
 		Burst:     2,
 	}); err != nil {
-		t.Fatalf("CreateAuthRule error: %v", err)
+		t.Fatalf("CreateOrUpdateRouteAuthConfig error: %v", err)
 	}
 
 	mgr := router.NewManager(db)

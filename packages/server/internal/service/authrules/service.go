@@ -17,7 +17,6 @@ const (
 	ErrCodeRouteIDRequired         = "route_id_required"
 	ErrCodeInvalidAuthRuleType     = "invalid_auth_rule_type"
 	ErrCodeMissingAPIKeySecret     = "missing_apikey_secret"
-	ErrCodeMissingBasicCredentials = "missing_basic_credentials"
 	ErrCodeAuthRuleStoreFailure    = "auth_rule_store_failure"
 )
 
@@ -359,11 +358,6 @@ func validate(ruleType string, config store.AuthConfig) error {
 	case "apikey":
 		if config.Secret == "" {
 			return newError(ErrCodeMissingAPIKeySecret, "apikey secret required", nil)
-		}
-		return nil
-	case "basic":
-		if config.Username == "" || strings.TrimSpace(config.Password) == "" {
-			return newError(ErrCodeMissingBasicCredentials, "basic username and password required", nil)
 		}
 		return nil
 	case "gateway":

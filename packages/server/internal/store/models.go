@@ -62,7 +62,7 @@ func (r *Route) EffectiveBackends() []Backend {
 type AuthRule struct {
 	ID        string     `json:"id"`
 	RouteID   string     `json:"route_id"`
-	Type      string     `json:"type"` // none, apikey, bearer, basic
+	Type      string     `json:"type"` // none, apikey, gateway
 	Config    AuthConfig `json:"config"`
 	Whitelist []string   `json:"whitelist"`  // IPs/ CIDRs excluded from rate limiting
 	RateLimit int        `json:"rate_limit"` // max requests per second
@@ -80,8 +80,8 @@ type AuthRule struct {
 type AuthConfig struct {
 	HeaderName string `json:"header_name,omitempty"`
 	Secret     string `json:"secret,omitempty"`
-	Username   string `json:"username,omitempty"` // for basic auth
-	Password   string `json:"password,omitempty"` // for basic auth
+	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 	LoginMode  string `json:"login_mode,omitempty"`
 }
 
@@ -128,11 +128,6 @@ type RouteAuthConfig struct {
 	ApiKeyEnabled bool   `json:"api_key_enabled"`
 	ApiKeyHeader  string `json:"api_key_header,omitempty"` // default "X-API-Key"
 
-	// Basic Auth toggle
-	BasicEnabled  bool   `json:"basic_enabled"`
-	BasicUsername string `json:"basic_username,omitempty"`
-	BasicPassword string `json:"basic_password,omitempty"` // stored as-is (hashed or plain)
-
 	// Gateway login toggle
 	GatewayEnabled   bool   `json:"gateway_enabled"`
 	GatewayLoginMode string `json:"gateway_login_mode,omitempty"` // "form"
@@ -153,7 +148,7 @@ type RouteAuthConfig struct {
 
 // HasAuth returns true if any authentication method is enabled.
 func (c *RouteAuthConfig) HasAuth() bool {
-	return c.ApiKeyEnabled || c.BasicEnabled || c.GatewayEnabled
+	return c.ApiKeyEnabled || c.GatewayEnabled
 }
 
 // IsApiKeyExpired returns true if the given ApiKey is expired or revoked.

@@ -71,7 +71,7 @@ describe('AuthRulesPage permissions', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByText(
-        'Add a rule to require API keys, basic auth, or gateway-managed login before requests are forwarded.'
+        'Add a rule to require API keys or gateway-managed login before requests are forwarded.'
       )
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create First Rule' })).not.toBeInTheDocument()
@@ -306,8 +306,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'basic',
-        config: { username: 'service-user' },
+        type: 'apikey',
+        config: { header_name: 'X-API-Key' },
         created_at: '',
         updated_at: '',
       },
@@ -346,8 +346,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'basic',
-        config: { username: 'service-user' },
+        type: 'apikey',
+        config: { header_name: 'X-API-Key' },
         whitelist: ['127.0.0.1/32', '10.0.0.0/8'],
         rate_limit: 15,
         burst: 30,
@@ -385,8 +385,8 @@ describe('AuthRulesPage permissions', () => {
       {
         id: 'rule-1',
         route_id: 'route-1',
-        type: 'basic',
-        config: { username: 'service-user' },
+        type: 'apikey',
+        config: { header_name: 'X-API-Key' },
         created_at: '',
         updated_at: '',
       },
@@ -734,8 +734,8 @@ describe('AuthRulesPage permissions', () => {
         {
           id: 'rule-2',
           route_id: 'route-2',
-          type: 'basic',
-          config: { username: 'service-user' },
+          type: 'apikey',
+          config: { header_name: 'X-Reports-Key' },
           created_at: '',
           updated_at: '',
         },
@@ -822,8 +822,8 @@ describe('AuthRulesPage permissions', () => {
         {
           id: 'rule-stale',
           route_id: 'route-stale',
-          type: 'basic',
-          config: { username: 'legacy' },
+          type: 'apikey',
+          config: { header_name: 'X-Stale-Key' },
           created_at: '',
           updated_at: '',
         },

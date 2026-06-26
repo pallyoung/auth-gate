@@ -296,10 +296,6 @@ func (s *JSONStore) migrateAuthRules() {
 					UpdatedAt: now,
 				})
 			}
-		case "basic":
-			g.config.BasicEnabled = true
-			g.config.BasicUsername = rule.Config.Username
-			g.config.BasicPassword = rule.Config.Password
 		case "gateway":
 			g.config.GatewayEnabled = true
 			if rule.Config.LoginMode != "" {

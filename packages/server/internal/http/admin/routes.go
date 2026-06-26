@@ -719,8 +719,7 @@ func authRuleServiceError(c *gin.Context, err error) bool {
 	case authrulesservice.ErrCodeRouteNotFound,
 		authrulesservice.ErrCodeRouteIDRequired,
 		authrulesservice.ErrCodeInvalidAuthRuleType,
-		authrulesservice.ErrCodeMissingAPIKeySecret,
-		authrulesservice.ErrCodeMissingBasicCredentials:
+		authrulesservice.ErrCodeMissingAPIKeySecret:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
@@ -1003,9 +1002,6 @@ func updateRouteAuthConfig(db store.Store, routerMgr *router.Manager) gin.Handle
 		cfg, err := svc.Update(routeID, routeauthservice.UpdateInput{
 			ApiKeyEnabled:        req.ApiKeyEnabled,
 			ApiKeyHeader:         req.ApiKeyHeader,
-			BasicEnabled:         req.BasicEnabled,
-			BasicUsername:        req.BasicUsername,
-			BasicPassword:        req.BasicPassword,
 			GatewayEnabled:       req.GatewayEnabled,
 			GatewayLoginMode:     req.GatewayLoginMode,
 			Whitelist:            req.Whitelist,
@@ -1043,12 +1039,12 @@ func listApiKeys(db store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		routeID := c.Param("routeId")
 		svc := apikeyservice.NewService(db)
-		keys, err := svc.ListByRoute(routeID)
+		keys, err := svc.ListWithSecrets(routeID)
 		if err != nil {
 			writeServiceError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, dto.ApiKeyListResponse(keys))
+		c.JSON(http.StatusOK, dto.ApiKeyListWithSecretsResponse(keys))
 	}
 }
 

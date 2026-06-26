@@ -38,9 +38,6 @@ func newError(code, message string, cause error) error {
 type UpdateInput struct {
 	ApiKeyEnabled    *bool
 	ApiKeyHeader     *string
-	BasicEnabled     *bool
-	BasicUsername    *string
-	BasicPassword    *string
 	GatewayEnabled   *bool
 	GatewayLoginMode *string
 	Whitelist        []string
@@ -98,17 +95,6 @@ func (s *Service) Update(routeID string, input UpdateInput) (*store.RouteAuthCon
 	}
 	if input.ApiKeyHeader != nil {
 		existing.ApiKeyHeader = strings.TrimSpace(*input.ApiKeyHeader)
-	}
-	if input.BasicEnabled != nil {
-		existing.BasicEnabled = *input.BasicEnabled
-	}
-	if input.BasicUsername != nil {
-		existing.BasicUsername = strings.TrimSpace(*input.BasicUsername)
-	}
-	if input.BasicPassword != nil {
-		if strings.TrimSpace(*input.BasicPassword) != "" {
-			existing.BasicPassword = *input.BasicPassword
-		}
 	}
 	if input.GatewayEnabled != nil {
 		existing.GatewayEnabled = *input.GatewayEnabled

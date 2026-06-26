@@ -71,9 +71,8 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
-    await user.type(screen.getByLabelText('Username'), 'test-user')
-    await user.type(screen.getByLabelText('Password'), 'test-pass')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
     await user.type(screen.getByLabelText('Whitelist'), '127.0.0.1/32, 10.0.0.0/8')
     await user.type(screen.getByLabelText('Rate Limit'), '15')
     await user.type(screen.getByLabelText('Burst'), '30')
@@ -87,10 +86,9 @@ describe('AuthRuleForm', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
         route_id: 'route-1',
-        type: 'basic',
+        type: 'apikey',
         config: {
-          username: 'test-user',
-          password: 'test-pass',
+          header_name: 'X-Custom-Key',
         },
         whitelist: ['127.0.0.1/32', '10.0.0.0/8'],
         rate_limit: 15,
@@ -143,72 +141,6 @@ describe('AuthRuleForm', () => {
     })
   })
 
-  it('does not block basic auth edits when the current password is redacted', async () => {
-    await renderForm({
-      id: 'rule-2',
-      route_id: 'route-1',
-      type: 'basic',
-      config: { username: 'service-user' },
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    })
-
-    expect(screen.getByLabelText('Password')).toBeValid()
-  })
-
-  it('omits an unchanged basic auth password when editing an existing basic rule', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn()
-
-    await renderForm({
-      id: 'rule-2',
-      route_id: 'route-1',
-      type: 'basic',
-      config: { username: 'service-user' },
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }, onSubmit)
-
-    await user.click(screen.getByRole('button', { name: 'Update Rule' }))
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith({
-        route_id: 'route-1',
-        type: 'basic',
-        config: {
-          username: 'service-user',
-        },
-      })
-    })
-  })
-
-  it('omits a whitespace-only basic auth password when editing an existing basic rule', async () => {
-    const user = userEvent.setup()
-    const onSubmit = vi.fn()
-
-    await renderForm({
-      id: 'rule-2',
-      route_id: 'route-1',
-      type: 'basic',
-      config: { username: 'service-user' },
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
-    }, onSubmit)
-
-    await user.type(screen.getByLabelText('Password'), '   ')
-    await user.click(screen.getByRole('button', { name: 'Update Rule' }))
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith({
-        route_id: 'route-1',
-        type: 'basic',
-        config: {
-          username: 'service-user',
-        },
-      })
-    })
-  })
-
   it('prevents duplicate submissions while an auth rule save is pending', async () => {
     let resolveSubmit: (() => void) | undefined
     const onSubmit = vi.fn(
@@ -221,9 +153,8 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
-    await user.type(screen.getByLabelText('Username'), 'test-user')
-    await user.type(screen.getByLabelText('Password'), 'test-pass')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
 
     const submitButton = screen.getByRole('button', { name: 'Create Rule' })
     await user.click(submitButton)
@@ -245,9 +176,8 @@ describe('AuthRuleForm', () => {
     const user = userEvent.setup()
     const { container } = await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'basic')
-    await user.type(screen.getByLabelText('Username'), 'test-user')
-    await user.type(screen.getByLabelText('Password'), 'test-pass')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
 
     const form = container.querySelector('form')
     expect(form).not.toBeNull()
@@ -285,9 +215,9 @@ describe('AuthRuleForm', () => {
           rule={{
             id: 'rule-2',
             route_id: 'route-2',
-            type: 'basic',
+            type: 'gateway',
             config: {
-              username: 'service-user',
+              login_mode: 'form',
             },
             created_at: '2026-01-01T00:00:00Z',
             updated_at: '2026-01-01T00:00:00Z',
@@ -300,9 +230,8 @@ describe('AuthRuleForm', () => {
     )
 
     expect(screen.getByRole('combobox', { name: 'Route' })).toHaveValue('route-2')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('basic')
-    expect(screen.getByLabelText('Username')).toHaveValue('service-user')
-    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('gateway')
+    expect(screen.getByRole('combobox', { name: 'Login Mode' })).toHaveValue('form')
     expect(screen.queryByLabelText('Header Name')).not.toBeInTheDocument()
   })
 
@@ -324,9 +253,9 @@ describe('AuthRuleForm', () => {
           rule={{
             id: 'rule-1',
             route_id: 'route-2',
-            type: 'basic',
+            type: 'gateway',
             config: {
-              username: 'service-user-updated',
+              login_mode: 'form',
             },
             created_at: '2026-01-01T00:00:00Z',
             updated_at: '2026-01-02T00:00:00Z',
@@ -339,8 +268,7 @@ describe('AuthRuleForm', () => {
     )
 
     expect(screen.getByRole('combobox', { name: 'Route' })).toHaveValue('route-2')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('basic')
-    expect(screen.getByLabelText('Username')).toHaveValue('service-user-updated')
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('gateway')
     expect(screen.queryByLabelText('Header Name')).not.toBeInTheDocument()
   })
 })

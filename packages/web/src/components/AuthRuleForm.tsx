@@ -69,7 +69,6 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
   const type = form.type || 'none'
   const config = form.config || {}
   const isEditingSameType = rule?.type === type
-  const shouldRequireBasicPassword = type === 'basic' && !isEditingSameType
 
   const updateConfig = (next: Partial<AuthRuleInput['config']>) => {
     setForm((current) => ({
@@ -132,16 +131,6 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
           },
           ...runtimePolicy,
         }
-      case 'basic':
-        return {
-          route_id: routeID,
-          type,
-          config: {
-            username,
-            ...(hasPassword ? { password } : {}),
-          },
-          ...runtimePolicy,
-        }
       case 'gateway':
         return {
           route_id: routeID,
@@ -186,7 +175,6 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
   const ruleTypeOptions = [
     { value: 'none', label: t('types.none') },
     { value: 'apikey', label: t('types.apikey') },
-    { value: 'basic', label: t('types.basic') },
     { value: 'gateway', label: t('types.gateway') },
   ]
 
@@ -253,27 +241,6 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
               <p className="text-xs text-[var(--text-muted)]">{t('form.apiKeyHint')}</p>
             </div>
           )}
-        </Card>
-      )}
-
-      {type === 'basic' && (
-        <Card tone="soft" className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Input
-            label={t('form.username')}
-            value={config.username || ''}
-            onChange={(event) => updateConfig({ username: event.target.value })}
-            placeholder={t('form.usernamePlaceholder')}
-            required
-          />
-          <Input
-            label={t('form.password')}
-            type="password"
-            value={config.password || ''}
-            onChange={(event) => updateConfig({ password: event.target.value })}
-            placeholder={t('form.passwordPlaceholder')}
-            hint={isEditingSameType ? t('form.passwordRetainedHint') : undefined}
-            required={shouldRequireBasicPassword}
-          />
         </Card>
       )}
 
