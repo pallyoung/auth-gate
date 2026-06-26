@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-06-26
+
+### Fixed
+- Fix install.sh download URL to include `v` prefix in version tag
+- Fix systemd service to use `--foreground` flag, preventing daemonization restart loop
+- Fix default admin port reference from 3000 to 9000 in install scripts
+
 ## [0.0.1] - 2026-06-26
 
 ### Added
@@ -25,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker support
 - GitHub Actions CI/CD pipeline
 
-[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/pallyoung/auth-gate/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/pallyoung/auth-gate/releases/tag/v0.0.1
