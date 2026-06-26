@@ -98,7 +98,7 @@ echo ""
 echo "Or with systemd:"
 echo "  systemctl start auth-gate"
 echo ""
-echo "Access admin UI at http://localhost:3000"
+echo "Access admin UI at http://localhost:9000"
 INSTALL_EOF
 chmod +x "$PACKAGE_DIR/install.sh"
 

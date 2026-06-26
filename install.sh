@@ -130,7 +130,7 @@ install() {
         echo "  systemctl status auth-gate"
         echo ""
     fi
-    echo "Access admin UI at http://localhost:3000"
+    echo "Access admin UI at http://localhost:9000"
 }
 
 # Main
