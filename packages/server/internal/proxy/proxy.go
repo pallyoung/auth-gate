@@ -809,10 +809,38 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 	}
 	defer backendConn.Close()
 
-	// Build WebSocket upgrade request with all original headers preserved
+	// Build WebSocket upgrade request with all original headers preserved.
+	// Start from the backend URL and apply the same path transformations
+	// that the normal HTTP proxy Director performs (strip prefix, rewrite).
+	backendReqURL := *backendURL
+	backendReqURL.Path = c.Request.URL.Path
+	backendReqURL.RawPath = c.Request.URL.RawPath
+
+	if route.StripPrefix {
+		backendReqURL.Path = strings.TrimPrefix(backendReqURL.Path, route.PathPrefix)
+		if !strings.HasPrefix(backendReqURL.Path, "/") {
+			backendReqURL.Path = "/" + backendReqURL.Path
+		}
+		if backendReqURL.RawPath != "" {
+			backendReqURL.RawPath = strings.TrimPrefix(backendReqURL.RawPath, route.PathPrefix)
+			if !strings.HasPrefix(backendReqURL.RawPath, "/") {
+				backendReqURL.RawPath = "/" + backendReqURL.RawPath
+			}
+		}
+	}
+
+	if route.RewriteTarget != "" && (route.PathMatchMode == "regex" || route.PathMatchMode == "regex_i") && route.PathRegex != nil {
+		newPath := route.PathRegex.ReplaceAllString(backendReqURL.Path, route.RewriteTarget)
+		if newPath != backendReqURL.Path {
+			backendReqURL.Path = newPath
+		}
+	}
+
+	backendReqURL.RawQuery = c.Request.URL.RawQuery
+
 	req := &http.Request{
 		Method:     "GET",
-		URL:        backendURL,
+		URL:        &backendReqURL,
 		Host:       backendURL.Host,
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
@@ -826,6 +854,14 @@ func handleWebSocket(c *gin.Context, backendURL *url.URL, route *router.Route) {
 	req.Header.Set("X-Forwarded-Proto", forwardedProto(c.Request))
 	req.Header.Set("X-Forwarded-For", c.ClientIP())
 	req.Header.Set("X-Real-IP", c.ClientIP())
+
+	// Apply custom request headers from route config
+	for k, v := range route.SetRequestHeaders {
+		req.Header.Set(k, v)
+	}
+	for _, k := range route.RemoveRequestHeaders {
+		req.Header.Del(k)
+	}
 
 	if err := req.Write(backendConn); err != nil {
 		log.Printf("WebSocket route_id=%s: write request to backend failed: %v", route.ID, err)
