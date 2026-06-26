@@ -310,6 +310,7 @@ export interface HostEntryReorderInput {
 export interface AccessLogEntry {
   request_id: string
   route_id: string
+  route_name?: string
   method: string
   path: string
   backend_url: string

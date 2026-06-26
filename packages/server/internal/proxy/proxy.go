@@ -63,6 +63,7 @@ const (
 type accessLogEntry struct {
 	RequestID        string `json:"request_id"`
 	RouteID          string `json:"route_id"`
+	RouteName        string `json:"route_name,omitempty"`
 	Method           string `json:"method"`
 	Path             string `json:"path"`
 	BackendURL       string `json:"backend_url"`
@@ -744,6 +745,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		accessLog := accessLogEntry{
 			RequestID:        requestID,
 			RouteID:          route.ID,
+			RouteName:        routeDisplayName(route),
 			Method:           c.Request.Method,
 			Path:             c.Request.URL.Path,
 			BackendURL:       backendHost,
@@ -763,6 +765,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			accessLogStore.Record(store.AccessLogEntry{
 				RequestID:        accessLog.RequestID,
 				RouteID:          accessLog.RouteID,
+				RouteName:        accessLog.RouteName,
 				Method:           accessLog.Method,
 				Path:             accessLog.Path,
 				BackendURL:       accessLog.BackendURL,
@@ -1003,6 +1006,17 @@ func setAccessLogStore(s *store.AccessLogStore) {
 	accessLogStoreInstance = s
 }
 
+// routeDisplayName returns a human-readable label for the route.
+func routeDisplayName(r *router.Route) string {
+	if r.Name != "" {
+		return r.Name
+	}
+	if r.Host != "" {
+		return r.Host + r.PathPrefix
+	}
+	return r.PathPrefix
+}
+
 // recordAuthFailure records a failed authentication attempt.
 func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
 	if accessLogStoreInstance == nil {
@@ -1012,6 +1026,7 @@ func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
 	accessLogStoreInstance.Record(store.AccessLogEntry{
 		RequestID:  uuid.New().String(),
 		RouteID:    route.ID,
+		RouteName:  routeDisplayName(route),
 		Method:     c.Request.Method,
 		Path:       c.Request.URL.Path,
 		StatusCode: statusCode,

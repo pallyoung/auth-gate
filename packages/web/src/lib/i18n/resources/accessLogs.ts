@@ -29,6 +29,7 @@ export const accessLogsEn = {
   table: {
     timestamp: 'Timestamp',
     method: 'Method',
+    route: 'Route',
     path: 'Path',
     statusCode: 'Status',
     clientIP: 'IP Address',
@@ -47,7 +48,7 @@ export const accessLogsEn = {
   detail: {
     title: 'Log Entry Details',
     requestID: 'Request ID',
-    routeID: 'Route ID',
+    routeID: 'Route',
     backendURL: 'Backend URL',
     userAgent: 'User Agent',
   },

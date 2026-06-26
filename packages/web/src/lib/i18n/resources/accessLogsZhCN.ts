@@ -29,6 +29,7 @@ export const accessLogsZhCN = {
   table: {
     timestamp: '时间戳',
     method: '方法',
+    route: '路由',
     path: '路径',
     statusCode: '状态码',
     clientIP: 'IP 地址',
@@ -47,7 +48,7 @@ export const accessLogsZhCN = {
   detail: {
     title: '日志详情',
     requestID: '请求 ID',
-    routeID: '路由 ID',
+    routeID: '路由',
     backendURL: '后端 URL',
     userAgent: '用户代理',
   },

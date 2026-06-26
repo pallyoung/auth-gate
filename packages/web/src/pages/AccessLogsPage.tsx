@@ -182,6 +182,7 @@ export function AccessLogsPage() {
                     <TableRow>
                       <TableHead className="w-32">{t('table.timestamp')}</TableHead>
                       <TableHead className="w-20">{t('table.method')}</TableHead>
+                      <TableHead className="w-40">{t('table.route')}</TableHead>
                       <TableHead>{t('table.path')}</TableHead>
                       <TableHead className="w-20">{t('table.statusCode')}</TableHead>
                       <TableHead className="w-32">{t('table.clientIP')}</TableHead>
@@ -201,6 +202,9 @@ export function AccessLogsPage() {
                           {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
                         </TableCell>
                         <TableCell>{getMethodBadge(entry.method)}</TableCell>
+                        <TableCell className="text-sm truncate max-w-[160px]" title={entry.route_name || entry.route_id}>
+                          {entry.route_name || entry.route_id}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {entry.path}
                         </TableCell>

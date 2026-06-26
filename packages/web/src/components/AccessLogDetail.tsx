@@ -131,7 +131,9 @@ export const AccessLogDetail: React.FC<AccessLogDetailProps> = ({ entry, onClose
                 {t('detail.routeID')}
               </label>
               <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
-                {entry.route_id}
+                {entry.route_name
+                  ? <span>{entry.route_name} <span className="opacity-50">({entry.route_id})</span></span>
+                  : entry.route_id}
               </p>
             </div>
 

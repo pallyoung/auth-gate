@@ -889,6 +889,7 @@ func listAccessLogs(svc *accesslogservice.Service) gin.HandlerFunc {
 			entries[i] = dto.AccessLogEntry{
 				RequestID:        entry.RequestID,
 				RouteID:          entry.RouteID,
+				RouteName:        entry.RouteName,
 				Method:           entry.Method,
 				Path:             entry.Path,
 				BackendURL:       entry.BackendURL,

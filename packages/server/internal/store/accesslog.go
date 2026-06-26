@@ -16,6 +16,7 @@ import (
 type AccessLogEntry struct {
 	RequestID        string    `json:"request_id"`
 	RouteID          string    `json:"route_id"`
+	RouteName        string    `json:"route_name,omitempty"`
 	Method           string    `json:"method"`
 	Path             string    `json:"path"`
 	BackendURL       string    `json:"backend_url"`
