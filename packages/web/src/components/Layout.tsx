@@ -4,6 +4,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Monitor,
   Moon,
   Network,
   Route as RouteIcon,
@@ -39,13 +40,21 @@ interface LayoutProps {
   onLogout?: () => void
 }
 
+function getSystemTheme(): 'dark' | 'light' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
-  const { t } = useTranslation(['layout', 'users'])
+  const { t, i18n } = useTranslation(['layout', 'users'])
+  const isZh = i18n.resolvedLanguage === 'zh-CN'
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
-  const [theme, setTheme] = React.useState<'dark' | 'light'>(() => {
+  const [themeMode, setThemeMode] = React.useState<'dark' | 'light' | 'system'>(() => {
     const stored = localStorage.getItem('theme')
-    return (stored === 'light' || stored === 'dark') ? stored : 'dark'
+    if (stored === 'light' || stored === 'dark') return stored
+    return 'system'
   })
+  const [systemTheme, setSystemTheme] = React.useState<'dark' | 'light'>(getSystemTheme)
+  const theme = themeMode === 'system' ? systemTheme : themeMode
   const previousActiveElement = React.useRef<HTMLElement | null>(null)
   const sidebarRef = React.useRef<HTMLElement | null>(null)
   const closeSidebarButtonRef = React.useRef<HTMLButtonElement | null>(null)
@@ -188,8 +197,17 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
+    localStorage.setItem('theme', themeMode)
+  }, [theme, themeMode])
+
+  // Listen for system theme changes when in 'system' mode
+  React.useEffect(() => {
+    if (themeMode !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [themeMode])
 
   const roleLabel = (role: string) => {
     switch (role) {
@@ -258,11 +276,25 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
       <div className="px-4 pb-3">
         <button
           type="button"
-          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+          onClick={() => setThemeMode(m => m === 'system' ? 'dark' : m === 'dark' ? 'light' : 'system')}
           className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
         >
-          {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-          {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+          {themeMode === 'system' ? (
+            <>
+              <Monitor className="h-4 w-4" />
+              {isZh ? '跟随系统' : 'System'}
+            </>
+          ) : themeMode === 'dark' ? (
+            <>
+              <Moon className="h-4 w-4" />
+              {isZh ? '深色模式' : 'Dark Mode'}
+            </>
+          ) : (
+            <>
+              <Sun className="h-4 w-4" />
+              {isZh ? '浅色模式' : 'Light Mode'}
+            </>
+          )}
         </button>
       </div>
 

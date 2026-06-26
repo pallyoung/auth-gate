@@ -36,9 +36,27 @@ function useRoute() {
   return path
 }
 
+function getSystemTheme(): 'dark' | 'light' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function resolveTheme(): string {
+  const stored = localStorage.getItem('theme')
+  if (stored === 'light' || stored === 'dark') return stored
+  return getSystemTheme()
+}
+
 export default function App() {
   const [apiReady, setApiReady] = React.useState(false)
   React.useEffect(() => { initApiBase().then(() => setApiReady(true)) }, [])
+
+  // Apply theme to <html> on mount and when localStorage changes
+  React.useEffect(() => {
+    const apply = () => document.documentElement.setAttribute('data-theme', resolveTheme())
+    apply()
+    window.addEventListener('storage', apply)
+    return () => window.removeEventListener('storage', apply)
+  }, [])
 
   const { user, token, loading, bootstrapping, notice, setupRequired, login, setup, logout, clearNotice } = useSession()
   const path = useRoute()
