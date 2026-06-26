@@ -10,6 +10,7 @@ import { UsersPage } from './pages/UsersPage'
 import { CertificatesPage } from './pages/CertificatesPage'
 import { HostsPage } from './pages/HostsPage'
 import { AccessLogsPage } from './pages/AccessLogsPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { useSession } from './lib/session'
 import { initApiBase } from './lib/api/client'
 
@@ -62,7 +63,7 @@ export default function App() {
   const path = useRoute()
   const [pathname, search = ''] = path.split('?')
   const searchParams = React.useMemo(() => new URLSearchParams(search), [search])
-  const normalizedPathname = knownControlPlanePaths.has(pathname) ? pathname : '/'
+  const normalizedPathname = knownControlPlanePaths.has(pathname) ? pathname : null
   const waitingForUsersPermissionBootstrap =
     normalizedPathname === '/users' && bootstrapping && token && user
   const effectivePathname =
@@ -75,7 +76,8 @@ export default function App() {
       : normalizedPathname
 
   React.useEffect(() => {
-    if (effectivePathname !== pathname) {
+    // Only redirect when effectivePathname is a known path that differs from the current URL
+    if (effectivePathname !== null && effectivePathname !== pathname) {
       window.location.hash = effectivePathname
     }
   }, [effectivePathname, pathname])
@@ -106,6 +108,15 @@ export default function App() {
     }
 
     return <LoginPage onLogin={login} sessionNotice={notice} onSessionNoticeShown={clearNotice} />
+  }
+
+  // Unknown route — show 404 page
+  if (effectivePathname === null) {
+    return (
+      <Layout currentPath="/" user={user} onLogout={logout}>
+        <NotFoundPage />
+      </Layout>
+    )
   }
 
   const renderPage = () => {

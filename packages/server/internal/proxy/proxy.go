@@ -386,6 +386,13 @@ func requestMatchHost(authority string) string {
 	return authority
 }
 
+// wantsHTML returns true if the request's Accept header indicates a preference
+// for HTML over JSON (i.e. the request comes from a browser).
+func wantsHTML(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html") && !strings.Contains(accept, "application/json")
+}
+
 func parseRuntimeBackendURL(raw string) (*url.URL, error) {
 	backendURL, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || backendURL.Scheme == "" || backendURL.Host == "" {
@@ -445,12 +452,16 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		route := routerMgr.Match(host, path, c.Request.Header)
 		if route == nil {
 			log.Printf("proxy match miss host=%s path=%s", host, path)
-			c.JSON(http.StatusNotFound, httpresponse.ErrorEnvelope{
-				Error: httpresponse.ErrorDetail{
-					Code:    "route_not_found",
-					Message: "no route found",
-				},
-			})
+			if wantsHTML(c.Request) {
+				c.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte(notFoundPageHTML))
+			} else {
+				c.JSON(http.StatusNotFound, httpresponse.ErrorEnvelope{
+					Error: httpresponse.ErrorDetail{
+						Code:    "route_not_found",
+						Message: "no route found",
+					},
+				})
+			}
 			return
 		}
 		log.Printf("proxy match route_id=%s host=%s path=%s", route.ID, host, path)
