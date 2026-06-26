@@ -26,7 +26,7 @@ describe('session integration', () => {
 
     const user = await refreshSessionUser()
 
-    expect(fetchMock).toHaveBeenCalledWith('/_authgate/api/auth/me', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.objectContaining({
       headers: expect.any(Headers),
     }))
     expect(user).toEqual({

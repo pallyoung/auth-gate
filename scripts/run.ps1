@@ -21,7 +21,9 @@ if (-not (Test-Path $ExePath)) {
 
 # Start service
 Set-Location $DistDir
-Write-Host "Starting Auth Gate control plane on http://localhost:8080/_authgate" -ForegroundColor Cyan
+Write-Host "Starting Auth Gate" -ForegroundColor Cyan
+Write-Host "  Admin UI:  http://localhost:9000" -ForegroundColor Gray
+Write-Host "  Proxy:     http://localhost:80" -ForegroundColor Gray
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Gray
 Write-Host ""
 .\auth-gate.exe start -f

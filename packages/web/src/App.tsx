@@ -11,6 +11,7 @@ import { CertificatesPage } from './pages/CertificatesPage'
 import { HostsPage } from './pages/HostsPage'
 import { AccessLogsPage } from './pages/AccessLogsPage'
 import { useSession } from './lib/session'
+import { initApiBase } from './lib/api/client'
 
 const knownControlPlanePaths = new Set([
   '/',
@@ -36,6 +37,9 @@ function useRoute() {
 }
 
 export default function App() {
+  const [apiReady, setApiReady] = React.useState(false)
+  React.useEffect(() => { initApiBase().then(() => setApiReady(true)) }, [])
+
   const { user, token, loading, bootstrapping, notice, setupRequired, login, setup, logout, clearNotice } = useSession()
   const path = useRoute()
   const [pathname, search = ''] = path.split('?')
@@ -62,7 +66,7 @@ export default function App() {
     return <AccessLoginPage searchParams={searchParams} />
   }
 
-  if (loading || waitingForUsersPermissionBootstrap) {
+  if (!apiReady || loading || waitingForUsersPermissionBootstrap) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-page)]">
         <div className="animate-spin w-8 h-8 border-2 border-[var(--primary-500)] border-t-transparent rounded-full" />

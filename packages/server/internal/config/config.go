@@ -18,7 +18,15 @@ type Config struct {
 
 type ServerConfig struct {
 	Listen    []ListenEntry `yaml:"listen"`
+	Admin     AdminConfig   `yaml:"admin,omitempty"`
 	HTTPSPort int           `yaml:"https_port,omitempty"` // deprecated, kept for backward compat
+}
+
+// AdminConfig holds the listen address for the admin/control-plane server.
+// When Addr is set, the admin UI and management API are served on a separate
+// engine from the proxy, enabling fault isolation.
+type AdminConfig struct {
+	Addr string `yaml:"addr"` // e.g. "127.0.0.1:9000"
 }
 
 // ListenEntry represents a single listen address with optional TLS.
@@ -106,6 +114,12 @@ func (c *Config) EffectiveHTTPSAddrs() []string {
 		addrs = append(addrs, fmt.Sprintf(":%d", c.Server.HTTPSPort))
 	}
 	return addrs
+}
+
+// AdminListenAddr returns the admin server listen address.
+// Returns "" if not configured (single-engine compatibility mode).
+func (c *Config) AdminListenAddr() string {
+	return strings.TrimSpace(c.Server.Admin.Addr)
 }
 
 func (c AuthConfig) JWTSecretValue() string {

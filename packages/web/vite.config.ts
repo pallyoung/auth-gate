@@ -1,13 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Dev server proxies /api/* to the admin backend on :9000.
+// The frontend auto-detects single-engine mode via initApiBase() if needed.
 export default defineConfig({
-  base: '/_authgate/',
+  base: '/',
   plugins: [react()],
   server: {
     port: 5174,
     proxy: {
-      '/_authgate/api': 'http://localhost:80',
+      '/api': 'http://localhost:9000',
     },
   },
   optimizeDeps: {

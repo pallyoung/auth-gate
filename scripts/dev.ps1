@@ -45,7 +45,7 @@ if (-not (Test-Path $nodeModules)) {
     Write-Host "[1/3] Web dependencies already installed." -ForegroundColor Gray
 }
 
-Write-Host "[2/3] Starting Go backend (port 80)..." -ForegroundColor Yellow
+Write-Host "[2/3] Starting Go backend (admin :9000, proxy :80)..." -ForegroundColor Yellow
 
 # Start Go backend in background via a separate PowerShell process.
 # Avoid Start-Process -Environment which replaces all env vars in PS 5.1.
@@ -79,8 +79,9 @@ if ($goProcess.HasExited) {
 
 Write-Host "[3/3] Starting Vite dev server (port 5174)..." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Backend:  http://localhost:80/_authgate" -ForegroundColor Gray
-Write-Host "  Frontend: http://localhost:5174/_authgate/" -ForegroundColor Gray
+Write-Host "  Admin UI:  http://localhost:5174" -ForegroundColor Gray
+Write-Host "  Admin API: http://127.0.0.1:9000/api" -ForegroundColor Gray
+Write-Host "  Proxy:     http://localhost:80" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Gray
 Write-Host ""
@@ -90,14 +91,20 @@ try {
     npm run dev
 } finally {
     Pop-Location
+
+    # Kill the air parent process
     if ($goProcess -and -not $goProcess.HasExited) {
         Write-Host ""
-        Write-Host "Stopping Go backend (PID $($goProcess.Id))..." -ForegroundColor Yellow
+        Write-Host "Stopping Go backend..." -ForegroundColor Yellow
         Stop-Process -Id $goProcess.Id -Force -ErrorAction SilentlyContinue
-        # Also kill any child go.exe process
-        Get-Process -Name "go" -ErrorAction SilentlyContinue |
-            Where-Object { $_.StartTime -gt (Get-Date).AddMinutes(-5) } |
-            Stop-Process -Force -ErrorAction SilentlyContinue
     }
+
+    # Kill ALL auth-gate.exe and air child processes (air spawns children
+    # that survive when the parent is killed).
+    Get-Process -Name "auth-gate" -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name "air" -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
     Write-Host "Dev environment stopped." -ForegroundColor Cyan
 }

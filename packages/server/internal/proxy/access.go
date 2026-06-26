@@ -12,10 +12,7 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-const (
-	routeAccessCookieName = "auth_gate_route_token"
-	routeLoginHashPath    = "/access-login"
-)
+const routeAccessCookieName = "auth_gate_route_token"
 
 func routeAccessClaims(c *gin.Context, db store.Store) (*auth.Claims, bool) {
 	token, err := c.Cookie(routeAccessCookieName)
@@ -87,5 +84,5 @@ func buildAccessLoginURL(route *router.Route, requestURI string) string {
 	values.Set("next", SanitizeAccessRedirect(requestURI, route.PathPrefix))
 	values.Set("route_name", route.Name)
 	values.Set("path_prefix", route.PathPrefix)
-	return "/_authgate/#" + routeLoginHashPath + "?" + values.Encode()
+	return "/auth/access-login?" + values.Encode()
 }

@@ -111,11 +111,18 @@ func hasIndexFile(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// buildEngine constructs a single unified engine (compatibility mode).
+// Used when admin.addr is not configured.
 func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
 	statichttp.RegisterRoutes(engine, webRoot, controlPlaneBasePath)
+
+	// Runtime config for frontend (tells it the API base path)
+	engine.GET(controlPlaneAPIBasePath+"/config/app", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"api_base": controlPlaneAPIBasePath})
+	})
 
 	// Public routes
 	engine.POST(controlPlaneAPIBasePath+"/auth/login", adminhttp.LoginRoute(db, certSvc))
@@ -131,6 +138,46 @@ func buildEngine(routerMgr *router.Manager, webRoot string, db store.Store, cert
 
 	// Proxy for unmatched routes
 	proxyhttp.RegisterRoutes(engine, routerMgr, accessLogStore)
+
+	return engine
+}
+
+// buildAdminEngine constructs the admin/control-plane engine.
+// Serves the management UI (SPA) and admin API only — no proxy, no NoRoute.
+// In dual-engine mode the admin has its own port, so no /_authgate prefix is needed.
+func buildAdminEngine(routerMgr *router.Manager, webRoot string, db store.Store, certSvc adminhttp.CertService, hostSvc adminhttp.HostService, accessLogStore *store.AccessLogStore, cfg *config.Config) *gin.Engine {
+	engine := gin.New()
+	engine.Use(gin.Recovery())
+
+	// No prefix — admin engine owns its port, no conflict with proxy routes.
+	statichttp.RegisterRoutes(engine, webRoot, "")
+
+	// Runtime config for frontend
+	engine.GET("/api/config/app", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"api_base": "/api"})
+	})
+
+	// Public admin routes
+	engine.POST("/api/auth/login", adminhttp.LoginRoute(db, certSvc))
+	engine.GET("/api/auth/setup-status", adminhttp.SetupStatusRoute(db))
+	engine.POST("/api/auth/setup", adminhttp.SetupRoute(db, certSvc))
+
+	// Protected admin API routes
+	apiGroup := engine.Group("/api")
+	apiGroup.Use(auth.AuthMiddleware(db))
+	adminhttp.RegisterRoutes(apiGroup, routerMgr, db, certSvc, hostSvc, accessLogStore, cfg)
+
+	return engine
+}
+
+// buildProxyEngine constructs the proxy engine.
+// Serves gateway access login, self-contained login page, and the catch-all
+// reverse proxy — no admin UI, no management API.
+func buildProxyEngine(routerMgr *router.Manager, db store.Store, accessLogStore *store.AccessLogStore) *gin.Engine {
+	engine := gin.New()
+	engine.Use(gin.Recovery())
+
+	proxyhttp.RegisterProxyRoutes(engine, routerMgr, db, accessLogStore)
 
 	return engine
 }
@@ -187,53 +234,56 @@ func startHTTPServers(ctx context.Context, engine *gin.Engine, routerMgr *router
 		servers = append(servers, srv)
 	}
 
-	// Start HTTPS servers for each TLS listen address
+	// Start HTTPS servers for each TLS listen address.
+	// Uses GetConfigForClient so certificates added via the admin UI are picked
+	// up on the next TLS handshake without restarting the server.
 	httpsAddrs := cfg.EffectiveHTTPSAddrs()
 	if len(httpsAddrs) > 0 {
-		// Collect all TLS certificates from routes
-		allRoutes := routerMgr.GetRoutes()
-		tlsCfg := &tls.Config{
-			Certificates: make([]tls.Certificate, 0, 1),
-		}
-		seen := make(map[string]bool)
-		for _, r := range allRoutes {
-			if !r.Enabled || !r.TLSEnabled || r.TLSCert == "" || r.TLSKey == "" {
-				continue
-			}
-			key := r.TLSCert + "|" + r.TLSKey
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			cert, err := tls.LoadX509KeyPair(r.TLSCert, r.TLSKey)
-			if err != nil {
-				log.Printf("Failed to load TLS certificate (cert=%s): %v", r.TLSCert, err)
-				continue
-			}
-			tlsCfg.Certificates = append(tlsCfg.Certificates, cert)
+		dynamicTLS := &tls.Config{
+			GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+				allRoutes := routerMgr.GetRoutes()
+				certCfg := &tls.Config{}
+				seen := make(map[string]bool)
+				for _, r := range allRoutes {
+					if !r.Enabled || !r.TLSEnabled || r.TLSCert == "" || r.TLSKey == "" {
+						continue
+					}
+					key := r.TLSCert + "|" + r.TLSKey
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+					cert, err := tls.LoadX509KeyPair(r.TLSCert, r.TLSKey)
+					if err != nil {
+						log.Printf("TLS: failed to load cert (cert=%s): %v", r.TLSCert, err)
+						continue
+					}
+					certCfg.Certificates = append(certCfg.Certificates, cert)
+				}
+				if len(certCfg.Certificates) == 0 {
+					return nil, fmt.Errorf("no TLS certificates available")
+				}
+				return certCfg, nil
+			},
 		}
 
-		if len(tlsCfg.Certificates) > 0 {
-			for _, addr := range httpsAddrs {
-				ln, err := tls.Listen("tcp", addr, tlsCfg)
-				if err != nil {
-					log.Printf("Failed to listen on TLS %s: %v", addr, err)
-					continue
-				}
-				httpsSrv := &http.Server{
-					Addr:    addr,
-					Handler: engine,
-				}
-				go func(a string, l net.Listener) {
-					log.Printf("HTTPS server listening on %s (certs=%d)", a, len(tlsCfg.Certificates))
-					if err := httpsSrv.Serve(l); err != nil && err != http.ErrServerClosed {
-						log.Printf("HTTPS server error on %s: %v", a, err)
-					}
-				}(addr, ln)
-				servers = append(servers, httpsSrv)
+		for _, addr := range httpsAddrs {
+			ln, err := tls.Listen("tcp", addr, dynamicTLS)
+			if err != nil {
+				log.Printf("Failed to listen on TLS %s: %v", addr, err)
+				continue
 			}
-		} else {
-			log.Printf("Warning: TLS listen addresses configured but no valid certificates found")
+			httpsSrv := &http.Server{
+				Addr:    addr,
+				Handler: engine,
+			}
+			go func(a string, l net.Listener) {
+				log.Printf("HTTPS server listening on %s (dynamic TLS)", a)
+				if err := httpsSrv.Serve(l); err != nil && err != http.ErrServerClosed {
+					log.Printf("HTTPS server error on %s: %v", a, err)
+				}
+			}(addr, ln)
+			servers = append(servers, httpsSrv)
 		}
 	}
 
@@ -335,17 +385,46 @@ func startForeground() {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	webRoot := getWebRoot()
-	log.Printf("Serving web from: %s", webRoot)
-	log.Printf("Control plane available at: %s", controlPlaneBasePath)
-
-	engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	log.Printf("Auth Gate starting...")
-	servers := startHTTPServers(ctx, engine, routerMgr, cfg)
+	var servers []*http.Server
+
+	adminAddr := cfg.AdminListenAddr()
+	if adminAddr != "" {
+		// Dual-engine mode: admin and proxy on separate engines/ports.
+		webRoot := getWebRoot()
+		log.Printf("Serving web from: %s", webRoot)
+		log.Printf("Admin server: %s", adminAddr)
+
+		adminEngine := buildAdminEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
+		proxyEngine := buildProxyEngine(routerMgr, db, accessLogStore)
+
+		// Start admin server (HTTP only, typically localhost)
+		adminSrv := &http.Server{Addr: adminAddr, Handler: adminEngine}
+		go func() {
+			log.Printf("Admin server listening on %s", adminAddr)
+			if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Admin server error on %s: %v", adminAddr, err)
+			}
+		}()
+		servers = append(servers, adminSrv)
+
+		// Start proxy servers (external-facing, with TLS support)
+		log.Printf("Auth Gate starting (dual-engine mode)...")
+		proxyServers := startHTTPServers(ctx, proxyEngine, routerMgr, cfg)
+		servers = append(servers, proxyServers...)
+	} else {
+		// Single-engine mode (backward compatible).
+		webRoot := getWebRoot()
+		log.Printf("Serving web from: %s", webRoot)
+		log.Printf("Control plane available at: %s", controlPlaneBasePath)
+
+		engine := buildEngine(routerMgr, webRoot, db, certSvc, hostSvc, accessLogStore, cfg)
+
+		log.Printf("Auth Gate starting...")
+		servers = startHTTPServers(ctx, engine, routerMgr, cfg)
+	}
 
 	// Wait for shutdown signal
 	<-ctx.Done()

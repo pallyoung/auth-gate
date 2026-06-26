@@ -19,7 +19,10 @@ func RegisterRoutes(engine *gin.Engine, webRoot string, basePath string) {
 	registerStaticFile(engine, path.Join(basePath, "favicon.svg"), filepath.Join(webRoot, "favicon.svg"))
 	registerStaticFile(engine, path.Join(basePath, "favicon.ico"), filepath.Join(webRoot, "favicon.ico"))
 	engine.GET(basePath, serveIndex(webRoot))
-	engine.GET(basePath+"/", serveIndex(webRoot))
+	// Avoid duplicate registration: Gin treats "" and "/" as the same path.
+	if basePath != "" {
+		engine.GET(basePath+"/", serveIndex(webRoot))
+	}
 }
 
 func normalizeBasePath(basePath string) string {

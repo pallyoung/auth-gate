@@ -2,7 +2,41 @@ import { clearSession, getSessionToken } from '../session-store'
 import type { ApiErrorEnvelope } from './types'
 
 const ensureArray = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : []
-const controlPlaneAPIBasePath = '/_authgate/api'
+
+// API base path — defaults to /api (dual-engine mode).
+// In single-engine compatibility mode, initApiBase() detects the /_authgate prefix.
+let controlPlaneAPIBasePath = '/api'
+
+/**
+ * Detect the API base path from the backend.
+ * Tries /api/config/app first (dual-engine), then /_authgate/api/config/app
+ * (single-engine compatibility). If both fail the default /api is kept.
+ */
+export async function initApiBase(): Promise<void> {
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    // Tests use single-engine mock URLs (/_authgate/api/*).
+    controlPlaneAPIBasePath = '/_authgate/api'
+    return
+  }
+  for (const base of ['/api', '/_authgate/api']) {
+    try {
+      const res = await fetch(`${base}/config/app`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.api_base) {
+          controlPlaneAPIBasePath = data.api_base
+          return
+        }
+      }
+    } catch {
+      // try next
+    }
+  }
+}
+
+export function getApiBasePath(): string {
+  return controlPlaneAPIBasePath
+}
 
 export class ApiError extends Error {
   status: number
