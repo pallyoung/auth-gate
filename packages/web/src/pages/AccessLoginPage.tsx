@@ -1,11 +1,11 @@
 import React from 'react'
-import { KeyRound, Lock, User } from 'lucide-react'
+import { ArrowRight, KeyRound, Lock, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { authApi } from '../lib/api/auth'
 import { ApiError } from '../lib/api/client'
 import { navigateTo } from '../lib/navigation'
-import { Button, Card, Input } from '../components/ui'
+import { Button } from '../components/ui'
 
 interface AccessLoginPageProps {
   searchParams: URLSearchParams
@@ -122,63 +122,106 @@ export function AccessLoginPage({ searchParams }: AccessLoginPageProps) {
       <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
         <LanguageSwitcher />
       </div>
-      <div className="absolute left-[8%] top-[12%] hidden h-40 w-40 rounded-full bg-[rgba(189,122,24,0.16)] blur-3xl md:block" />
-      <div className="absolute bottom-[10%] right-[10%] hidden h-48 w-48 rounded-full bg-[rgba(15,143,139,0.16)] blur-3xl md:block" />
 
-      <Card className="mx-auto w-full max-w-lg rounded-[32px] p-6 md:p-8">
-        <div className="flex flex-col items-center text-center">
-            <div className="animate-pulse-glow flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-lg)]">
+      {/* Background gradient blobs */}
+      <div className="absolute left-[15%] top-[20%] h-64 w-64 rounded-full bg-[rgba(15,143,139,0.15)] blur-[100px]" />
+      <div className="absolute bottom-[20%] right-[15%] h-72 w-72 rounded-full bg-[rgba(47,114,200,0.12)] blur-[100px]" />
+      <div className="absolute left-[60%] top-[10%] h-48 w-48 rounded-full bg-[rgba(189,122,24,0.1)] blur-[80px]" />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Login Card */}
+        <div className="glass-panel rounded-[20px] p-8">
+          <div className="flex flex-col items-center text-center">
+            {/* Key Icon */}
+            <div className="animate-pulse-glow flex h-16 w-16 items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] text-white shadow-[0_0_30px_rgba(15,143,139,0.3)]">
               <KeyRound className="h-8 w-8" />
             </div>
-          <div className="eyebrow mt-5">{t('eyebrow')}</div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-            {t('title')}
-          </h1>
-          <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-            {t('description', { routeName })}
-          </p>
-          <div className="mt-4 rounded-full bg-[rgba(255,255,255,0.6)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            {pathPrefix}
+
+            <h1 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+              {t('title')}
+            </h1>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              {t('description', { routeName })}
+            </p>
+            <div className="mt-3 inline-flex items-center rounded-full border border-[var(--border-default)] bg-[var(--bg-card)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+              {pathPrefix}
+            </div>
           </div>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {displayError && (
+              <div
+                className="rounded-[12px] border border-[rgba(248,113,113,0.2)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
+                role="alert"
+              >
+                {displayError}
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t('fields.username')}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]">
+                  <User className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  placeholder={t('fields.usernamePlaceholder')}
+                  required
+                  className="w-full rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)] py-3 pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-subtle)] transition-colors focus:border-[var(--primary-500)] focus:outline-none focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t('fields.password')}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  placeholder={t('fields.passwordPlaceholder')}
+                  required
+                  className="w-full rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)] py-3 pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-subtle)] transition-colors focus:border-[var(--primary-500)] focus:outline-none focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]"
+                />
+              </div>
+            </div>
+
+            {/* Sign In Button */}
+            <Button
+              type="submit"
+              className="w-full rounded-[12px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(15,143,139,0.3)] hover:shadow-[0_6px_20px_rgba(15,143,139,0.4)]"
+              size="lg"
+              loading={loading}
+              disabled={!routeId || routeUnavailable}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {t('submit')}
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            </Button>
+          </form>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-          {displayError && (
-            <div
-              className="rounded-[20px] border border-[rgba(208,71,75,0.16)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
-              role="alert"
-            >
-              {displayError}
-            </div>
-          )}
-
-          <Input
-            label={t('fields.username')}
-            type="text"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            autoComplete="username"
-            placeholder={t('fields.usernamePlaceholder')}
-            leftIcon={<User className="h-4 w-4" />}
-            required
-          />
-
-          <Input
-            label={t('fields.password')}
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            placeholder={t('fields.passwordPlaceholder')}
-            leftIcon={<Lock className="h-4 w-4" />}
-            required
-          />
-
-          <Button type="submit" className="w-full" size="lg" loading={loading} disabled={!routeId || routeUnavailable}>
-            {t('submit')}
-          </Button>
-        </form>
-      </Card>
+        {/* Version Pill */}
+        <div className="mt-6 flex justify-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--text-muted)]">
+            <KeyRound className="h-3 w-3" />
+            <span>Protected Route</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

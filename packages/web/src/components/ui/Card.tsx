@@ -14,10 +14,10 @@ const paddingStyles = {
 }
 
 const toneStyles = {
-  default: 'glass-panel',
-  soft: 'bg-[var(--bg-card-soft)] border border-[var(--border-soft)] shadow-[var(--shadow-sm)] backdrop-blur-xl',
-  strong: 'glass-panel-strong',
-  inverse: 'bg-[var(--bg-inverse)] text-[var(--text-inverse)] border border-white/10 shadow-[var(--shadow-lg)]',
+  default: 'border border-[var(--border-default)] bg-[var(--bg-card)]',
+  soft: 'bg-[var(--bg-card-soft)] border border-[var(--border-default)]',
+  strong: 'border border-[var(--border-strong)] bg-[var(--bg-card-strong)]',
+  inverse: 'bg-[var(--bg-inverse)] text-[var(--text-inverse)] border border-white/10',
 }
 
 export function Card({

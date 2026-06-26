@@ -7,22 +7,26 @@ interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   label: string
   value: string | number
   hint?: string
+  trend?: string
+  trendUp?: boolean
   icon?: React.ReactNode
   tone?: MetricCardTone
 }
 
 const toneStyles: Record<MetricCardTone, string> = {
-  primary: 'from-[rgba(15,143,139,0.18)] to-transparent text-[var(--primary-700)]',
-  accent: 'from-[rgba(189,122,24,0.18)] to-transparent text-[var(--accent-600)]',
-  neutral: 'from-[rgba(23,33,45,0.08)] to-transparent text-[var(--text-secondary)]',
-  warning: 'from-[var(--warning-light)] to-transparent text-[var(--warning)]',
-  error: 'from-[var(--error-light)] to-transparent text-[var(--error)]',
+  primary: 'text-[var(--primary-600)]',
+  accent: 'text-[var(--accent-600)]',
+  neutral: 'text-[var(--text-secondary)]',
+  warning: 'text-[var(--warning)]',
+  error: 'text-[var(--error)]',
 }
 
 export function MetricCard({
   label,
   value,
   hint,
+  trend,
+  trendUp,
   icon,
   tone = 'neutral',
   className,
@@ -31,23 +35,33 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'glass-panel rounded-[24px] p-5',
-        'bg-[linear-gradient(180deg,rgba(255,255,255,0.5),rgba(255,255,255,0.14))]',
+        'rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-card)] p-4',
         className
       )}
       {...props}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</div>
-          <div className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">{value}</div>
-          {hint ? <div className="mt-2 text-sm text-[var(--text-muted)]">{hint}</div> : null}
+      <div className="flex items-start justify-between">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">{label}</div>
+          <div className="mt-2 text-2xl font-bold tracking-[-0.02em] text-[var(--text-primary)]">{value}</div>
+          {hint && (
+            <div className="mt-1.5 text-xs text-[var(--text-muted)]">{hint}</div>
+          )}
+          {trend && (
+            <div className={cn(
+              'mt-2 inline-flex items-center gap-1 text-[11px] font-medium',
+              trendUp ? 'text-[var(--success)]' : 'text-[var(--error)]'
+            )}>
+              <span>{trendUp ? '↑' : '↓'}</span>
+              <span>{trend}</span>
+            </div>
+          )}
         </div>
-        {icon ? (
-          <div className={cn('rounded-[18px] bg-gradient-to-br p-3', toneStyles[tone])}>
+        {icon && (
+          <div className={cn('flex h-8 w-8 items-center justify-center rounded-[8px] bg-[var(--bg-hover)]', toneStyles[tone])}>
             {icon}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   )

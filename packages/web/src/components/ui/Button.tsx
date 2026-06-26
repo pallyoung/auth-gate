@@ -57,7 +57,7 @@ export function Button({
     <button
       type={type ?? 'button'}
       className={cn(
-        'inline-flex items-center justify-center rounded-full font-semibold tracking-[-0.01em]',
+        'inline-flex items-center justify-center rounded-[12px] font-semibold tracking-[-0.01em]',
         'transition-all duration-[var(--duration-normal)] ease-[var(--ease-out)]',
         'focus-visible:outline-none touch-manipulation',
         'disabled:translate-y-0 disabled:shadow-none disabled:opacity-55',

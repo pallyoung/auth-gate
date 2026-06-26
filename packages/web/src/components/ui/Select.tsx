@@ -51,14 +51,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             aria-invalid={!!error}
             aria-describedby={error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined}
             className={cn(
-              'w-full appearance-none rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-strong)]',
-              'px-4 pr-11 text-[var(--text-primary)] shadow-[var(--shadow-sm)] backdrop-blur-xl',
+              'w-full appearance-none rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)]',
+              'px-4 pr-11 text-[var(--text-primary)]',
               'transition-all duration-[var(--duration-normal)]',
-              'hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]',
-              'focus:border-[rgba(15,143,139,0.38)] focus:bg-[var(--bg-elevated)]',
+              'hover:border-[var(--border-strong)]',
+              'focus:border-[var(--primary-500)] focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]',
               'disabled:cursor-not-allowed disabled:opacity-55',
               sizeStyles[selectSize],
-              error && 'border-[rgba(208,71,75,0.36)] text-[var(--error)]',
+              error && 'border-[rgba(248,113,113,0.3)] text-[var(--error)]',
               className
             )}
             {...props}

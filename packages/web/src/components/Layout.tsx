@@ -4,11 +4,13 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Moon,
   Network,
   Route as RouteIcon,
   ScrollText,
   Settings,
   Shield,
+  Sun,
   User as UserIcon,
   Users,
   X,
@@ -40,6 +42,10 @@ interface LayoutProps {
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
   const { t } = useTranslation(['layout', 'users'])
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const [theme, setTheme] = React.useState<'dark' | 'light'>(() => {
+    const stored = localStorage.getItem('theme')
+    return (stored === 'light' || stored === 'dark') ? stored : 'dark'
+  })
   const previousActiveElement = React.useRef<HTMLElement | null>(null)
   const sidebarRef = React.useRef<HTMLElement | null>(null)
   const closeSidebarButtonRef = React.useRef<HTMLButtonElement | null>(null)
@@ -180,6 +186,11 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
     }
   }, [getSidebarFocusableElements, sidebarOpen])
 
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
   const roleLabel = (role: string) => {
     switch (role) {
       case 'member':
@@ -197,36 +208,25 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
 
   const sidebarContent = (
     <>
-      <div className="relative border-b border-[var(--border-soft)] px-5 py-5">
-        <div className="flex items-center gap-4">
-          <div className="animate-pulse-glow flex h-12 w-12 items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-md)]">
-            <Shield className="h-6 w-6" aria-hidden="true" />
+      {/* Sidebar Header */}
+      <div className="border-b border-[var(--border-default)] px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] text-white">
+            <Shield className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-              {t('brand.name')}
+            <div className="text-sm font-semibold text-[var(--text-primary)]">
+              Auth Gate
             </div>
-            <div className="mt-1 text-lg font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              {t('brand.controlPlane')}
+            <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+              API GATEWAY
             </div>
           </div>
         </div>
       </div>
 
-      <div className="px-4 pt-5">
-        <div className="rounded-[24px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(15,143,139,0.12),rgba(255,255,255,0.08))] px-4 py-4">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-            {t('brand.currentFocus')}
-          </div>
-          <div className="mt-2 text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-            {activeItem?.label}
-          </div>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">{activeItem?.description}</p>
-        </div>
-        <LanguageSwitcher className="mt-4" />
-      </div>
-
-      <nav className="flex-1 space-y-2 px-4 py-5" role="navigation" aria-label={t('navigation.main')}>
+      {/* Navigation */}
+      <nav className="flex-1 space-y-1 px-3 py-4" role="navigation" aria-label={t('navigation.main')}>
         {navItems.map((item) => {
           const isActive = currentPath === item.path
           return (
@@ -236,51 +236,63 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
               onClick={closeSidebar}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'group flex items-center gap-3 rounded-[22px] px-4 py-3 transition-all duration-[var(--duration-normal)]',
+                'flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-all duration-[var(--duration-normal)]',
                 isActive
-                  ? 'bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-md)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                  ? 'bg-[var(--bg-soft-primary)] text-[var(--primary-600)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
               )}
             >
-              <div
-                className={cn(
-                  'flex h-11 w-11 items-center justify-center rounded-[16px] transition-colors',
-                  isActive ? 'bg-white/18 text-white' : 'bg-[rgba(255,255,255,0.56)] text-[var(--primary-600)]'
-                )}
-              >
-                <item.icon className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold">{item.label}</div>
-                <div className={cn('text-xs', isActive ? 'text-white/78' : 'text-[var(--text-muted)]')}>
-                  {item.description}
-                </div>
-              </div>
+              <item.icon className={cn('h-5 w-5', isActive ? 'text-[var(--primary-600)]' : '')} aria-hidden="true" />
+              <span className="text-sm font-medium">{item.label}</span>
             </a>
           )
         })}
       </nav>
 
+      {/* Language Switcher */}
+      <div className="px-4 pb-2">
+        <LanguageSwitcher className="w-full" />
+      </div>
+
+      {/* Theme Toggle */}
+      <div className="px-4 pb-3">
+        <button
+          type="button"
+          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+          className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+        >
+          {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+        </button>
+      </div>
+
+      {/* User Profile */}
       {user && (
-        <div className="border-t border-[var(--border-soft)] p-4">
-          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[rgba(255,255,255,0.18)] p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)]">
-                <UserIcon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{user.username}</p>
-                <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">{roleLabel(user.role)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:h-10 md:w-10"
-                aria-label={t('user.logout')}
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
+        <div className="border-t border-[var(--border-default)] p-4 space-y-3">
+          <a
+            href="#/settings"
+            onClick={closeSidebar}
+            className="flex items-center gap-2 rounded-[10px] bg-[var(--bg-soft-primary)] px-3 py-2.5 text-sm font-medium text-[var(--primary-600)] transition-colors hover:bg-[rgba(15,143,139,0.15)]"
+          >
+            <Settings className="h-4 w-4" />
+            Admin Panel
+          </a>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)]">
+              <UserIcon className="h-4 w-4" />
             </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{user.username}</p>
+              <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Admin Profile</p>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              aria-label={t('user.logout')}
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
@@ -288,34 +300,36 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
   )
 
   return (
-    <div className="app-shell-grid min-h-screen bg-transparent">
+    <div className="min-h-screen bg-transparent">
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-[rgba(15,23,34,0.42)] backdrop-blur-sm md:hidden" onClick={closeSidebar} aria-hidden="true" />
+        <div className="fixed inset-0 z-40 bg-[rgba(0,0,0,0.5)] backdrop-blur-sm md:hidden" onClick={closeSidebar} aria-hidden="true" />
       )}
 
+      {/* Desktop Sidebar */}
       <aside
         className={cn(
-          'sidebar-sheen glass-panel-strong fixed left-5 top-5 hidden h-[calc(100vh-2.5rem)] flex-col overflow-hidden md:flex',
-          'w-[var(--sidebar-width)] z-50'
+          'fixed left-0 top-0 hidden h-screen w-[var(--sidebar-width)] flex-col overflow-y-auto border-r border-[var(--border-default)] bg-[var(--bg-page-strong)] md:flex',
+          'z-50'
         )}
       >
         {sidebarContent}
       </aside>
 
+      {/* Mobile Sidebar */}
       {sidebarOpen && (
         <aside
           ref={sidebarRef}
-          className="glass-panel-strong fixed left-3 top-3 z-50 flex h-[calc(100vh-1.5rem)] w-[var(--sidebar-width)] flex-col overflow-hidden transition-transform duration-[var(--duration-slow)] md:hidden"
+          className="fixed left-0 top-0 z-50 flex h-screen w-[var(--sidebar-width)] flex-col overflow-y-auto border-r border-[var(--border-default)] bg-[var(--bg-page-strong)] transition-transform duration-[var(--duration-slow)] md:hidden"
           role="dialog"
           aria-modal="true"
           aria-label={t('navigation.main')}
         >
-          <div className="absolute right-4 top-4 z-10">
+          <div className="absolute right-3 top-3 z-10">
             <button
               type="button"
               ref={closeSidebarButtonRef}
               onClick={closeSidebar}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(255,255,255,0.44)] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+              className="flex h-9 w-9 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               aria-label={t('navigation.closeMenu')}
             >
               <X className="h-5 w-5" />
@@ -325,35 +339,34 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         </aside>
       )}
 
-      <main className="min-h-screen md:ml-[calc(var(--sidebar-width)+2.25rem)]">
-        <header className="sticky top-0 z-30 border-b border-[rgba(255,255,255,0.35)] bg-[rgba(246,243,236,0.72)] backdrop-blur-xl md:hidden">
+      <main className="min-h-screen md:ml-[var(--sidebar-width)]">
+        {/* Mobile Header */}
+        <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-[var(--bg-page)] backdrop-blur-xl md:hidden">
           <div className="flex h-[var(--header-height)] items-center justify-between px-4">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(255,255,255,0.72)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+              className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[var(--bg-card)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
               aria-label={t('navigation.openMenu')}
             >
               <Menu className="h-5 w-5" />
             </button>
             <div className="text-center">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                {t('brand.name')}
-              </div>
               <div className="text-sm font-semibold text-[var(--text-primary)]">{activeItem?.label}</div>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-sm)]">
-              <Shield className="h-5 w-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] text-white">
+              <Shield className="h-4 w-4" />
             </div>
           </div>
         </header>
 
-        <div className="flex min-h-screen w-full flex-col px-4 pb-[calc(var(--bottom-nav-height)+1rem)] pt-5 md:px-8 md:pb-10 md:pt-5">
+        <div className="flex min-h-screen w-full flex-col px-4 pb-[calc(var(--bottom-nav-height)+1rem)] pt-5 md:px-8 md:pb-8 md:pt-6">
           {children}
         </div>
 
+        {/* Mobile Bottom Nav */}
         <nav
-          className="glass-panel fixed bottom-3 left-3 right-3 z-30 flex rounded-[28px] border border-[var(--border-soft)] px-2 py-2 md:hidden"
+          className="fixed bottom-3 left-3 right-3 z-30 flex rounded-[16px] border border-[var(--border-default)] bg-[var(--bg-card-strong)] px-2 py-2 backdrop-blur-xl md:hidden"
           role="navigation"
           aria-label={t('navigation.mobile')}
         >
@@ -365,9 +378,9 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
                 href={`#${item.path}`}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex flex-1 flex-col items-center justify-center gap-1 rounded-[22px] px-2 py-2 text-[11px] font-semibold transition-all',
+                  'flex flex-1 flex-col items-center justify-center gap-1 rounded-[10px] px-2 py-2 text-[10px] font-medium transition-all',
                   isActive
-                    ? 'bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-sm)]'
+                    ? 'bg-[var(--bg-soft-primary)] text-[var(--primary-600)]'
                     : 'text-[var(--text-muted)]'
                 )}
               >

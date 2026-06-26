@@ -17,7 +17,7 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
   return (
     <div
       className={cn(
-        'inline-flex items-center rounded-full border border-[var(--border-default)] bg-[rgba(255,255,255,0.62)] p-1 shadow-[var(--shadow-sm)]',
+        'inline-flex items-center rounded-[8px] border border-[var(--border-default)] bg-[var(--bg-card)] p-1',
         className
       )}
       role="group"
@@ -33,9 +33,9 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
             aria-pressed={isActive}
             onClick={() => void i18n.changeLanguage(option.value)}
             className={cn(
-              'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
+              'inline-flex min-h-8 min-w-8 items-center justify-center rounded-[6px] px-3 py-1 text-xs font-medium transition-colors',
               isActive
-                ? 'bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-sm)]'
+                ? 'bg-[var(--bg-soft-primary)] text-[var(--primary-600)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             )}
           >

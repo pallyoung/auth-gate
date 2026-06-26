@@ -113,34 +113,34 @@ export function Modal({
       className="fixed inset-0 z-[var(--z-modal-backdrop)]"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-[rgba(15,23,34,0.52)] backdrop-blur-md" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[rgba(0,0,0,0.6)] backdrop-blur-sm" aria-hidden="true" />
       <div className="flex min-h-screen items-end justify-center p-0 md:items-center md:p-6">
         <div
           ref={panelRef}
           className={cn(
-            'relative w-full rounded-t-[30px] border border-white/10 bg-[var(--bg-elevated)] shadow-[var(--shadow-xl)] outline-none animate-modal-enter',
-            'max-h-[92vh] overflow-y-auto md:rounded-[30px]',
+            'relative w-full rounded-t-[16px] border border-[var(--border-default)] bg-[var(--bg-elevated)] shadow-[var(--shadow-xl)] outline-none animate-modal-enter',
+            'max-h-[92vh] overflow-y-auto md:rounded-[16px]',
             sizeStyles[modalSize]
           )}
           onClick={(event) => event.stopPropagation()}
           tabIndex={-1}
         >
           {title && (
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-elevated)] px-6 py-5 backdrop-blur-xl">
-              <h2 id="modal-title" className="text-xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-elevated)] px-5 py-4">
+              <h2 id="modal-title" className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
                 {title}
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:h-10 md:w-10"
+                className="flex h-9 w-9 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 aria-label={t('actions.closeModal')}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
           )}
-          <div className="p-5 md:p-6">{children}</div>
+          <div className="p-5">{children}</div>
         </div>
       </div>
     </div>

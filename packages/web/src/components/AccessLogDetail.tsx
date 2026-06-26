@@ -43,7 +43,7 @@ export const AccessLogDetail: React.FC<AccessLogDetailProps> = ({ entry, onClose
   }
 
   return (
-    <Modal isOpen={!!entry} onClose={onClose} title={t('detail.title')} size="lg">
+    <Modal open={!!entry} onClose={onClose} title={t('detail.title')} modalSize="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>

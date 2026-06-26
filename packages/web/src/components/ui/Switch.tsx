@@ -33,11 +33,16 @@ export function Switch({
   const switchId = id || label?.toLowerCase().replace(/\s+/g, '-')
   const labelId = label ? `${switchId}-label` : undefined
   const descriptionId = description ? `${switchId}-description` : undefined
+  const isStandalone = !label && !description
 
   return (
     <label
       htmlFor={switchId}
-      className="flex items-center justify-between gap-4 rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-xl"
+      className={cn(
+        isStandalone
+          ? 'inline-flex items-center cursor-pointer'
+          : 'flex items-center justify-between gap-4 rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-card-soft)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur-xl'
+      )}
     >
       <div className="min-w-0">
         {label && <div id={labelId} className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>}
@@ -56,7 +61,7 @@ export function Switch({
         />
         <div
           className={cn(
-            'rounded-full border border-white/40 bg-[rgba(107,98,86,0.22)] transition-all duration-[var(--duration-normal)]',
+            'rounded-full border border-[var(--border-default)] bg-[var(--neutral-300)] transition-all duration-[var(--duration-normal)]',
             'peer-checked:bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))]',
             'peer-disabled:opacity-50',
             sizeStyles[switchSize].wrapper,

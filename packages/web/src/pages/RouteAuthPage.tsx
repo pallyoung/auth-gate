@@ -1,26 +1,32 @@
 import React from 'react'
 import {
-  ChevronDown,
   Copy,
+  Eye,
+  EyeOff,
   KeyRound,
-  LockKeyhole,
+  Pencil,
   Plus,
   RefreshCw,
-  Shield,
   Trash2,
   XCircle,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '../components/PageHeader'
-import { Alert, Badge, Button, Card, EmptyState, Input, MetricCard, Modal, Select, Switch } from '../components/ui'
-import { ApiError } from '../lib/api/client'
-import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
+import { Alert, Badge, Button, Card, EmptyState, Input, Modal, Select, Switch } from '../components/ui'
 import { routeAuthApi, apiKeyApi } from '../lib/api/route-auth'
 import { routesApi } from '../lib/api/routes'
 import { getSessionUser } from '../lib/session-store'
 import type { ApiKey, ApiKeyCreateInput, Route, RouteAuthConfig, RouteAuthConfigInput } from '../lib/api/types'
 
 const EXPIRATION_OPTIONS = [
+  { value: '', label: 'Never' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
+  { value: '1y', label: '1 year' },
+]
+
+const EXPIRATION_OPTIONS_ZH = [
   { value: '', label: '永不过期' },
   { value: '7d', label: '7 天' },
   { value: '30d', label: '30 天' },
@@ -46,149 +52,248 @@ function formatDate(iso?: string | null): string {
   return new Date(iso).toLocaleDateString()
 }
 
-function keyStatusBadge(status: string) {
-  switch (status) {
-    case 'active':
-      return <Badge variant="success" badgeSize="sm">有效</Badge>
-    case 'revoked':
-      return <Badge variant="error" badgeSize="sm">已吊销</Badge>
-    default:
-      return <Badge variant="warning" badgeSize="sm">{status}</Badge>
-  }
+function getActiveAuthTypes(cfg: RouteAuthConfig | null): string[] {
+  if (!cfg) return []
+  const types: string[] = []
+  if (cfg.api_key_enabled) types.push('apikey')
+  if (cfg.gateway_enabled) types.push('gateway')
+  return types
 }
 
 export function RouteAuthPage() {
-  const { t } = useTranslation(['authRules', 'common'])
+  const { t, i18n } = useTranslation(['authRules', 'common'])
+  const isZh = i18n.resolvedLanguage === 'zh-CN'
+  const expirationOptions = isZh ? EXPIRATION_OPTIONS_ZH : EXPIRATION_OPTIONS
+
   const [routes, setRoutes] = React.useState<Route[]>([])
-  const [selectedRouteId, setSelectedRouteId] = React.useState<string>('')
-  const [authConfig, setAuthConfig] = React.useState<RouteAuthConfig | null>(null)
-  const [apiKeys, setApiKeys] = React.useState<ApiKey[]>([])
+  const [configs, setConfigs] = React.useState<Map<string, RouteAuthConfig>>(new Map())
+  const [keyCounts, setKeyCounts] = React.useState<Map<string, number>>(new Map())
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<LocalizedTextState>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // Detail modal state
+  const [detailRouteId, setDetailRouteId] = React.useState<string | null>(null)
+  const [detailConfig, setDetailConfig] = React.useState<RouteAuthConfig | null>(null)
+  const [detailKeys, setDetailKeys] = React.useState<ApiKey[]>([])
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState<string | null>(null)
+
+  // Key creation state
   const [showCreateKey, setShowCreateKey] = React.useState(false)
-  const [newKeyName, setNewKeyName] = React.useState('')
   const [newKeyExpiration, setNewKeyExpiration] = React.useState('')
   const [createdSecret, setCreatedSecret] = React.useState<string | null>(null)
-  const [copiedSecret, setCopiedSecret] = React.useState(false)
-  const [keyMenuOpen, setKeyMenuOpen] = React.useState<string | null>(null)
+  const [copiedId, setCopiedId] = React.useState<string | null>(null)
+  const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set())
+
   const canManageAuth = getSessionUser()?.permissions?.can_manage_auth ?? false
-  const errorMessage = resolveLocalizedText(t, error)
 
-  const loadRoutes = React.useCallback(async () => {
+  // Load all routes + their configs on mount
+  const loadAll = React.useCallback(async () => {
     try {
-      const list = await routesApi.list()
-      setRoutes(list)
-      if (list.length > 0 && !selectedRouteId) {
-        setSelectedRouteId(list[0].id)
-      }
-    } catch {
-      // ignore
-    }
-  }, [selectedRouteId])
-
-  const loadAuthData = React.useCallback(async (routeId: string) => {
-    if (!routeId) return
-    setLoading(true)
-    try {
-      const [config, keys] = await Promise.all([
-        routeAuthApi.getConfig(routeId),
-        apiKeyApi.list(routeId),
-      ])
-      setAuthConfig(config)
-      setApiKeys(keys)
+      setLoading(true)
       setError(null)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      const routeList = await routesApi.list()
+      setRoutes(routeList)
+
+      // Load configs for all routes in parallel
+      const results = await Promise.allSettled(
+        routeList.map((r) =>
+          Promise.all([
+            routeAuthApi.getConfig(r.id).catch(() => null),
+            apiKeyApi.list(r.id).catch(() => []),
+          ])
+        )
+      )
+
+      const configMap = new Map<string, RouteAuthConfig>()
+      const countMap = new Map<string, number>()
+
+      results.forEach((result, idx) => {
+        const routeId = routeList[idx].id
+        if (result.status === 'fulfilled') {
+          const [config, keys] = result.value
+          if (config) configMap.set(routeId, config)
+          countMap.set(routeId, keys.length)
+        }
+      })
+
+      setConfigs(configMap)
+      setKeyCounts(countMap)
+    } catch {
+      setError(t('errors.routeStoreFailure'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
-  React.useEffect(() => { loadRoutes() }, [])
-  React.useEffect(() => { if (selectedRouteId) loadAuthData(selectedRouteId) }, [selectedRouteId, loadAuthData])
+  React.useEffect(() => { loadAll() }, [loadAll])
 
-  const updateConfig = async (patch: RouteAuthConfigInput) => {
-    if (!selectedRouteId) return
+  // Load detail data for modal
+  const loadDetail = React.useCallback(async (routeId: string) => {
+    setDetailLoading(true)
+    setDetailError(null)
+    setCreatedSecret(null)
+    setShowCreateKey(false)
+    setNewKeyExpiration('')
+    setRevealedIds(new Set())
     try {
-      const updated = await routeAuthApi.updateConfig(selectedRouteId, patch)
-      setAuthConfig(updated)
-      setError(null)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      const [config, keys] = await Promise.all([
+        routeAuthApi.getConfig(routeId).catch(() => null),
+        apiKeyApi.list(routeId).catch(() => []),
+      ])
+      setDetailConfig(config)
+      setDetailKeys(keys)
+    } catch {
+      setDetailError(t('errors.authRuleStoreFailure'))
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [t])
+
+  React.useEffect(() => {
+    if (detailRouteId) loadDetail(detailRouteId)
+  }, [detailRouteId, loadDetail])
+
+  // Quick toggle: update config from the list view
+  const quickToggle = async (routeId: string, patch: RouteAuthConfigInput) => {
+    try {
+      const updated = await routeAuthApi.updateConfig(routeId, patch)
+      setConfigs((prev) => {
+        const next = new Map(prev)
+        next.set(routeId, updated)
+        return next
+      })
+    } catch {
+      setError(t('errors.authRuleStoreFailure'))
     }
   }
 
-  const handleCreateKey = async () => {
-    if (!selectedRouteId || !newKeyName.trim()) return
+  // Detail: update config
+  const detailUpdateConfig = async (patch: RouteAuthConfigInput) => {
+    if (!detailRouteId) return
     try {
-      const resp = await apiKeyApi.create(selectedRouteId, {
-        name: newKeyName.trim(),
-        expires_at: parseExpiration(newKeyExpiration),
+      const updated = await routeAuthApi.updateConfig(detailRouteId, patch)
+      setDetailConfig(updated)
+      // Also update the list view config
+      setConfigs((prev) => {
+        const next = new Map(prev)
+        next.set(detailRouteId, updated)
+        return next
       })
+    } catch {
+      setDetailError(t('errors.authRuleStoreFailure'))
+    }
+  }
+
+  // API Key operations
+  const handleCreateKey = async () => {
+    if (!detailRouteId) return
+    try {
+      const input: ApiKeyCreateInput = { expires_at: parseExpiration(newKeyExpiration) }
+      const resp = await apiKeyApi.create(detailRouteId, input)
       setCreatedSecret(resp.secret)
-      setCopiedSecret(false)
-      setNewKeyName('')
       setNewKeyExpiration('')
-      await loadAuthData(selectedRouteId)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      setShowCreateKey(false)
+      await loadDetail(detailRouteId)
+      // Update key count in list
+      const keys = await apiKeyApi.list(detailRouteId).catch(() => [])
+      setKeyCounts((prev) => {
+        const next = new Map(prev)
+        next.set(detailRouteId, keys.length)
+        return next
+      })
+    } catch {
+      setDetailError(t('errors.missingAPIKeySecret'))
     }
   }
 
   const handleRotateKey = async (id: string) => {
+    if (!detailRouteId) return
     try {
       const resp = await apiKeyApi.rotate(id)
       setCreatedSecret(resp.secret)
-      setCopiedSecret(false)
-      await loadAuthData(selectedRouteId)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      await loadDetail(detailRouteId)
+    } catch {
+      setDetailError(t('errors.authRuleStoreFailure'))
     }
   }
 
   const handleExpireKey = async (id: string) => {
+    if (!detailRouteId) return
     try {
       await apiKeyApi.expire(id)
-      await loadAuthData(selectedRouteId)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      await loadDetail(detailRouteId)
+    } catch {
+      setDetailError(t('errors.authRuleStoreFailure'))
     }
   }
 
   const handleDeleteKey = async (id: string) => {
-    if (!confirm('确认删除此 API Key？')) return
+    if (!detailRouteId) return
     try {
       await apiKeyApi.delete(id)
-      await loadAuthData(selectedRouteId)
-    } catch (err) {
-      setError({ translationKey: 'errors.authRuleStoreFailure' })
+      await loadDetail(detailRouteId)
+      const keys = await apiKeyApi.list(detailRouteId).catch(() => [])
+      setKeyCounts((prev) => {
+        const next = new Map(prev)
+        next.set(detailRouteId, keys.length)
+        return next
+      })
+    } catch {
+      setDetailError(t('errors.authRuleStoreFailure'))
     }
   }
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
-    setCopiedSecret(true)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const cfg = authConfig || {
-    route_id: selectedRouteId,
+  const toggleReveal = (id: string) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectedRoute = routes.find((r) => r.id === detailRouteId)
+  const detailCfg = detailConfig || {
+    route_id: detailRouteId || '',
     api_key_enabled: false,
-    basic_enabled: false,
     gateway_enabled: false,
+  }
+
+  const typeBadge = (type: string) => {
+    switch (type) {
+      case 'apikey': return <Badge variant="primary" badgeSize="sm">API Key</Badge>
+      case 'gateway': return <Badge variant="primary" badgeSize="sm">Gateway</Badge>
+      default: return null
+    }
+  }
+
+  const keyStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active': return <Badge variant="success" badgeSize="sm">{isZh ? '有效' : 'Active'}</Badge>
+      case 'revoked': return <Badge variant="error" badgeSize="sm">{isZh ? '已吊销' : 'Revoked'}</Badge>
+      default: return <Badge variant="warning" badgeSize="sm">{status}</Badge>
+    }
   }
 
   if (routes.length === 0 && !loading) {
     return (
       <div className="animate-rise-in">
         <PageHeader
-          eyebrow="鉴权管理"
-          title="路由鉴权配置"
-          description="为每个路由配置认证方式和 API Key。"
+          eyebrow={t('page.eyebrow')}
+          title={t('page.title')}
+          description={t('page.description')}
         />
         <EmptyState
-          icon={<Shield className="h-8 w-8" />}
-          title="暂无路由"
-          description="请先创建路由，再配置鉴权规则。"
+          icon={<KeyRound className="h-8 w-8" />}
+          title={t('page.emptyTitle')}
+          description={t('page.noRoutesDescription')}
         />
       </div>
     )
@@ -197,279 +302,451 @@ export function RouteAuthPage() {
   return (
     <div className="animate-rise-in">
       <PageHeader
-        eyebrow="鉴权管理"
-        title="路由鉴权配置"
-        description="为每个路由配置认证方式。多种方式同时启用时，任一通过即放行。"
-        meta={<Badge variant="primary">鉴权配置</Badge>}
+        eyebrow={t('page.eyebrow')}
+        title={t('page.title')}
+        description={t('page.description')}
+        meta={
+          routes.length > 0 ? (
+            <Badge variant="primary">{isZh ? `${routes.length} 个路由` : `${routes.length} routes`}</Badge>
+          ) : undefined
+        }
       />
 
-      {errorMessage && (
-        <Alert variant="error" title="操作失败" className="mb-5">{errorMessage}</Alert>
+      {error && (
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">{error}</Alert>
       )}
 
-      {/* 路由选择 */}
-      <Card tone="soft" className="mb-6">
-        <Select
-          label="选择路由"
-          value={selectedRouteId}
-          onChange={(e) => setSelectedRouteId(e.target.value)}
-          options={routes.map((r) => ({ value: r.id, label: r.name || r.path_prefix }))}
-        />
-      </Card>
-
       {loading ? (
-        <div className="flex h-32 items-center justify-center text-[var(--text-muted)]">加载中...</div>
+        <div className="flex h-48 items-center justify-center">
+          <div className="flex items-center gap-3 text-[var(--text-muted)]">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" />
+            {t('page.loading')}
+          </div>
+        </div>
       ) : (
-        <div className="space-y-6">
-          {/* API Key 认证 */}
-          <Card tone="soft" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <KeyRound className="h-5 w-5 text-[var(--text-muted)]" />
-                <div>
-                  <div className="font-semibold text-[var(--text-primary)]">API Key 认证</div>
-                  <div className="text-xs text-[var(--text-muted)]">通过请求头或查询参数传递 API Key</div>
-                </div>
-              </div>
-              {canManageAuth && (
-                <Switch
-                  checked={cfg.api_key_enabled}
-                  onChange={(e) => updateConfig({ api_key_enabled: e.target.checked })}
-                />
-              )}
-            </div>
+        <div className="space-y-2">
+          {/* List Header */}
+          <div className="hidden items-center px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] md:flex">
+            <div className="min-w-0 flex-1">{isZh ? '路由' : 'Route'}</div>
+            <div className="w-24 text-center">{isZh ? 'API Key' : 'API Key'}</div>
+            <div className="w-24 text-center">{isZh ? '网关' : 'Gateway'}</div>
+            <div className="w-20 text-center">{isZh ? '密钥数' : 'Keys'}</div>
+            <div className="w-16" />
+          </div>
 
-            {cfg.api_key_enabled && (
-              <div className="space-y-4 border-t border-[var(--border-default)] pt-4">
-                {canManageAuth && (
-                  <Input
-                    label="Header 名称"
-                    value={cfg.api_key_header || ''}
-                    onChange={(e) => updateConfig({ api_key_header: e.target.value })}
-                    placeholder="X-API-Key"
-                  />
-                )}
+          {/* Route List */}
+          {routes.map((route) => {
+            const cfg = configs.get(route.id) || null
+            const activeTypes = getActiveAuthTypes(cfg)
+            const keyCount = keyCounts.get(route.id) || 0
+            const hasAuth = activeTypes.length > 0
 
-                {/* API Key 列表 */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-[var(--text-primary)]">API Key 列表</div>
-                    {canManageAuth && (
-                      <Button size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setShowCreateKey(true)}>
-                        新建 Key
-                      </Button>
+            return (
+              <div
+                key={route.id}
+                className="flex items-center gap-4 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-3 transition-colors hover:bg-[var(--bg-hover)]"
+              >
+                {/* Route info */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[var(--text-primary)]">{route.name || route.path_prefix}</span>
+                    {hasAuth ? (
+                      <Badge variant="success" badgeSize="sm">{isZh ? '已保护' : 'Protected'}</Badge>
+                    ) : (
+                      <Badge variant="default" badgeSize="sm">{isZh ? '公开' : 'Public'}</Badge>
                     )}
                   </div>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                    {route.host && <span className="app-code">{route.host}</span>}
+                    <span className="app-code text-[var(--primary-600)]">{route.path_prefix}</span>
+                  </div>
+                  {/* Mobile: show toggles inline */}
+                  <div className="mt-2 flex items-center gap-3 md:hidden">
+                    {canManageAuth && (
+                      <>
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                          <input
+                            type="checkbox"
+                            checked={cfg?.api_key_enabled || false}
+                            onChange={(e) => quickToggle(route.id, { api_key_enabled: e.target.checked })}
+                            className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--primary-500)]"
+                          />
+                          API Key
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                          <input
+                            type="checkbox"
+                            checked={cfg?.gateway_enabled || false}
+                            onChange={(e) => quickToggle(route.id, { gateway_enabled: e.target.checked })}
+                            className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--primary-500)]"
+                          />
+                          GW
+                        </label>
+                      </>
+                    )}
+                    <span className="ml-auto text-xs text-[var(--text-muted)]">{keyCount} {isZh ? '个密钥' : 'keys'}</span>
+                  </div>
+                </div>
 
-                  {apiKeys.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-[var(--border-default)] p-4 text-center text-sm text-[var(--text-muted)]">
-                      暂无 API Key，点击上方按钮创建
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {apiKeys.map((key) => (
-                        <div key={key.id} className="flex items-center gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm text-[var(--text-primary)]">{key.name}</span>
-                              {keyStatusBadge(key.status)}
-                            </div>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                              <code className="rounded bg-[var(--surface-inset)] px-1.5 py-0.5">{key.key_prefix}...</code>
-                              <span>过期: {formatDate(key.expires_at)}</span>
-                              {key.last_used_at && <span>最后使用: {formatDate(key.last_used_at)}</span>}
-                            </div>
-                          </div>
-                          {canManageAuth && key.status === 'active' && (
-                            <div className="relative">
-                              <Button variant="ghost" size="sm" onClick={() => setKeyMenuOpen(keyMenuOpen === key.id ? null : key.id)}>
-                                <ChevronDown className="h-4 w-4" />
-                              </Button>
-                              {keyMenuOpen === key.id && (
-                                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-[var(--border-default)] bg-[var(--bg-card)] py-1 shadow-lg">
-                                  <button className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-inset)]" onClick={() => { handleRotateKey(key.id); setKeyMenuOpen(null) }}>
-                                    <RefreshCw className="h-3.5 w-3.5" /> 轮换 Key
-                                  </button>
-                                  <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text-error)] hover:bg-[var(--surface-inset)]" onClick={() => { handleExpireKey(key.id); setKeyMenuOpen(null) }}>
-                                    <XCircle className="h-3.5 w-3.5" /> 吊销
-                                  </button>
-                                  <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text-error)] hover:bg-[var(--surface-inset)]" onClick={() => { handleDeleteKey(key.id); setKeyMenuOpen(null) }}>
-                                    <Trash2 className="h-3.5 w-3.5" /> 删除
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                {/* Desktop: toggles */}
+                <div className="hidden items-center gap-4 md:flex">
+                  <div className="w-24 flex justify-center">
+                    {canManageAuth ? (
+                      <Switch
+                        switchSize="sm"
+                        checked={cfg?.api_key_enabled || false}
+                        onChange={(e) => quickToggle(route.id, { api_key_enabled: e.target.checked })}
+                      />
+                    ) : (
+                      <Badge variant={cfg?.api_key_enabled ? 'success' : 'default'} badgeSize="sm">
+                        {cfg?.api_key_enabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="w-24 flex justify-center">
+                    {canManageAuth ? (
+                      <Switch
+                        switchSize="sm"
+                        checked={cfg?.gateway_enabled || false}
+                        onChange={(e) => quickToggle(route.id, { gateway_enabled: e.target.checked })}
+                      />
+                    ) : (
+                      <Badge variant={cfg?.gateway_enabled ? 'success' : 'default'} badgeSize="sm">
+                        {cfg?.gateway_enabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="w-20 flex justify-center">
+                    <span className="text-sm font-medium text-[var(--text-secondary)]">{keyCount}</span>
+                  </div>
+                  <div className="w-16 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setDetailRouteId(route.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-default)] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                      aria-label={isZh ? '编辑' : 'Edit'}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile: edit button */}
+                <button
+                  type="button"
+                  onClick={() => setDetailRouteId(route.id)}
+                  className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-default)] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:hidden"
+                  aria-label={isZh ? '编辑' : 'Edit'}
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      <Modal
+        open={!!detailRouteId}
+        onClose={() => setDetailRouteId(null)}
+        title={selectedRoute ? `${isZh ? '鉴权配置' : 'Auth Config'} — ${selectedRoute.name || selectedRoute.path_prefix}` : ''}
+        modalSize="lg"
+      >
+        {detailLoading ? (
+          <div className="flex h-48 items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary-500)] border-t-transparent" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {detailError && (
+              <Alert variant="error" title={t('page.errorTitle')}>{detailError}</Alert>
+            )}
+
+            {createdSecret && (
+              <Alert variant="success" title={isZh ? 'API Key 已创建' : 'API Key Created'}>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="flex-1 break-all rounded bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)]">{createdSecret}</code>
+                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(createdSecret, 'created')}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                {copiedId === 'created' && (
+                  <div className="mt-1 text-sm text-[var(--success)]">{isZh ? '已复制到剪贴板' : 'Copied to clipboard'}</div>
+                )}
+                <div className="mt-2">
+                  <Button size="sm" variant="ghost" onClick={() => setCreatedSecret(null)}>
+                    {isZh ? '关闭' : 'Dismiss'}
+                  </Button>
+                </div>
+              </Alert>
+            )}
+
+            {/* Route info */}
+            {selectedRoute && (
+              <div className="flex items-center gap-4 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-surface-tint)] px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">{selectedRoute.name || selectedRoute.path_prefix}</div>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                    {selectedRoute.host && <span className="app-code">{selectedRoute.host}</span>}
+                    <span className="app-code text-[var(--primary-600)]">{selectedRoute.path_prefix}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {getActiveAuthTypes(detailCfg).map((type) => (
+                    <span key={type}>{typeBadge(type)}</span>
+                  ))}
+                  {getActiveAuthTypes(detailCfg).length === 0 && (
+                    <Badge variant="default" badgeSize="sm">{isZh ? '无鉴权' : 'No auth'}</Badge>
                   )}
                 </div>
               </div>
             )}
-          </Card>
 
-          {/* Basic Auth */}
-          <Card tone="soft" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <LockKeyhole className="h-5 w-5 text-[var(--text-muted)]" />
-                <div>
-                  <div className="font-semibold text-[var(--text-primary)]">Basic Auth</div>
-                  <div className="text-xs text-[var(--text-muted)]">HTTP Basic 认证（用户名 + 密码）</div>
+            {/* Auth Toggles */}
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {isZh ? '鉴权方式' : 'Authentication Methods'}
+              </div>
+              <div className="space-y-3">
+                {/* API Key */}
+                <div
+                  className={`relative overflow-hidden rounded-[14px] border transition-all duration-[var(--duration-normal)] ${
+                    detailCfg.api_key_enabled
+                      ? 'border-l-2 border-l-[var(--primary-500)] border-y-transparent border-r-transparent bg-[var(--bg-card)]'
+                      : 'border-[var(--border-default)] bg-[var(--bg-card)]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] transition-colors ${
+                      detailCfg.api_key_enabled
+                        ? 'bg-[var(--primary-500)]/15 text-[var(--primary-600)]'
+                        : 'bg-[var(--bg-surface-tint)] text-[var(--text-muted)]'
+                    }`}>
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-[var(--text-primary)]">API Key</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {isZh ? '通过请求头传递 API Key 进行鉴权' : 'Authenticate via request header with an API key'}
+                      </div>
+                    </div>
+                    {canManageAuth && (
+                      <Switch
+                        switchSize="sm"
+                        checked={detailCfg.api_key_enabled}
+                        onChange={(e) => detailUpdateConfig({ api_key_enabled: e.target.checked })}
+                      />
+                    )}
+                  </div>
+                  {detailCfg.api_key_enabled && (
+                    <div className="border-t border-[var(--border-soft)] px-4 py-3">
+                      <Input
+                        label={isZh ? 'Header 名称' : 'Header Name'}
+                        value={detailCfg.api_key_header || ''}
+                        onChange={(e) => detailUpdateConfig({ api_key_header: e.target.value })}
+                        placeholder="X-API-Key"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Gateway Login */}
+                <div
+                  className={`relative overflow-hidden rounded-[14px] border transition-all duration-[var(--duration-normal)] ${
+                    detailCfg.gateway_enabled
+                      ? 'border-l-2 border-l-[var(--accent-500)] border-y-transparent border-r-transparent bg-[var(--bg-card)]'
+                      : 'border-[var(--border-default)] bg-[var(--bg-card)]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] transition-colors ${
+                      detailCfg.gateway_enabled
+                        ? 'bg-[var(--accent-500)]/15 text-[var(--accent-600)]'
+                        : 'bg-[var(--bg-surface-tint)] text-[var(--text-muted)]'
+                    }`}>
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{isZh ? '网关登录' : 'Gateway Login'}</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {isZh ? '未登录用户自动跳转至登录页' : 'Unauthenticated users are redirected to the login page'}
+                      </div>
+                    </div>
+                    {canManageAuth && (
+                      <Switch
+                        switchSize="sm"
+                        checked={detailCfg.gateway_enabled}
+                        onChange={(e) => detailUpdateConfig({ gateway_enabled: e.target.checked })}
+                      />
+                    )}
+                  </div>
+                  {detailCfg.gateway_enabled && (
+                    <div className="border-t border-[var(--border-soft)] px-4 py-3">
+                      <div className="rounded-[10px] bg-[var(--bg-surface-tint)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                        {isZh
+                          ? '用户访问此路由时将自动跳转到统一登录页，登录后可访问所有已授权路由'
+                          : 'Users visiting this route will be redirected to a unified login page. After login, they can access all authorized routes'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              {canManageAuth && (
-                <Switch
-                  checked={cfg.basic_enabled}
-                  onChange={(e) => updateConfig({ basic_enabled: e.target.checked })}
-                />
-              )}
             </div>
-            {cfg.basic_enabled && canManageAuth && (
-              <div className="grid grid-cols-1 gap-4 border-t border-[var(--border-default)] pt-4 md:grid-cols-2">
-                <Input
-                  label="用户名"
-                  value={cfg.basic_username || ''}
-                  onChange={(e) => updateConfig({ basic_username: e.target.value })}
-                  placeholder="admin"
-                />
-                <Input
-                  label="密码"
-                  type="password"
-                  value=""
-                  onChange={(e) => updateConfig({ basic_password: e.target.value })}
-                  placeholder="留空则保持不变"
-                />
+
+            {/* API Keys Section */}
+            {detailCfg.api_key_enabled && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    {isZh ? 'API Key 管理' : 'API Key Management'}
+                  </div>
+                  {canManageAuth && (
+                    <Button size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setShowCreateKey(true)}>
+                      {isZh ? '新建 Key' : 'New Key'}
+                    </Button>
+                  )}
+                </div>
+
+                {showCreateKey && canManageAuth && (
+                  <div className="flex items-end gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-surface-tint)] p-4">
+                    <Select
+                      label={isZh ? '过期时间' : 'Expiration'}
+                      value={newKeyExpiration}
+                      onChange={(e) => setNewKeyExpiration(e.target.value)}
+                      options={expirationOptions}
+                      className="flex-1"
+                    />
+                    <Button onClick={handleCreateKey}>{isZh ? '创建' : 'Create'}</Button>
+                    <Button variant="ghost" onClick={() => setShowCreateKey(false)}>{isZh ? '取消' : 'Cancel'}</Button>
+                  </div>
+                )}
+
+                {detailKeys.length === 0 ? (
+                  <div className="rounded-[12px] border border-dashed border-[var(--border-default)] p-6 text-center text-sm text-[var(--text-muted)]">
+                    {isZh ? '暂无 API Key' : 'No API keys yet'}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {detailKeys.map((key) => (
+                      <div key={key.id} className="flex items-center gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-[var(--text-primary)]">{key.name || (isZh ? '未命名' : 'Unnamed')}</span>
+                            {keyStatusBadge(key.status)}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                            <code className="rounded bg-[var(--bg-input)] px-1.5 py-0.5 font-mono text-[var(--text-secondary)]">
+                              {key.secret
+                                ? (revealedIds.has(key.id) ? key.secret : key.key_prefix + '••••••••')
+                                : key.key_prefix + '...'}
+                            </code>
+                            <span>{isZh ? '过期' : 'Exp'}: {formatDate(key.expires_at)}</span>
+                            {key.last_used_at && <span>{isZh ? '最后使用' : 'Used'}: {formatDate(key.last_used_at)}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {key.secret && (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => toggleReveal(key.id)}>
+                                {revealedIds.has(key.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => copyToClipboard(key.secret!, key.id)}>
+                                {copiedId === key.id ? <span className="text-xs text-[var(--success)]">{isZh ? '已复制' : 'Copied'}</span> : <Copy className="h-3.5 w-3.5" />}
+                              </Button>
+                            </>
+                          )}
+                          {canManageAuth && key.status === 'active' && (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => handleRotateKey(key.id)} title={isZh ? '轮换 Key' : 'Rotate key'}>
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleExpireKey(key.id)} title={isZh ? '吊销' : 'Revoke'}>
+                                <XCircle className="h-3.5 w-3.5 text-[var(--error)]" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteKey(key.id)} title={isZh ? '删除' : 'Delete'}>
+                                <Trash2 className="h-3.5 w-3.5 text-[var(--error)]" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-          </Card>
 
-          {/* 网关登录 */}
-          <Card tone="soft" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-[var(--text-muted)]" />
-                <div>
-                  <div className="font-semibold text-[var(--text-primary)]">网关登录</div>
-                  <div className="text-xs text-[var(--text-muted)]">通过登录页面进行用户认证</div>
-                </div>
+            {/* Rate Limiting */}
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {isZh ? '速率限制' : 'Rate Limiting'}
               </div>
-              {canManageAuth && (
-                <Switch
-                  checked={cfg.gateway_enabled}
-                  onChange={(e) => updateConfig({ gateway_enabled: e.target.checked })}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Input
+                  label={isZh ? '限流 (次/秒)' : 'Rate (req/s)'}
+                  type="number"
+                  min={0}
+                  value={detailCfg.rate_limit ?? ''}
+                  onChange={(e) => detailUpdateConfig({ rate_limit: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder={isZh ? '不限制' : 'Unlimited'}
                 />
-              )}
+                <Input
+                  label={isZh ? '突发上限' : 'Burst'}
+                  type="number"
+                  min={0}
+                  value={detailCfg.burst ?? ''}
+                  onChange={(e) => detailUpdateConfig({ burst: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder={isZh ? '不限制' : 'Unlimited'}
+                />
+                <Input
+                  label={isZh ? '白名单' : 'Whitelist'}
+                  value={(detailCfg.whitelist || []).join(', ')}
+                  onChange={(e) => detailUpdateConfig({ whitelist: e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean) })}
+                  placeholder="127.0.0.1/32, 10.0.0.0/8"
+                />
+              </div>
             </div>
-          </Card>
 
-          {/* 速率限制 */}
-          <Card tone="soft" className="space-y-4">
-            <div className="text-sm font-medium text-[var(--text-primary)]">速率限制</div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Input
-                label="限流 (次/秒)"
-                type="number"
-                min={0}
-                value={cfg.rate_limit ?? ''}
-                onChange={(e) => updateConfig({ rate_limit: e.target.value === '' ? undefined : Number(e.target.value) })}
-                placeholder="不限制"
+            {/* CORS */}
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                CORS
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label={isZh ? '允许来源' : 'Allowed Origins'}
+                  value={detailCfg.cors_allowed_origins || ''}
+                  onChange={(e) => detailUpdateConfig({ cors_allowed_origins: e.target.value })}
+                  placeholder="https://app.example.com, *"
+                />
+                <Input
+                  label={isZh ? '允许方法' : 'Allowed Methods'}
+                  value={detailCfg.cors_allowed_methods || ''}
+                  onChange={(e) => detailUpdateConfig({ cors_allowed_methods: e.target.value })}
+                  placeholder="GET,POST,OPTIONS"
+                />
+                <Input
+                  label={isZh ? '允许请求头' : 'Allowed Headers'}
+                  value={detailCfg.cors_allowed_headers || ''}
+                  onChange={(e) => detailUpdateConfig({ cors_allowed_headers: e.target.value })}
+                  placeholder="Authorization,Content-Type"
+                />
+                <Input
+                  label={isZh ? '缓存时长 (秒)' : 'Max Age (s)'}
+                  type="number"
+                  min={0}
+                  value={detailCfg.cors_max_age ?? ''}
+                  onChange={(e) => detailUpdateConfig({ cors_max_age: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder="86400"
+                />
+              </div>
+              <Switch
+                label={isZh ? '允许携带凭证' : 'Allow Credentials'}
+                description={isZh ? '返回 Access-Control-Allow-Credentials' : 'Return Access-Control-Allow-Credentials'}
+                checked={detailCfg.cors_allow_credentials || false}
+                onChange={(e) => detailUpdateConfig({ cors_allow_credentials: e.target.checked })}
               />
-              <Input
-                label="突发上限"
-                type="number"
-                min={0}
-                value={cfg.burst ?? ''}
-                onChange={(e) => updateConfig({ burst: e.target.value === '' ? undefined : Number(e.target.value) })}
-                placeholder="不限制"
-              />
-              <Input
-                label="白名单"
-                value={(cfg.whitelist || []).join(', ')}
-                onChange={(e) => updateConfig({ whitelist: e.target.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean) })}
-                placeholder="127.0.0.1/32, 10.0.0.0/8"
-              />
-            </div>
-          </Card>
-
-          {/* CORS */}
-          <Card tone="soft" className="space-y-4">
-            <div className="text-sm font-medium text-[var(--text-primary)]">CORS 配置</div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Input
-                label="允许来源"
-                value={cfg.cors_allowed_origins || ''}
-                onChange={(e) => updateConfig({ cors_allowed_origins: e.target.value })}
-                placeholder="https://app.example.com, *"
-              />
-              <Input
-                label="允许方法"
-                value={cfg.cors_allowed_methods || ''}
-                onChange={(e) => updateConfig({ cors_allowed_methods: e.target.value })}
-                placeholder="GET,POST,OPTIONS"
-              />
-              <Input
-                label="允许请求头"
-                value={cfg.cors_allowed_headers || ''}
-                onChange={(e) => updateConfig({ cors_allowed_headers: e.target.value })}
-                placeholder="Authorization,Content-Type"
-              />
-              <Input
-                label="缓存时长 (秒)"
-                type="number"
-                min={0}
-                value={cfg.cors_max_age ?? ''}
-                onChange={(e) => updateConfig({ cors_max_age: e.target.value === '' ? undefined : Number(e.target.value) })}
-                placeholder="86400"
-              />
-            </div>
-            <Switch
-              label="允许携带凭证"
-              description="返回 Access-Control-Allow-Credentials"
-              checked={cfg.cors_allow_credentials || false}
-              onChange={(e) => updateConfig({ cors_allow_credentials: e.target.checked })}
-            />
-          </Card>
-        </div>
-      )}
-
-      {/* 新建 Key Modal */}
-      <Modal open={showCreateKey} onClose={() => { setShowCreateKey(false); setCreatedSecret(null) }} title="新建 API Key">
-        {createdSecret ? (
-          <div className="space-y-4">
-            <Alert variant="success" title="API Key 已创建">
-              请立即复制保存，此密钥只会显示一次。
-            </Alert>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 break-all rounded bg-[var(--surface-inset)] px-3 py-2 text-sm">{createdSecret}</code>
-              <Button variant="ghost" size="sm" onClick={() => copyToClipboard(createdSecret)}>
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            {copiedSecret && <div className="text-sm text-[var(--text-success)]">已复制到剪贴板</div>}
-            <div className="flex justify-end">
-              <Button onClick={() => { setShowCreateKey(false); setCreatedSecret(null) }}>完成</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <Input
-              label="Key 名称"
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              placeholder="例如: Production, CI/CD"
-              required
-            />
-            <Select
-              label="过期时间"
-              value={newKeyExpiration}
-              onChange={(e) => setNewKeyExpiration(e.target.value)}
-              options={EXPIRATION_OPTIONS}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowCreateKey(false)}>取消</Button>
-              <Button onClick={handleCreateKey} disabled={!newKeyName.trim()}>创建</Button>
             </div>
           </div>
         )}

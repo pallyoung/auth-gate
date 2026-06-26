@@ -1,4 +1,143 @@
 :root {
+  color-scheme: dark;
+
+  --primary-50: #11383d;
+  --primary-100: #14484b;
+  --primary-200: #176063;
+  --primary-300: #1d7f81;
+  --primary-400: #24a19d;
+  --primary-500: #0f8f8b;
+  --primary-600: #38c7ba;
+  --primary-700: #69dacd;
+  --primary-800: #99ebe1;
+  --primary-900: #d8fffa;
+
+  --accent-50: #3a2a13;
+  --accent-100: #50361a;
+  --accent-200: #6d4a22;
+  --accent-300: #8f6327;
+  --accent-400: #b7832b;
+  --accent-500: #bd7a18;
+  --accent-600: #d6a43d;
+  --accent-700: #f3d59d;
+
+  --neutral-0: #080d14;
+  --neutral-25: #0a1018;
+  --neutral-50: #0d1520;
+  --neutral-100: #111d2a;
+  --neutral-150: #141f2e;
+  --neutral-200: #1a2942;
+  --neutral-300: #2d3a4d;
+  --neutral-400: #4a5568;
+  --neutral-500: #6b7a90;
+  --neutral-600: #8b95a5;
+  --neutral-700: #b0b8c5;
+  --neutral-800: #d4dae3;
+  --neutral-900: #e8ecf0;
+  --neutral-950: #f4f6f8;
+
+  --success: #34d399;
+  --success-light: rgba(52, 211, 153, 0.16);
+  --warning: #fbbf24;
+  --warning-light: rgba(251, 191, 36, 0.16);
+  --error: #f87171;
+  --error-light: rgba(248, 113, 113, 0.16);
+  --info: #60a5fa;
+  --info-light: rgba(96, 165, 250, 0.16);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 30px;
+  --text-3xl: 42px;
+
+  --leading-xs: 16px;
+  --leading-sm: 20px;
+  --leading-base: 24px;
+  --leading-lg: 28px;
+  --leading-xl: 30px;
+  --leading-2xl: 38px;
+  --leading-3xl: 48px;
+
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-none: 0;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 10px 22px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 28px 64px rgba(0, 0, 0, 0.36);
+  --shadow-xl: 0 40px 96px rgba(0, 0, 0, 0.44);
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-slow: 360ms;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --sidebar-width: 280px;
+  --header-height: 72px;
+  --bottom-nav-height: 72px;
+  --page-max-width: 1200px;
+
+  --z-dropdown: 1000;
+  --z-modal-backdrop: 1100;
+  --z-modal: 1200;
+  --z-toast: 1300;
+
+  --bg-page: #0d1520;
+  --bg-page-strong: #111d2a;
+  --bg-card: rgba(20, 31, 46, 0.82);
+  --bg-card-strong: rgba(26, 38, 54, 0.94);
+  --bg-card-soft: rgba(20, 31, 46, 0.7);
+  --bg-elevated: rgba(29, 42, 59, 0.98);
+  --bg-inverse: linear-gradient(180deg, #e8ecf0 0%, #d4dae3 100%);
+  --bg-hover: rgba(56, 199, 186, 0.12);
+  --bg-active: rgba(56, 199, 186, 0.2);
+  --bg-soft-primary: rgba(15, 143, 139, 0.18);
+  --bg-soft-accent: rgba(189, 122, 24, 0.18);
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --bg-surface-tint: rgba(255, 255, 255, 0.02);
+
+  --text-primary: #e8ecf0;
+  --text-secondary: #b0b8c5;
+  --text-muted: #8b95a5;
+  --text-subtle: #6b7a90;
+  --text-inverse: #0d1520;
+
+  --border-default: rgba(220, 226, 234, 0.1);
+  --border-strong: rgba(220, 226, 234, 0.18);
+  --border-soft: rgba(255, 255, 255, 0.08);
+
+  --focus-ring: 0 0 0 4px rgba(56, 199, 186, 0.22);
+}
+
+[data-theme='light'],
+.light {
   color-scheme: light;
 
   --primary-50: #e7fbf8;
@@ -45,69 +184,11 @@
   --info: #2f72c8;
   --info-light: #e8f1ff;
 
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
-  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-
-  --text-xs: 12px;
-  --text-sm: 14px;
-  --text-base: 16px;
-  --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 30px;
-  --text-3xl: 42px;
-
-  --leading-xs: 16px;
-  --leading-sm: 20px;
-  --leading-base: 24px;
-  --leading-lg: 28px;
-  --leading-xl: 30px;
-  --leading-2xl: 38px;
-  --leading-3xl: 48px;
-
-  --space-0: 0;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 28px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-
-  --radius-none: 0;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
-  --radius-2xl: 36px;
-  --radius-full: 9999px;
-
   --shadow-sm: 0 10px 20px rgba(23, 33, 45, 0.05);
   --shadow-md: 0 18px 40px rgba(23, 33, 45, 0.08);
   --shadow-lg: 0 24px 56px rgba(23, 33, 45, 0.12);
   --shadow-xl: 0 32px 72px rgba(23, 33, 45, 0.18);
   --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-
-  --duration-fast: 140ms;
-  --duration-normal: 220ms;
-  --duration-slow: 360ms;
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-
-  --sidebar-width: 296px;
-  --header-height: 76px;
-  --bottom-nav-height: 78px;
-  --page-max-width: 1240px;
-
-  --z-dropdown: 1000;
-  --z-modal-backdrop: 1100;
-  --z-modal: 1200;
-  --z-toast: 1300;
 
   --bg-page: #f6f3ec;
   --bg-page-strong: #ece7dc;
@@ -120,6 +201,8 @@
   --bg-active: rgba(15, 143, 139, 0.16);
   --bg-soft-primary: rgba(15, 143, 139, 0.1);
   --bg-soft-accent: rgba(189, 122, 24, 0.12);
+  --bg-input: rgba(0, 0, 0, 0.03);
+  --bg-surface-tint: rgba(0, 0, 0, 0.02);
 
   --text-primary: #17212d;
   --text-secondary: #4f493f;
@@ -134,91 +217,12 @@
   --focus-ring: 0 0 0 4px rgba(15, 143, 139, 0.18);
 }
 
-[data-theme='dark'],
-.dark {
-  color-scheme: dark;
-
-  --primary-50: #11383d;
-  --primary-100: #14484b;
-  --primary-200: #176063;
-  --primary-300: #1d7f81;
-  --primary-400: #24a19d;
-  --primary-500: #38c7ba;
-  --primary-600: #69dacd;
-  --primary-700: #99ebe1;
-  --primary-800: #b8f6ef;
-  --primary-900: #d8fffa;
-
-  --accent-50: #3a2a13;
-  --accent-100: #50361a;
-  --accent-200: #6d4a22;
-  --accent-300: #8f6327;
-  --accent-400: #b7832b;
-  --accent-500: #d6a43d;
-  --accent-600: #e8bd6a;
-  --accent-700: #f3d59d;
-
-  --neutral-0: #111a25;
-  --neutral-25: #141e2b;
-  --neutral-50: #182230;
-  --neutral-100: #223043;
-  --neutral-150: #29384f;
-  --neutral-200: #35455d;
-  --neutral-300: #54617a;
-  --neutral-400: #7b89a0;
-  --neutral-500: #9ca9be;
-  --neutral-600: #c0c9d6;
-  --neutral-700: #dce2ea;
-  --neutral-800: #eef2f7;
-  --neutral-900: #f8fafc;
-  --neutral-950: #ffffff;
-
-  --success: #44cf8e;
-  --success-light: rgba(68, 207, 142, 0.16);
-  --warning: #ebb15b;
-  --warning-light: rgba(235, 177, 91, 0.18);
-  --error: #ff7f84;
-  --error-light: rgba(255, 127, 132, 0.18);
-  --info: #70a7ff;
-  --info-light: rgba(112, 167, 255, 0.2);
-
-  --shadow-sm: 0 10px 22px rgba(0, 0, 0, 0.24);
-  --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 28px 64px rgba(0, 0, 0, 0.36);
-  --shadow-xl: 0 40px 96px rgba(0, 0, 0, 0.44);
-  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-
-  --bg-page: #0d1520;
-  --bg-page-strong: #111d2a;
-  --bg-card: rgba(24, 34, 48, 0.82);
-  --bg-card-strong: rgba(26, 38, 54, 0.94);
-  --bg-card-soft: rgba(24, 34, 48, 0.7);
-  --bg-elevated: rgba(29, 42, 59, 0.98);
-  --bg-inverse: linear-gradient(180deg, #eef2f7 0%, #dce2ea 100%);
-  --bg-hover: rgba(56, 199, 186, 0.12);
-  --bg-active: rgba(56, 199, 186, 0.2);
-  --bg-soft-primary: rgba(56, 199, 186, 0.18);
-  --bg-soft-accent: rgba(214, 164, 61, 0.18);
-
-  --text-primary: #f8fafc;
-  --text-secondary: #dce2ea;
-  --text-muted: #9ca9be;
-  --text-subtle: #7b89a0;
-  --text-inverse: #17212d;
-
-  --border-default: rgba(220, 226, 234, 0.12);
-  --border-strong: rgba(220, 226, 234, 0.22);
-  --border-soft: rgba(255, 255, 255, 0.1);
-
-  --focus-ring: 0 0 0 4px rgba(56, 199, 186, 0.22);
-}
-
 @media (max-width: 767px) {
   :root {
     --text-xl: 20px;
     --text-2xl: 26px;
     --text-3xl: 34px;
-    --sidebar-width: 280px;
-    --header-height: 68px;
+    --sidebar-width: 260px;
+    --header-height: 64px;
   }
 }

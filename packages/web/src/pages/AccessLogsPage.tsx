@@ -138,7 +138,7 @@ export function AccessLogsPage() {
           label={t('stats.avgLatency')}
           value={`${stats?.avg_latency_ms?.toFixed(0) || 0} ms`}
           icon={<Clock className="h-4 w-4" />}
-          tone="default"
+          tone="neutral"
         />
         <MetricCard
           label={t('stats.authFailures')}

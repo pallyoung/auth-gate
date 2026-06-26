@@ -65,7 +65,7 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'flex h-11 w-11 items-center justify-center rounded-full border transition-all duration-[var(--duration-fast)] md:h-9 md:w-9',
+        'flex h-9 w-9 items-center justify-center rounded-[8px] border transition-all duration-[var(--duration-fast)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         danger
           ? 'border-[rgba(208,71,75,0.14)] text-[var(--error)] hover:bg-[var(--error-light)]'

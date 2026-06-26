@@ -1,5 +1,5 @@
 import React from 'react'
-import { Activity, Plus, Route as RouteIcon, Server, ToggleLeft } from 'lucide-react'
+import { Activity, Plus, Route as RouteIcon, Server, Shield, ToggleLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { DataTable } from '../components/DataTable'
 import { PageHeader } from '../components/PageHeader'
@@ -9,8 +9,9 @@ import { ApiError } from '../lib/api/client'
 import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { routesApi } from '../lib/api/routes'
 import { certificatesApi } from '../lib/api/certificates'
+import { authRulesApi } from '../lib/api/auth-rules'
 import { getSessionUser } from '../lib/session-store'
-import type { Certificate, Route, RouteInput } from '../lib/api/types'
+import type { AuthRule, Certificate, Route, RouteInput } from '../lib/api/types'
 
 function getPrimaryBackendTarget(route: Route) {
   const pooledTarget = route.backends?.find((backend) => backend.url?.trim())?.url
@@ -78,6 +79,7 @@ export function RoutesPage() {
   const { t } = useTranslation('routes')
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [certificates, setCertificates] = React.useState<Certificate[]>([])
+  const [authRules, setAuthRules] = React.useState<AuthRule[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showForm, setShowForm] = React.useState(false)
   const [editingRoute, setEditingRoute] = React.useState<Route | null>(null)
@@ -143,15 +145,17 @@ export function RoutesPage() {
       setError(null)
       setRouteListUnavailable(false)
       setRouteDirectoryUnavailable(false)
-      const [data, certs] = await Promise.all([
+      const [data, certs, rules] = await Promise.all([
         routesApi.list(),
         certificatesApi.list().catch(() => [] as Certificate[]),
+        authRulesApi.list().catch(() => [] as AuthRule[]),
       ])
       if (requestGenerationRef.current !== requestGeneration) {
         return
       }
       setRoutes(data)
       setCertificates(certs)
+      setAuthRules(rules)
     } catch (err) {
       if (requestGenerationRef.current !== requestGeneration) {
         return
@@ -209,57 +213,47 @@ export function RoutesPage() {
 
   const columns = [
     {
-      key: 'name',
-      header: t('table.route'),
-      render: (value: string, row: Route) => (
-        <div className="min-w-0">
-          <div className="font-semibold text-[var(--text-primary)]">{value || t('page.untitled')}</div>
-          <div className="mt-1 text-xs text-[var(--text-muted)]">{row.path_prefix}</div>
+      key: 'host',
+      header: t('table.host'),
+      render: (value: string) => (
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-[var(--primary-500)]" />
+          <span className="app-code">{value || '*'}</span>
         </div>
       ),
     },
     {
-      key: 'host',
-      header: t('table.hostMatch'),
-      render: (value: string) => <span className="app-code">{value || t('page.allHosts')}</span>,
+      key: 'path_prefix',
+      header: t('table.pathPrefix'),
+      render: (value: string) => (
+        <span className="app-code text-[var(--primary-600)]">{value}</span>
+      ),
     },
     {
       key: 'backend',
       header: t('table.backendTarget'),
       render: (_value: string, row: Route) => {
         const primaryTarget = getPrimaryBackendTarget(row)
-        const pooledBackendCount = row.backends?.length || 0
-        const runtimePolicySummary = getRuntimePolicySummary(row, t)
-        const backendTimeoutSummary = getBackendTimeoutSummary(row, t)
-
-        return (
-          <div className="min-w-0">
-            <div className="app-code break-all">{primaryTarget || t('table.noBackend')}</div>
-            {(pooledBackendCount > 0 || row.tls_enabled || runtimePolicySummary.length > 0 || backendTimeoutSummary.length > 0) ? (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
-                {pooledBackendCount > 0 ? <span>{t('table.backendPoolCount', { count: pooledBackendCount })}</span> : null}
-                {row.tls_enabled ? <span>{t('table.tlsEnabled')}</span> : null}
-                {runtimePolicySummary.map((item) => <span key={item}>{item}</span>)}
-                {backendTimeoutSummary.map((item) => <span key={item}>{item}</span>)}
-              </div>
-            ) : null}
-          </div>
-        )
+        return <span className="app-code">{primaryTarget || t('table.noBackend')}</span>
       },
-    },
-    {
-      key: 'priority',
-      header: t('table.priority'),
-      className: 'w-28',
-      render: (value: number) => <span className="font-semibold text-[var(--text-secondary)]">{value}</span>,
     },
     {
       key: 'enabled',
       header: t('table.status'),
       className: 'w-36',
-      render: (value: boolean) => (
+      render: (value: boolean, row: Route) => (
         <Badge variant={value ? 'success' : 'default'} badgeSize="sm">
           {value ? t('page.active') : t('page.disabled')}
+        </Badge>
+      ),
+    },
+    {
+      key: 'tls_enabled',
+      header: t('table.authType'),
+      className: 'w-32',
+      render: (_value: boolean, row: Route) => (
+        <Badge variant={row.tls_enabled ? 'primary' : 'default'} badgeSize="sm">
+          {row.tls_enabled ? 'TLS' : row.certificate_id ? 'Cert' : 'Public'}
         </Badge>
       ),
     },
@@ -314,7 +308,7 @@ export function RoutesPage() {
       )}
 
       {showDirectoryMetrics ? (
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 md:grid-cols-4">
           <MetricCard
             label={t('page.totalRoutes')}
             value={routes.length}
@@ -324,16 +318,24 @@ export function RoutesPage() {
           />
           <MetricCard
             label={t('page.activeRoutes')}
-            value={activeCount}
-            hint={t('page.activeRoutesHint')}
-            icon={<ToggleLeft className="h-5 w-5" />}
+            value={`${activeCount}/${routes.length}`}
+            hint="Unlicensed"
+            icon={<Server className="h-5 w-5" />}
             tone="accent"
           />
           <MetricCard
-            label={t('page.hostCoverage')}
-            value={uniqueHosts || t('page.wildcard')}
-            hint={t('page.highestPriority', { count: highestPriority })}
-            icon={<Server className="h-5 w-5" />}
+            label="Auth Rules"
+            value={authRules.length}
+            hint="Enabled"
+            icon={<Shield className="h-5 w-5" />}
+            tone="warning"
+          />
+          <MetricCard
+            label="Certificates"
+            value={certificates.length}
+            hint="All Valid"
+            icon={<Shield className="h-5 w-5" />}
+            tone="primary"
           />
         </div>
       ) : null}
@@ -351,7 +353,7 @@ export function RoutesPage() {
               {t('page.directoryDescription')}
             </p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-[rgba(255,255,255,0.54)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+          <div className="inline-flex items-center gap-2 rounded-full bg-[var(--bg-hover)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             <Activity className="h-3.5 w-3.5 text-[var(--primary-600)]" />
             {t('page.liveSnapshot')}
           </div>

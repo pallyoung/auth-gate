@@ -15,7 +15,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
     >
       {icon && (
         <div
-          className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)] shadow-[var(--shadow-sm)]"
+          className="mb-5 flex h-14 w-14 items-center justify-center rounded-[12px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)]"
           aria-hidden="true"
         >
           {icon}

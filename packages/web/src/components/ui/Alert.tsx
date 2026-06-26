@@ -27,7 +27,7 @@ export function Alert({
   return (
     <div
       className={cn(
-        'flex items-start gap-3 rounded-[20px] border px-4 py-3 shadow-[var(--shadow-sm)]',
+        'flex items-start gap-3 rounded-[12px] border px-4 py-3',
         variantStyles[variant],
         className
       )}

@@ -1,10 +1,10 @@
 import React from 'react'
-import { Lock, Shield, Sparkles, User, CheckCircle } from 'lucide-react'
+import { ArrowRight, CheckCircle, Lock, Shield, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import type { LoginResponse } from '../lib/api/types'
 import { ApiError } from '../lib/api/client'
-import { Button, Card, Input } from '../components/ui'
+import { Button } from '../components/ui'
 
 interface SetupPageProps {
   onSetup: (username: string, password: string) => Promise<LoginResponse>
@@ -54,109 +54,123 @@ export function SetupPage({ onSetup }: SetupPageProps) {
       <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
         <LanguageSwitcher />
       </div>
-      <div className="absolute left-[8%] top-[12%] hidden h-40 w-40 rounded-full bg-[rgba(15,143,139,0.16)] blur-3xl md:block" />
-      <div className="absolute bottom-[10%] right-[10%] hidden h-48 w-48 rounded-full bg-[rgba(189,122,24,0.16)] blur-3xl md:block" />
 
-      <div className="grid w-full max-w-6xl items-center gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <Card
-          tone="inverse"
-          className="relative hidden overflow-hidden rounded-[36px] px-8 py-10 lg:block"
-        >
-          <div className="absolute inset-0 opacity-70">
-            <div className="absolute left-10 top-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute bottom-10 right-10 h-48 w-48 rounded-full bg-[rgba(56,199,186,0.18)] blur-3xl" />
-          </div>
-          <div className="relative">
-            <div className="eyebrow text-white/72">
-              <Sparkles className="h-3.5 w-3.5" />
-              {t('hero.eyebrow')}
-            </div>
-            <h1 className="mt-5 max-w-lg text-5xl font-semibold tracking-[-0.05em] text-white">
-              {t('hero.title')}
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-white/78">
-              {t('hero.description')}
-            </p>
+      {/* Background gradient blobs */}
+      <div className="absolute left-[15%] top-[20%] h-64 w-64 rounded-full bg-[rgba(15,143,139,0.15)] blur-[100px]" />
+      <div className="absolute bottom-[20%] right-[15%] h-72 w-72 rounded-full bg-[rgba(47,114,200,0.12)] blur-[100px]" />
+      <div className="absolute left-[60%] top-[10%] h-48 w-48 rounded-full bg-[rgba(189,122,24,0.1)] blur-[80px]" />
 
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
-              <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.step1Label')}</div>
-                <div className="mt-2 text-lg font-semibold text-white">{t('hero.step1Value')}</div>
-              </div>
-              <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.step2Label')}</div>
-                <div className="mt-2 text-lg font-semibold text-white">{t('hero.step2Value')}</div>
-              </div>
-              <div className="rounded-[24px] border border-white/12 bg-white/6 p-4 backdrop-blur-md">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/58">{t('hero.step3Label')}</div>
-                <div className="mt-2 text-lg font-semibold text-white">{t('hero.step3Value')}</div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="mx-auto w-full max-w-lg rounded-[32px] p-6 md:p-8">
+      <div className="relative z-10 w-full max-w-md">
+        {/* Setup Card */}
+        <div className="glass-panel rounded-[20px] p-8">
           <div className="flex flex-col items-center text-center">
-            <div className="animate-pulse-glow flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-700))] text-white shadow-[var(--shadow-lg)]">
+            {/* Shield Logo */}
+            <div className="animate-pulse-glow flex h-16 w-16 items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] text-white shadow-[0_0_30px_rgba(15,143,139,0.3)]">
               <Shield className="h-8 w-8" />
             </div>
-            <div className="eyebrow mt-5">{t('card.eyebrow')}</div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--text-primary)]">
-              {t('card.title')}
+
+            <h1 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+              Auth Gate
             </h1>
-            <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--text-muted)]">
-              {t('card.description')}
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Initial Setup
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             {error && (
               <div
-                className="rounded-[20px] border border-[rgba(208,71,75,0.16)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
+                className="rounded-[12px] border border-[rgba(248,113,113,0.2)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
                 role="alert"
               >
                 {error}
               </div>
             )}
 
-            <Input
-              label={t('fields.username')}
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              placeholder={t('fields.usernamePlaceholder')}
-              leftIcon={<User className="h-4 w-4" />}
-              required
-            />
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t('fields.username')}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]">
+                  <User className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  placeholder={t('fields.usernamePlaceholder')}
+                  required
+                  className="w-full rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)] py-3 pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-subtle)] transition-colors focus:border-[var(--primary-500)] focus:outline-none focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]"
+                />
+              </div>
+            </div>
 
-            <Input
-              label={t('fields.password')}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-              placeholder={t('fields.passwordPlaceholder')}
-              leftIcon={<Lock className="h-4 w-4" />}
-              required
-            />
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t('fields.password')}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  placeholder={t('fields.passwordPlaceholder')}
+                  required
+                  className="w-full rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)] py-3 pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-subtle)] transition-colors focus:border-[var(--primary-500)] focus:outline-none focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]"
+                />
+              </div>
+            </div>
 
-            <Input
-              label={t('fields.confirmPassword')}
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              placeholder={t('fields.confirmPasswordPlaceholder')}
-              leftIcon={<CheckCircle className="h-4 w-4" />}
-              required
-            />
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t('fields.confirmPassword')}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]">
+                  <CheckCircle className="h-4 w-4" />
+                </div>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  placeholder={t('fields.confirmPasswordPlaceholder')}
+                  required
+                  className="w-full rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-input)] py-3 pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-subtle)] transition-colors focus:border-[var(--primary-500)] focus:outline-none focus:ring-2 focus:ring-[rgba(15,143,139,0.2)]"
+                />
+              </div>
+            </div>
 
-            <Button type="submit" className="w-full" size="lg" loading={loading}>
-              {t('card.submit')}
+            {/* Setup Button */}
+            <Button
+              type="submit"
+              className="w-full rounded-[12px] bg-[linear-gradient(135deg,var(--primary-500),var(--primary-600))] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(15,143,139,0.3)] hover:shadow-[0_6px_20px_rgba(15,143,139,0.4)]"
+              size="lg"
+              loading={loading}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {t('card.submit')}
+                <ArrowRight className="h-4 w-4" />
+              </span>
             </Button>
           </form>
-        </Card>
+        </div>
+
+        {/* Version Pill */}
+        <div className="mt-6 flex justify-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--text-muted)]">
+            <Shield className="h-3 w-3" />
+            <span>Auth Gate v2.4.0</span>
+            <span className="text-[var(--text-subtle)]">•</span>
+            <span>Enterprise Security</span>
+          </div>
+        </div>
       </div>
     </div>
   )
