@@ -119,6 +119,8 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	{
 		adminOnly.GET("/config", getConfig(cfg))
 		adminOnly.PUT("/config", updateConfig(cfg))
+		adminOnly.GET("/settings/log-retention", getLogRetention(db))
+		adminOnly.PUT("/settings/log-retention", updateLogRetention(db))
 		adminOnly.GET("/users", listUsers(userSvc))
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
@@ -292,6 +294,9 @@ func createRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			StripPrefix:   req.StripPrefix,
 			Enabled:       req.Enabled,
 			Priority:      req.Priority,
+			Type:          req.Type,
+			StaticRoot:    req.StaticRoot,
+			StaticSPA:     req.StaticSPA,
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,
@@ -335,6 +340,9 @@ func updateRoute(routeSvc *routesservice.Service) gin.HandlerFunc {
 			StripPrefix:   req.StripPrefix,
 			Enabled:       req.Enabled,
 			Priority:      req.Priority,
+			Type:          req.Type,
+			StaticRoot:    req.StaticRoot,
+			StaticSPA:     req.StaticSPA,
 			TLSCert:       req.TLSCert,
 			TLSKey:        req.TLSKey,
 			TLSEnabled:    req.TLSEnabled,

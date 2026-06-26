@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -348,6 +349,11 @@ func startForeground() {
 		log.Fatalf("Failed to init access log store: %v", err)
 	}
 	accessLogStore.StartFlusher(30 * time.Second)
+	accessLogStore.StartCleanup(func() int {
+		v, _ := db.GetSetting("log_retention_days")
+		days, _ := strconv.Atoi(v)
+		return days
+	})
 	defer accessLogStore.StopFlusher()
 
 	routerMgr := router.NewManager(db)

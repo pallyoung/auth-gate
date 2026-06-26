@@ -1,5 +1,5 @@
 import React from 'react'
-import { Database, Globe, Plus, RefreshCw, Server, Shield, X } from 'lucide-react'
+import { Database, Globe, Plus, RefreshCw, Server, Shield, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '../components/PageHeader'
 import { Alert, Button, Card, Input, MetricCard, Switch } from '../components/ui'
@@ -29,6 +29,13 @@ export function SettingsPage() {
   const [configMessage, setConfigMessage] = React.useState<SettingsAlertState>(null)
   const [configError, setConfigError] = React.useState<SettingsAlertState>(null)
 
+  // Log retention state
+  const [retentionDays, setRetentionDays] = React.useState(0)
+  const [retentionLoading, setRetentionLoading] = React.useState(true)
+  const [retentionSaving, setRetentionSaving] = React.useState(false)
+  const [retentionMessage, setRetentionMessage] = React.useState<SettingsAlertState>(null)
+  const [retentionError, setRetentionError] = React.useState<SettingsAlertState>(null)
+
   const sessionUser = getSessionUser()
   const isAdmin = sessionUser?.role === 'admin'
 
@@ -39,6 +46,15 @@ export function SettingsPage() {
       // Ignore - use defaults
     }).finally(() => setConfigLoading(false))
   }, [])
+
+  React.useEffect(() => {
+    if (!isAdmin) { setRetentionLoading(false); return }
+    configApi.getLogRetention().then((res) => {
+      setRetentionDays(res.days)
+    }).catch(() => {
+      // Ignore - use defaults
+    }).finally(() => setRetentionLoading(false))
+  }, [isAdmin])
 
   const canReload =
     (sessionUser?.permissions?.can_manage_routes ?? false) ||
@@ -116,6 +132,20 @@ export function SettingsPage() {
       setConfigError({ translationKey: 'config.saveFailed' })
     } finally {
       setConfigSaving(false)
+    }
+  }
+
+  const handleSaveRetention = async () => {
+    setRetentionSaving(true)
+    setRetentionMessage(null)
+    setRetentionError(null)
+    try {
+      await configApi.updateLogRetention(retentionDays)
+      setRetentionMessage({ translationKey: 'logRetention.saved' })
+    } catch {
+      setRetentionError({ translationKey: 'logRetention.saveFailed' })
+    } finally {
+      setRetentionSaving(false)
     }
   }
 
@@ -276,6 +306,72 @@ export function SettingsPage() {
               </div>
             </div>
           </Card>
+
+          {/* Log Retention Card */}
+          {isAdmin && (
+            <Card padding="lg" className="space-y-5">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t('logRetention.eyebrow')}
+                </div>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+                  {t('logRetention.title')}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  {t('logRetention.description')}
+                </p>
+              </div>
+
+              {retentionMessage?.translationKey && (
+                <Alert variant="success">{t(retentionMessage.translationKey as any)}</Alert>
+              )}
+              {retentionError?.translationKey && (
+                <Alert variant="error">{t(retentionError.translationKey as any)}</Alert>
+              )}
+
+              {!retentionLoading && (
+                <div className="rounded-[24px] border border-[var(--border-default)] bg-[rgba(255,255,255,0.4)] p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[var(--error-light)] text-[var(--error)]">
+                      <Trash2 className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+                          {t('logRetention.label')}
+                        </h3>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                          {retentionDays > 0
+                            ? t('logRetention.description')
+                            : t('logRetention.disabled')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={String(retentionDays)}
+                          onChange={(e) => setRetentionDays(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-[var(--text-muted)]">{t('logRetention.unit')}</span>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {t('logRetention.hint')}
+                      </p>
+                      <Button
+                        loading={retentionSaving}
+                        onClick={handleSaveRetention}
+                        size="sm"
+                      >
+                        {retentionSaving ? t('logRetention.saving') : t('logRetention.save')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
         </div>
 
         <div className="space-y-5">

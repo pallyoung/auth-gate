@@ -49,6 +49,19 @@ export const settingsEn = {
     atLeastOneAddr: 'At least one listen address is required.',
     restartHint: 'Saving will trigger a server restart to apply the new port configuration.',
   },
+  logRetention: {
+    eyebrow: 'Log Management',
+    title: 'Access Log Retention',
+    description: 'Set how many days to keep access logs. Logs older than this will be automatically deleted every day at midnight. Set to 0 to disable auto-cleanup.',
+    label: 'Retention period',
+    unit: 'days',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Log retention setting saved.',
+    saveFailed: 'Failed to save log retention setting.',
+    disabled: 'Auto-cleanup is disabled.',
+    hint: 'Set to 0 to keep logs indefinitely (limited by ring buffer capacity of 10,000 entries).',
+  },
 } as const
 
 export const settingsZhCN = {
@@ -100,5 +113,18 @@ export const settingsZhCN = {
     saveFailed: '保存配置失败。',
     atLeastOneAddr: '至少需要一个监听地址。',
     restartHint: '保存后会触发服务器重启以应用新的端口配置。',
+  },
+  logRetention: {
+    eyebrow: '日志管理',
+    title: '访问日志保留',
+    description: '设置访问日志的保留天数。超过保留期限的日志将在每天 0 点自动清理。设为 0 则不自动清理。',
+    label: '保留期限',
+    unit: '天',
+    save: '保存',
+    saving: '保存中...',
+    saved: '日志保留设置已保存。',
+    saveFailed: '保存日志保留设置失败。',
+    disabled: '自动清理已关闭。',
+    hint: '设为 0 表示永久保留（受 ring buffer 10,000 条容量限制）。',
   },
 } as const

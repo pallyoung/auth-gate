@@ -34,6 +34,7 @@ type storeData struct {
 	CACertificates   map[string]CACertificate   `json:"ca_certificates"`
 	HostProfiles     map[string]HostProfile     `json:"host_profiles"`
 	HostEntries      map[string]HostEntry       `json:"host_entries"`
+	Settings         map[string]string          `json:"settings"`
 }
 
 // NewJSONStore creates or loads a JSON-backed store from the given directory.
@@ -62,6 +63,7 @@ func (s *JSONStore) load() error {
 			CACertificates:   make(map[string]CACertificate),
 			HostProfiles:     make(map[string]HostProfile),
 			HostEntries:      make(map[string]HostEntry),
+			Settings:         make(map[string]string),
 		}
 		return nil
 	}
@@ -77,6 +79,9 @@ func (s *JSONStore) load() error {
 	}
 	if s.data.ApiKeys == nil {
 		s.data.ApiKeys = make(map[string]ApiKey)
+	}
+	if s.data.Settings == nil {
+		s.data.Settings = make(map[string]string)
 	}
 	// Migrate old AuthRules to RouteAuthConfigs + ApiKeys
 	if len(s.data.AuthRules) > 0 {
@@ -906,4 +911,19 @@ func normalizeAuthRule(r *AuthRule) {
 	r.Config.Username = strings.TrimSpace(r.Config.Username)
 	// Password is intentionally NOT trimmed (may contain meaningful whitespace).
 	r.Config.LoginMode = strings.TrimSpace(r.Config.LoginMode)
+}
+
+// ---- Settings ----
+
+func (s *JSONStore) GetSetting(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.data.Settings[key], nil
+}
+
+func (s *JSONStore) SetSetting(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.Settings[key] = value
+	return s.save()
 }

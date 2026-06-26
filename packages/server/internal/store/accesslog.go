@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -245,12 +246,94 @@ func (s *AccessLogStore) StopFlusher() {
 	s.flush()
 }
 
+// PurgeOlderThan removes all entries with a Timestamp before cutoff.
+// It returns the number of entries removed and flushes the result to disk.
+func (s *AccessLogStore) PurgeOlderThan(cutoff time.Time) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.count == 0 {
+		return 0
+	}
+
+	// Collect surviving entries
+	all := s.collectEntries()
+	keep := make([]AccessLogEntry, 0, len(all))
+	for _, e := range all {
+		if !e.Timestamp.Before(cutoff) {
+			keep = append(keep, e)
+		}
+	}
+	removed := len(all) - len(keep)
+	if removed == 0 {
+		return 0
+	}
+
+	// Rebuild the ring buffer with surviving entries
+	s.entries = make([]AccessLogEntry, s.capacity)
+	s.writeIndex = 0
+	s.count = 0
+	for _, e := range keep {
+		s.entries[s.writeIndex] = e
+		s.writeIndex = (s.writeIndex + 1) % s.capacity
+		if s.count < s.capacity {
+			s.count++
+		}
+	}
+
+	// Persist immediately (collectEntries works on the rebuilt buffer)
+	s.writeToDisk(s.collectEntries())
+
+	return removed
+}
+
+// StartCleanup launches a goroutine that purges expired access logs daily
+// at midnight. getRetentionDays is called each cycle to read the current
+// setting; a value <= 0 disables cleanup.
+func (s *AccessLogStore) StartCleanup(getRetentionDays func() int) {
+	go func() {
+		// Use a 1-hour ticker and only act in the 00:00–00:30 window.
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		lastRun := ""
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				today := now.Format("2006-01-02")
+				// Only run once per day, in the first 30 minutes after midnight
+				if now.Hour() != 0 || lastRun == today {
+					continue
+				}
+				lastRun = today
+				days := getRetentionDays()
+				if days <= 0 {
+					continue
+				}
+				cutoff := now.AddDate(0, 0, -days)
+				removed := s.PurgeOlderThan(cutoff)
+				if removed > 0 {
+					log.Printf("access log cleanup: purged %d entries older than %d days", removed, days)
+				}
+			case <-s.doneChan:
+				return
+			}
+		}
+	}()
+}
+
 // flush writes all entries to disk.
 func (s *AccessLogStore) flush() error {
 	s.mu.RLock()
 	entries := s.collectEntries()
 	s.mu.RUnlock()
 
+	return s.writeToDisk(entries)
+}
+
+// writeToDisk atomically writes the given entries to the JSONL file.
+// Does not acquire any lock; the caller is responsible for consistency.
+func (s *AccessLogStore) writeToDisk(entries []AccessLogEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}

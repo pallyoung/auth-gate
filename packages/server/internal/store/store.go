@@ -75,6 +75,10 @@ type Store interface {
 	ReorderHostEntries(profileID string, orderedIDs []string) error
 	ListEnabledHostEntries(profileID string) ([]HostEntry, error)
 
+	// Settings (key-value)
+	GetSetting(key string) (string, error)
+	SetSetting(key, value string) error
+
 	// Lifecycle
 	Close() error
 }
