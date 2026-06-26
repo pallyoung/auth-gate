@@ -121,6 +121,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 		adminOnly.PUT("/config", updateConfig(cfg))
 		adminOnly.GET("/settings/log-retention", getLogRetention(db))
 		adminOnly.PUT("/settings/log-retention", updateLogRetention(db))
+		adminOnly.POST("/settings/log-retention/purge", purgeLogs(db, accessLogStore))
 		adminOnly.GET("/users", listUsers(userSvc))
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))

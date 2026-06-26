@@ -3,6 +3,7 @@ package admin
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -41,5 +42,23 @@ func updateLogRetention(db store.Store) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"days": req.Days})
+	}
+}
+
+func purgeLogs(db store.Store, logStore *store.AccessLogStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		val, err := db.GetSetting(settingLogRetentionDays)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "read_failed", "failed to read setting")
+			return
+		}
+		days, _ := strconv.Atoi(val)
+		if days <= 0 {
+			c.JSON(http.StatusOK, gin.H{"removed": 0, "message": "retention is set to 0, nothing to purge"})
+			return
+		}
+		cutoff := time.Now().AddDate(0, 0, -days)
+		removed := logStore.PurgeOlderThan(cutoff)
+		c.JSON(http.StatusOK, gin.H{"removed": removed, "cutoff_days": days})
 	}
 }

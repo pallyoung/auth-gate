@@ -35,6 +35,7 @@ export function SettingsPage() {
   const [retentionSaving, setRetentionSaving] = React.useState(false)
   const [retentionMessage, setRetentionMessage] = React.useState<SettingsAlertState>(null)
   const [retentionError, setRetentionError] = React.useState<SettingsAlertState>(null)
+  const [purging, setPurging] = React.useState(false)
 
   const sessionUser = getSessionUser()
   const isAdmin = sessionUser?.role === 'admin'
@@ -146,6 +147,24 @@ export function SettingsPage() {
       setRetentionError({ translationKey: 'logRetention.saveFailed' })
     } finally {
       setRetentionSaving(false)
+    }
+  }
+
+  const handlePurge = async () => {
+    setPurging(true)
+    setRetentionMessage(null)
+    setRetentionError(null)
+    try {
+      const res = await configApi.purgeLogs()
+      if (res.removed > 0) {
+        setRetentionMessage({ translationKey: 'logRetention.purgeSuccess' })
+      } else {
+        setRetentionMessage({ translationKey: 'logRetention.purgeNothing' })
+      }
+    } catch {
+      setRetentionError({ translationKey: 'logRetention.purgeFailed' })
+    } finally {
+      setPurging(false)
     }
   }
 
@@ -359,13 +378,25 @@ export function SettingsPage() {
                       <p className="text-xs text-[var(--text-muted)]">
                         {t('logRetention.hint')}
                       </p>
-                      <Button
-                        loading={retentionSaving}
-                        onClick={handleSaveRetention}
-                        size="sm"
-                      >
-                        {retentionSaving ? t('logRetention.saving') : t('logRetention.save')}
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          loading={retentionSaving}
+                          onClick={handleSaveRetention}
+                          size="sm"
+                        >
+                          {retentionSaving ? t('logRetention.saving') : t('logRetention.save')}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          loading={purging}
+                          disabled={retentionDays <= 0}
+                          onClick={handlePurge}
+                          size="sm"
+                          icon={<Trash2 className="h-3.5 w-3.5" />}
+                        >
+                          {purging ? t('logRetention.purging') : t('logRetention.purge')}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -61,6 +61,11 @@ export const settingsEn = {
     saveFailed: 'Failed to save log retention setting.',
     disabled: 'Auto-cleanup is disabled.',
     hint: 'Set to 0 to keep logs indefinitely (limited by ring buffer capacity of 10,000 entries).',
+    purge: 'Purge Now',
+    purging: 'Purging...',
+    purgeSuccess: 'Expired log entries have been purged.',
+    purgeNothing: 'No expired logs to purge.',
+    purgeFailed: 'Failed to purge logs.',
   },
 } as const
 
@@ -126,5 +131,10 @@ export const settingsZhCN = {
     saveFailed: '保存日志保留设置失败。',
     disabled: '自动清理已关闭。',
     hint: '设为 0 表示永久保留（受 ring buffer 10,000 条容量限制）。',
+    purge: '立即清理',
+    purging: '清理中...',
+    purgeSuccess: '过期日志已清理完成。',
+    purgeNothing: '没有需要清理的过期日志。',
+    purgeFailed: '清理日志失败。',
   },
 } as const

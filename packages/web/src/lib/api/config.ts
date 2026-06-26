@@ -15,4 +15,8 @@ export const configApi = {
       method: 'PUT',
       body: JSON.stringify({ days }),
     }),
+  purgeLogs: () =>
+    request<{ removed: number; cutoff_days: number; message?: string }>('/settings/log-retention/purge', {
+      method: 'POST',
+    }),
 }
