@@ -158,7 +158,7 @@ func TestRegisterRoutes_UsesStructuredErrorEnvelope(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestRegisterRoutes_CreateRouteAcceptsRegexPathMatchMode(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestRegisterRoutes_CreateRouteNormalizesExplicitPathMatchMode(t *testing.T)
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -263,7 +263,7 @@ func TestRegisterRoutes_RejectsInvalidRoutePathMatchMode(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -294,7 +294,7 @@ func TestRegisterRoutes_RejectsInvalidRouteRegexPathPrefix(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -325,7 +325,7 @@ func TestRegisterRoutes_CreateRouteNormalizesHostCase(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -361,7 +361,7 @@ func TestRegisterRoutes_RejectsInvalidRouteHost(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -392,7 +392,7 @@ func TestRegisterRoutes_RejectsInvalidRouteBackends(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -426,7 +426,7 @@ func TestRegisterRoutes_CreateRouteAllowsBackendsWithoutLegacyBackend(t *testing
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -468,7 +468,7 @@ func TestRegisterRoutes_CreateRouteRequiresBackendOrBackends(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -497,7 +497,7 @@ func TestRegisterRoutes_RejectsInvalidRouteBackendWeights(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -531,7 +531,7 @@ func TestRegisterRoutes_RejectsInvalidRouteRedirectCode(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -563,7 +563,7 @@ func TestRegisterRoutes_CreateRoutePersistsAndReturnsRuntimePolicyFields(t *test
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -643,7 +643,7 @@ func TestRegisterRoutes_UpdateRoutePreservesOmittedFields(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -741,7 +741,7 @@ func TestRegisterRoutes_MeReturnsPermissions(t *testing.T) {
 	engine.POST("/_authgate/api/auth/login", LoginRoute(db, nil))
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -797,7 +797,7 @@ func TestRegisterRoutes_MeReportsCertificateFeatureAvailability(t *testing.T) {
 			engine := gin.New()
 			group := engine.Group("/_authgate/api")
 			group.Use(auth.AuthMiddleware(db))
-			RegisterRoutes(group, router.NewManager(db), db, tc.certSvc, nil, nil)
+			RegisterRoutes(group, router.NewManager(db), db, tc.certSvc, nil, nil, nil, nil)
 
 			token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 			if err != nil {
@@ -836,7 +836,7 @@ func TestRegisterRoutes_RejectsCertificateCreateWhenNameIsMissing(t *testing.T) 
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -866,7 +866,7 @@ func TestRegisterRoutes_RejectsCertificateCreateWhenDomainIsMissing(t *testing.T
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -896,7 +896,7 @@ func TestRegisterRoutes_RejectsCertificateCreateWhenSourceIsUnsupported(t *testi
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -930,7 +930,7 @@ func TestRegisterRoutes_RejectsCertificateImportWhenPEMIsMissing(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -964,7 +964,7 @@ func TestRegisterRoutes_RejectsCertificateImportWhenDomainMismatchesCert(t *test
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, stub, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1073,7 +1073,7 @@ func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1105,7 +1105,7 @@ func TestRegisterRoutes_CreateAuthRulePersistsAndReturnsRuntimePolicyFields(t *t
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1219,7 +1219,7 @@ func TestRegisterRoutes_UpdateAuthRulePreservesOmittedFields(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1298,7 +1298,7 @@ func TestRegisterRoutes_GetLegacyStoredAuthRuleNormalizesConfigFields(t *testing
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1344,7 +1344,7 @@ func TestRegisterRoutes_MeNormalizesLegacyStoredRoleForControlPlaneAccess(t *tes
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, store.RoleViewer)
 	if err != nil {
@@ -1374,7 +1374,7 @@ func TestRegisterRoutes_MeRejectsDisabledUserWithOldToken(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -1403,7 +1403,7 @@ func TestRegisterRoutes_ListUsersNormalizesLegacyStoredRole(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1445,7 +1445,7 @@ func TestRegisterRoutes_UpdateUserPreservesEnabledWhenOmitted(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1487,7 +1487,7 @@ func TestRegisterRoutes_CreateUserRejectsWhitespaceOnlyUsername(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1528,7 +1528,7 @@ func TestRegisterRoutes_CreateUserDefaultsOmittedRoleToMember(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1564,7 +1564,7 @@ func TestRegisterRoutes_UpdateUserPreservesRoleWhenOmitted(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1607,7 +1607,7 @@ func TestRegisterRoutes_UpdateUserPreservesUsernameWhenOmitted(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1660,7 +1660,7 @@ func TestRegisterRoutes_UpdateUserPreservesRouteAssignmentsWhenOmitted(t *testin
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {
@@ -1706,7 +1706,7 @@ func TestRegisterRoutes_UpdateUserRejectsDuplicateUsername(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil)
+	RegisterRoutes(group, router.NewManager(db), db, nil, nil, nil, nil, nil)
 
 	token, err := auth.GenerateToken(adminUser.ID, adminUser.Username, adminUser.Role)
 	if err != nil {

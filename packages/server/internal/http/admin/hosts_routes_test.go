@@ -31,7 +31,7 @@ func newTestHostRouter(t *testing.T) (*gin.Engine, store.Store) {
 	r := gin.New()
 	group := r.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
-	RegisterRoutes(group, nil, db, nil, svc, nil)
+	RegisterRoutes(group, nil, db, nil, svc, nil, nil, nil)
 	return r, db
 }
 

@@ -12,6 +12,9 @@ vi.mock('../lib/api/config', () => ({
     reload: vi.fn(),
     get: vi.fn(),
     update: vi.fn(),
+    getLogRetention: vi.fn(),
+    updateLogRetention: vi.fn(),
+    purgeLogs: vi.fn(),
   },
 }))
 
@@ -22,6 +25,12 @@ beforeEach(() => {
   vi.mocked(configApi.get).mockResolvedValue({ listen: [{ addr: ':80', tls: false }] })
   vi.mocked(configApi.update).mockReset()
   vi.mocked(configApi.update).mockResolvedValue({ message: 'saved' })
+  vi.mocked(configApi.getLogRetention).mockReset()
+  vi.mocked(configApi.getLogRetention).mockResolvedValue({ days: 30 })
+  vi.mocked(configApi.updateLogRetention).mockReset()
+  vi.mocked(configApi.updateLogRetention).mockResolvedValue({ days: 30 })
+  vi.mocked(configApi.purgeLogs).mockReset()
+  vi.mocked(configApi.purgeLogs).mockResolvedValue({ removed: 0, cutoff_days: 30 })
 })
 
 afterEach(() => {
