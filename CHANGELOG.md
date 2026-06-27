@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-06-27
+
+### Added
+- System monitoring dashboard as homepage with CPU, memory, goroutines, and uptime
+- Access log aggregate view with group-by and drill-down filtering
+- Access log auto-cleanup with configurable retention period
+- Manual log purge button in settings page
+- Route name column in route directory table and access log entries
+- Static file serving for routes
+- Friendly 404 pages for unmatched routes
+- Friendly 502 page for browser requests when backend is unreachable
+
+### Changed
+- Rewrite Windows installer to match Linux feature parity
+- Redesign Select dropdown component
+- Add UI spacing and progress bar component
+
+### Fixed
+- Resolve route name from router for old logs, add name uniqueness enforcement
+
+### Docs
+- Move design screenshots into docs/designs folder
+
 ## [0.0.4] - 2026-06-26
 
 ### Fixed
@@ -44,7 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker support
 - GitHub Actions CI/CD pipeline
 
-[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/pallyoung/auth-gate/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/pallyoung/auth-gate/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/pallyoung/auth-gate/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/pallyoung/auth-gate/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/pallyoung/auth-gate/compare/v0.0.1...v0.0.2
