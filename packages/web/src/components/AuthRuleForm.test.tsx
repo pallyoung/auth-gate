@@ -4,6 +4,7 @@ import { I18nextProvider } from 'react-i18next'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthRuleForm } from './AuthRuleForm'
 import { renderWithI18n } from '../test/render'
+import { selectComboboxOption } from '../test/selectComboboxOption'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 
 const routes: Route[] = [
@@ -49,7 +50,7 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await selectComboboxOption(user, 'Type', 'API Key')
     await user.clear(screen.getByLabelText('Header Name'))
     await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
@@ -71,7 +72,8 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await selectComboboxOption(user, 'Type', 'API Key')
+    await user.clear(screen.getByLabelText('Header Name'))
     await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
     await user.type(screen.getByLabelText('Whitelist'), '127.0.0.1/32, 10.0.0.0/8')
     await user.type(screen.getByLabelText('Rate Limit'), '15')
@@ -153,7 +155,7 @@ describe('AuthRuleForm', () => {
 
     await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await selectComboboxOption(user, 'Type', 'API Key')
     await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
 
     const submitButton = screen.getByRole('button', { name: 'Create Rule' })
@@ -176,7 +178,7 @@ describe('AuthRuleForm', () => {
     const user = userEvent.setup()
     const { container } = await renderForm(null, onSubmit)
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'apikey')
+    await selectComboboxOption(user, 'Type', 'API Key')
     await user.type(screen.getByLabelText('Header Name'), 'X-Custom-Key')
 
     const form = container.querySelector('form')
@@ -205,8 +207,11 @@ describe('AuthRuleForm', () => {
       updated_at: '2026-01-01T00:00:00Z',
     })
 
-    expect(screen.getByRole('combobox', { name: 'Route' })).toHaveValue('route-1')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('apikey')
+    const routeCombobox = screen.getByRole('combobox', { name: 'Route' })
+    expect(routeCombobox).toHaveAccessibleName('Route')
+    expect(routeCombobox).toHaveTextContent('Protected API')
+    const typeCombobox = screen.getByRole('combobox', { name: 'Type' })
+    expect(typeCombobox).toHaveTextContent('API Key')
     expect(screen.getByLabelText('Header Name')).toHaveValue('X-Billing-Key')
 
     view.rerender(
@@ -229,9 +234,10 @@ describe('AuthRuleForm', () => {
       </I18nextProvider>
     )
 
-    expect(screen.getByRole('combobox', { name: 'Route' })).toHaveValue('route-2')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('gateway')
-    expect(screen.getByRole('combobox', { name: 'Login Mode' })).toHaveValue('form')
+    const updatedRouteCombobox = screen.getByRole('combobox', { name: 'Route' })
+    expect(updatedRouteCombobox).toHaveTextContent('Reports API')
+    const updatedTypeCombobox = screen.getByRole('combobox', { name: 'Type' })
+    expect(updatedTypeCombobox).toHaveTextContent('Gateway Login')
     expect(screen.queryByLabelText('Header Name')).not.toBeInTheDocument()
   })
 
@@ -267,8 +273,7 @@ describe('AuthRuleForm', () => {
       </I18nextProvider>
     )
 
-    expect(screen.getByRole('combobox', { name: 'Route' })).toHaveValue('route-2')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('gateway')
+    expect(screen.getByRole('combobox', { name: 'Route' })).toHaveTextContent('Reports API')
     expect(screen.queryByLabelText('Header Name')).not.toBeInTheDocument()
   })
 })

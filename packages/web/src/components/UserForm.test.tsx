@@ -107,7 +107,7 @@ describe('UserForm', () => {
     )
 
     expect(screen.getByLabelText('Username')).toHaveValue('alice')
-    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('member')
+    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Member')
     expect(screen.getByRole('checkbox', { name: /enabled/i, hidden: true })).toBeChecked()
 
     view.rerender(
@@ -117,7 +117,7 @@ describe('UserForm', () => {
     )
 
     expect(screen.getByLabelText('Username')).toHaveValue('bob')
-    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('admin')
+    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Admin')
     expect(screen.getByRole('checkbox', { name: /enabled/i, hidden: true })).not.toBeChecked()
   })
 
@@ -145,7 +145,7 @@ describe('UserForm', () => {
     )
 
     expect(screen.getByLabelText('Username')).toHaveValue('alice-updated')
-    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('admin')
+    expect(screen.getByRole('combobox', { name: 'Role' })).toHaveTextContent('Admin')
     expect(screen.getByRole('checkbox', { name: /enabled/i, hidden: true })).not.toBeChecked()
   })
 })

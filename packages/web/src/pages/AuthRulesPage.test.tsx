@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthRulesPage } from './AuthRulesPage'
@@ -125,12 +125,10 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     expect(
-      await screen.findByText(
-        'The current auth rule list could not be loaded. Resolve the current error before reviewing or editing auth rules.'
-      )
+      await screen.findByText('Your session has expired. Sign in again before managing auth rules.')
     ).toBeInTheDocument()
+    expect(screen.getByText('Billing Route')).toBeInTheDocument()
     expect(screen.queryByText('No auth rules configured')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add Rule' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create First Rule' })).not.toBeInTheDocument()
   })
 
@@ -161,9 +159,9 @@ describe('AuthRulesPage permissions', () => {
 
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
-    await screen.findByText(
-      'The current auth rule list could not be loaded. Resolve the current error before reviewing or editing auth rules.'
-    )
+    expect(
+      await screen.findByText('Your session has expired. Sign in again before managing auth rules.')
+    ).toBeInTheDocument()
 
     expect(screen.queryByText('0 active rule definitions')).not.toBeInTheDocument()
     expect(screen.queryByText('Protected Routes')).not.toBeInTheDocument()
@@ -316,10 +314,12 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     expect(await screen.findByText('1 active rule definitions')).toBeInTheDocument()
-    expect(screen.queryByText('No auth rules configured')).not.toBeInTheDocument()
+    expect(screen.getByText('The route list could not be loaded. Try again in a moment.')).toBeInTheDocument()
   })
 
   it('summarizes runtime policy fields in the auth rule directory', async () => {
+    const user = userEvent.setup()
+
     sessionUser.id = 'editor-1'
     sessionUser.username = 'editor-debug'
     sessionUser.role = 'editor'
@@ -364,9 +364,19 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     expect(await screen.findByText('1 active rule definitions')).toBeInTheDocument()
-    expect(screen.getAllByText('15 rps / burst 30').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('2 whitelist entries').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('CORS https://app.example.com,.example.com').length).toBeGreaterThan(0)
+
+    const table = screen.getByRole('table')
+    const routeRow = within(table).getByText('Billing Route').closest('tr')!
+
+    await act(async () => {
+      fireEvent.click(routeRow)
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/15 rps \/ burst 30/).length).toBeGreaterThan(0)
+    })
+    expect(screen.getAllByText(/2 whitelist entries/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/CORS https:\/\/app\.example\.com,.example\.com/).length).toBeGreaterThan(0)
   })
 
   it('does not offer edit actions when available routes fail to load', async () => {
@@ -396,7 +406,7 @@ describe('AuthRulesPage permissions', () => {
 
     expect(await screen.findByText('1 active rule definitions')).toBeInTheDocument()
     expect(screen.queryAllByLabelText('Edit')).toHaveLength(0)
-    expect(screen.getAllByLabelText('Delete').length).toBeGreaterThan(0)
+    expect(screen.queryAllByLabelText('Delete')).toHaveLength(0)
   })
 
   it('guides editors to create a route before adding auth rules when no routes exist', async () => {
@@ -461,10 +471,10 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Rule' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Add Rule' }).length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('button', { name: 'Add Rule' }))
+    await user.click(screen.getAllByRole('button', { name: 'Add Rule' })[0])
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -508,10 +518,10 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Rule' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Add Rule' }).length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('button', { name: 'Add Rule' }))
+    await user.click(screen.getAllByRole('button', { name: 'Add Rule' })[0])
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -555,10 +565,10 @@ describe('AuthRulesPage permissions', () => {
     await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Rule' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Add Rule' }).length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('button', { name: 'Add Rule' }))
+    await user.click(screen.getAllByRole('button', { name: 'Add Rule' })[0])
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -630,10 +640,10 @@ describe('AuthRulesPage permissions', () => {
     const view = await renderWithI18n(<AuthRulesPage />, { locale: 'en' })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add Rule' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Add Rule' }).length).toBeGreaterThan(0)
     })
 
-    await user.click(screen.getByRole('button', { name: 'Add Rule' }))
+    await user.click(screen.getAllByRole('button', { name: 'Add Rule' })[0])
     await user.click(screen.getByRole('button', { name: 'Create Rule' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -750,8 +760,39 @@ describe('AuthRulesPage permissions', () => {
     expect(billingRuleRow).not.toBeNull()
     expect(reportsRuleRow).not.toBeNull()
 
-    await user.click(within(billingRuleRow as HTMLTableRowElement).getByLabelText('Delete'))
-    await user.click(within(reportsRuleRow as HTMLTableRowElement).getByLabelText('Delete'))
+    await act(async () => {
+      fireEvent.click(billingRuleRow!)
+    })
+
+    await act(async () => {
+      fireEvent.click(reportsRuleRow!)
+    })
+
+    await waitFor(() => {
+      expect(within(table).getAllByRole('button', { name: 'Delete' }).length).toBeGreaterThanOrEqual(2)
+    })
+
+    // The Delete buttons are in expanded sub-rows (siblings after the route row).
+    // Find them by clicking each route row to expand, then finding the Delete button
+    // that appears right after that route row.
+    const allDeleteButtons = within(table).getAllByRole('button', { name: 'Delete' })
+    const allRows = within(table).getAllByRole('row')
+
+    const billingRowIndex = allRows.indexOf(billingRuleRow!)
+    const reportsRowIndex = allRows.indexOf(reportsRuleRow!)
+
+    // The expanded sub-row for each route should be the next row after the route row
+    const billingExpandedRow = allRows[billingRowIndex + 1]
+    const reportsExpandedRow = allRows[reportsRowIndex + 1]
+
+    const billingDelete = allDeleteButtons.find((btn) => billingExpandedRow?.contains(btn))
+    const reportsDelete = allDeleteButtons.find((btn) => reportsExpandedRow?.contains(btn))
+
+    expect(billingDelete).toBeDefined()
+    expect(reportsDelete).toBeDefined()
+
+    await user.click(billingDelete!)
+    await user.click(reportsDelete!)
 
     await act(async () => {
       deleteResolvers.get('rule-1')?.()

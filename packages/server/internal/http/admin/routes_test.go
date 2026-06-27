@@ -1082,7 +1082,7 @@ func TestRegisterRoutes_CreateAuthRuleRedactsSecrets(t *testing.T) {
 
 	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/auth-rules", token, map[string]any{
 		"route_id": "route-1",
-		"type":     "bearer",
+		"type":     "apikey",
 		"config": map[string]any{
 			"secret": "shared-secret",
 		},
@@ -1114,7 +1114,7 @@ func TestRegisterRoutes_CreateAuthRulePersistsAndReturnsRuntimePolicyFields(t *t
 
 	resp := performRequest(t, engine, http.MethodPost, "/_authgate/api/auth-rules", token, map[string]any{
 		"route_id": "route-1",
-		"type":     "bearer",
+		"type":     "apikey",
 		"config": map[string]any{
 			"secret": "shared-secret",
 		},

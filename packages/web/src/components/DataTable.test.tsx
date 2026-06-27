@@ -43,13 +43,13 @@ describe('DataTable i18n', () => {
     )
 
     for (const button of screen.getAllByLabelText('Edit')) {
-      expect(button).toHaveClass('h-11')
-      expect(button).toHaveClass('w-11')
+      expect(button).toHaveClass('h-9')
+      expect(button).toHaveClass('w-9')
     }
 
     for (const button of screen.getAllByLabelText('Delete')) {
-      expect(button).toHaveClass('h-11')
-      expect(button).toHaveClass('w-11')
+      expect(button).toHaveClass('h-9')
+      expect(button).toHaveClass('w-9')
     }
   })
 

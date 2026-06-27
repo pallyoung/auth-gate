@@ -115,10 +115,10 @@ export function LoginPage({
             </div>
 
             <h1 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-              Auth Gate
+              {t('card.title')}
             </h1>
             <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              API Gateway Management
+              {t('card.description')}
             </p>
           </div>
 
@@ -133,7 +133,7 @@ export function LoginPage({
             )}
 
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <label htmlFor="login-username" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 {t('fields.username')}
               </label>
               <div className="relative">
@@ -141,6 +141,7 @@ export function LoginPage({
                   <User className="h-4 w-4" />
                 </div>
                 <input
+                  id="login-username"
                   type="text"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
@@ -153,7 +154,7 @@ export function LoginPage({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <label htmlFor="login-password" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 {t('fields.password')}
               </label>
               <div className="relative">
@@ -161,6 +162,7 @@ export function LoginPage({
                   <Lock className="h-4 w-4" />
                 </div>
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -196,7 +198,7 @@ export function LoginPage({
               loading={loading}
             >
               <span className="flex items-center justify-center gap-2">
-                SIGN IN
+                {t('card.submit')}
                 <ArrowRight className="h-4 w-4" />
               </span>
             </Button>

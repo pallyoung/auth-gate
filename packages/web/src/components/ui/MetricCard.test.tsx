@@ -22,11 +22,11 @@ describe('MetricCard', () => {
     )
 
     expect(screen.getByTestId('warning-icon').parentElement).toHaveClass(
-      'from-[var(--warning-light)]',
+      'bg-[var(--bg-hover)]',
       'text-[var(--warning)]'
     )
     expect(screen.getByTestId('error-icon').parentElement).toHaveClass(
-      'from-[var(--error-light)]',
+      'bg-[var(--bg-hover)]',
       'text-[var(--error)]'
     )
   })

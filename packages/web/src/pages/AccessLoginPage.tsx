@@ -159,7 +159,7 @@ export function AccessLoginPage({ searchParams }: AccessLoginPageProps) {
             )}
 
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <label htmlFor="access-login-username" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 {t('fields.username')}
               </label>
               <div className="relative">
@@ -167,6 +167,7 @@ export function AccessLoginPage({ searchParams }: AccessLoginPageProps) {
                   <User className="h-4 w-4" />
                 </div>
                 <input
+                  id="access-login-username"
                   type="text"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
@@ -179,7 +180,7 @@ export function AccessLoginPage({ searchParams }: AccessLoginPageProps) {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <label htmlFor="access-login-password" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 {t('fields.password')}
               </label>
               <div className="relative">
@@ -187,6 +188,7 @@ export function AccessLoginPage({ searchParams }: AccessLoginPageProps) {
                   <Lock className="h-4 w-4" />
                 </div>
                 <input
+                  id="access-login-password"
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}

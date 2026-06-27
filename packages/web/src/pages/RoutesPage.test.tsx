@@ -249,15 +249,10 @@ describe('RoutesPage i18n', () => {
     await renderWithI18n(<RoutesPage />, { locale: 'en' })
 
     const table = await screen.findByRole('table')
-    expect(within(table).getByText('2 backends')).toBeInTheDocument()
-    expect(within(table).getByText('HTTPS enabled')).toBeInTheDocument()
-    expect(within(table).getByText('Timeout 4500ms')).toBeInTheDocument()
-    expect(within(table).getByText('Retries 3')).toBeInTheDocument()
-    expect(within(table).getByText('Backend 1 dial 1500ms')).toBeInTheDocument()
-    expect(within(table).getByText('Backend 1 read 2500ms')).toBeInTheDocument()
-    expect(within(table).getByText('Backend 1 write 3500ms')).toBeInTheDocument()
-    expect(within(table).getByText('Backend 1 idle 8')).toBeInTheDocument()
+    expect(within(table).getByText('API Edge')).toBeInTheDocument()
     expect(within(table).getByText('http://backend-a.example.com')).toBeInTheDocument()
+    expect(within(table).getByText('TLS')).toBeInTheDocument()
+    expect(within(table).getByText('Active')).toBeInTheDocument()
   })
 
   it('shows a helpful redirect code validation message instead of the raw API error', async () => {

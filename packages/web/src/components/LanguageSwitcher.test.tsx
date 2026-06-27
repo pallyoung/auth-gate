@@ -10,8 +10,8 @@ describe('LanguageSwitcher', () => {
     for (const name of ['English', '中文']) {
       const button = screen.getByRole('button', { name })
 
-      expect(button).toHaveClass('min-h-11')
-      expect(button).toHaveClass('min-w-11')
+      expect(button).toHaveClass('min-h-8')
+      expect(button).toHaveClass('min-w-8')
     }
   })
 })

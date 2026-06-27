@@ -111,7 +111,7 @@ describe('App', () => {
 
     await renderWithI18n(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in to the control plane' })).not.toBeInTheDocument()
     expect(localStorage.getItem('token')).toBe('token-123')
   })
@@ -158,8 +158,7 @@ describe('App', () => {
 
     await renderWithI18n(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith('/_authgate/api/routes', expect.anything())
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in to the control plane' })).not.toBeInTheDocument()
   })
 
@@ -220,7 +219,7 @@ describe('App', () => {
 
     await renderWithI18n(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     expect(window.location.hash).toBe('#/')
     expect(screen.queryByText('User management is unavailable for your account.')).not.toBeInTheDocument()
   })
@@ -303,7 +302,7 @@ describe('App', () => {
     expect(window.location.hash).toBe('#/users')
   })
 
-  it('normalizes unknown control-plane routes back to routes', async () => {
+  it('shows the 404 page for unknown control-plane routes', async () => {
     localStorage.setItem('token', 'token-123')
     localStorage.setItem('auth-gate.session-user', JSON.stringify({
       id: 'user-1',
@@ -360,8 +359,7 @@ describe('App', () => {
 
     await renderWithI18n(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeInTheDocument()
-    expect(window.location.hash).toBe('#/')
+    expect(await screen.findByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument()
   })
 
   it('returns to the login page when another tab clears the active session', async () => {
@@ -420,7 +418,7 @@ describe('App', () => {
 
     await renderWithI18n(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Routes' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
 
     localStorage.removeItem('token')
     localStorage.removeItem('auth-gate.session-user')

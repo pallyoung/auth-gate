@@ -36,8 +36,8 @@ describe('Modal', () => {
 
     const closeButton = screen.getByRole('button', { name: 'Close modal' })
 
-    expect(closeButton).toHaveClass('h-11')
-    expect(closeButton).toHaveClass('w-11')
+    expect(closeButton).toHaveClass('h-9')
+    expect(closeButton).toHaveClass('w-9')
   })
 
   it('keeps focus trapped inside the dialog when tabbing past the last control', async () => {

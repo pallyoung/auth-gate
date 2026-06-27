@@ -4,6 +4,7 @@ import { I18nextProvider } from 'react-i18next'
 import { describe, expect, it, vi } from 'vitest'
 import { RouteForm } from './RouteForm'
 import { renderWithI18n } from '../test/render'
+import { selectComboboxOption } from '../test/selectComboboxOption'
 import type { Route } from '../lib/api/types'
 
 const billingRoute: Route = {
@@ -95,7 +96,7 @@ describe('RouteForm', () => {
     expect(pathPrefixInput).toHaveAttribute('placeholder', '/api/v1 or empty to match all')
     expect(screen.getByText('Leave empty to match all paths.')).toBeInTheDocument()
 
-    await user.selectOptions(pathMatchModeSelect, 'regex')
+    await selectComboboxOption(user, 'Path Match Mode', 'Regex (~)')
 
     expect(pathPrefixInput).toHaveAttribute('placeholder', '^/api/v\\d+')
     expect(
@@ -270,7 +271,7 @@ describe('RouteForm', () => {
     await user.clear(screen.getByLabelText('Retry Attempts'))
     await user.type(screen.getByLabelText('Retry Attempts'), '3')
     await user.click(screen.getByLabelText('Enable HTTPS'))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'System Certificate' }), 'cert-1')
+    await selectComboboxOption(user, 'System Certificate', 'API Cert (api.example.com)')
     await user.click(screen.getByRole('button', { name: 'Create Route' }))
 
     await waitFor(() => {
@@ -335,8 +336,8 @@ describe('RouteForm', () => {
     expect(screen.getByLabelText('Host')).toHaveValue('reports.example.com')
     expect(screen.getByLabelText('Path Prefix')).toHaveValue('/reports')
     expect(screen.getByLabelText('Backend')).toHaveValue('https://reports.internal')
-    expect(screen.getByRole('combobox', { name: 'Path Match Mode' })).toHaveValue('exact')
-    expect(screen.getByRole('combobox', { name: 'Redirect Code' })).toHaveValue('301')
+    expect(screen.getByRole('combobox', { name: 'Path Match Mode' })).toHaveTextContent('Exact (=)')
+    expect(screen.getByRole('combobox', { name: 'Redirect Code' })).toHaveTextContent('301')
   })
 
   it('refreshes form fields when the same route receives updated values while the form stays mounted', async () => {

@@ -66,6 +66,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	routeSvc := routesservice.NewService(db, routerMgr, certSvc)
 	userSvc := usersservice.NewService(db)
 	accessLogSvc := accesslogservice.NewService(accessLogStore)
+	authRuleSvc := authrulesservice.NewService(db, nil)
 
 	group.POST("/auth/logout", logoutHandler())
 	group.GET("/auth/me", meHandler(db, certSvc))
@@ -79,6 +80,10 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	group.GET("/routes/:id", getRoute(routeSvc))
 	group.GET("/route-auth-config/:routeId", getRouteAuthConfig(db))
 	group.GET("/route-api-keys/:routeId", listApiKeys(db))
+
+	// Auth rule endpoints
+	group.GET("/auth-rules", listAuthRules(authRuleSvc))
+	group.GET("/auth-rules/:id", getAuthRule(authRuleSvc))
 
 	// Access log endpoints - available to any authenticated user
 	if accessLogStore != nil {
@@ -108,6 +113,9 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 		editor.POST("/routes", createRoute(routeSvc))
 		editor.PUT("/routes/:id", updateRoute(routeSvc))
 		editor.DELETE("/routes/:id", deleteRoute(routeSvc))
+		editor.POST("/auth-rules", createAuthRule(authRuleSvc))
+		editor.PUT("/auth-rules/:id", updateAuthRule(authRuleSvc))
+		editor.DELETE("/auth-rules/:id", deleteAuthRule(authRuleSvc))
 
 		editor.PUT("/route-auth-config/:routeId", updateRouteAuthConfig(db, routerMgr))
 		editor.DELETE("/route-auth-config/:routeId", deleteRouteAuthConfig(db, routerMgr))
@@ -395,7 +403,11 @@ func listAuthRules(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, dto.AuthRuleListResponse(rules))
+		resp := dto.AuthRuleListResponse(rules)
+		for i := range resp {
+			resp[i].Config.Secret = ""
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
@@ -406,7 +418,9 @@ func getAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, dto.AuthRuleResponse(*rule))
+		resp := dto.AuthRuleResponse(*rule)
+		resp.Config.Secret = ""
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
@@ -476,7 +490,9 @@ func updateAuthRule(authRuleSvc *authrulesservice.Service) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, dto.AuthRuleResponse(*rule))
+		resp := dto.AuthRuleResponse(*rule)
+		resp.Config.Secret = ""
+		c.JSON(http.StatusOK, resp)
 	}
 }
 

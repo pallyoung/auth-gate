@@ -21,6 +21,13 @@ Object.defineProperty(globalThis, 'matchMedia', {
   }),
 })
 
+// jsdom does not implement scrollIntoView; the custom Select component calls it
+// on the active option element when the dropdown opens. Provide a no-op so the
+// component does not throw in tests.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn()
+}
+
 const { cleanup } = await import('@testing-library/react')
 
 const storage = new Map<string, string>()
