@@ -73,9 +73,9 @@ jobs:
           cache-dependency-path: packages/server/go.sum
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.12.2
           working-directory: packages/server
 
       - name: Setup Node.js

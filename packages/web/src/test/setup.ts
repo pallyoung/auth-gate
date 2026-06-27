@@ -7,6 +7,20 @@ declare const process: {
 
 process.env.NODE_ENV = 'test'
 
+Object.defineProperty(globalThis, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+})
+
 const { cleanup } = await import('@testing-library/react')
 
 const storage = new Map<string, string>()
