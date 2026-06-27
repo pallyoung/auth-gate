@@ -19,31 +19,37 @@ type Features struct {
 }
 
 type User struct {
-	ID          string       `json:"id"`
-	Username    string       `json:"username"`
-	Role        string       `json:"role"`
-	Enabled     *bool        `json:"enabled,omitempty"`
-	RouteIDs    []string     `json:"route_ids,omitempty"`
-	CreatedAt   *time.Time   `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time   `json:"updated_at,omitempty"`
-	Permissions *Permissions `json:"permissions,omitempty"`
-	Features    *Features    `json:"features,omitempty"`
+	ID          string              `json:"id"`
+	Username    string              `json:"username"`
+	Role        string              `json:"role"`
+	Enabled     *bool               `json:"enabled,omitempty"`
+	RouteIDs    []string            `json:"route_ids,omitempty"`
+	GroupIDs    []string            `json:"group_ids,omitempty"`
+	RoutePaths  map[string][]string `json:"route_paths,omitempty"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	UpdatedAt   *time.Time          `json:"updated_at,omitempty"`
+	Permissions *Permissions        `json:"permissions,omitempty"`
+	Features    *Features           `json:"features,omitempty"`
 }
 
 type UserCreateRequest struct {
-	Username string   `json:"username" binding:"required"`
-	Password string   `json:"password" binding:"required"`
-	Role     string   `json:"role"`
-	Enabled  *bool    `json:"enabled,omitempty"`
-	RouteIDs []string `json:"route_ids,omitempty"`
+	Username   string              `json:"username" binding:"required"`
+	Password   string              `json:"password" binding:"required"`
+	Role       string              `json:"role"`
+	Enabled    *bool               `json:"enabled,omitempty"`
+	RouteIDs   []string            `json:"route_ids,omitempty"`
+	GroupIDs   []string            `json:"group_ids,omitempty"`
+	RoutePaths map[string][]string `json:"route_paths,omitempty"`
 }
 
 type UserUpdateRequest struct {
-	Username *string   `json:"username,omitempty"`
-	Password string    `json:"password,omitempty"`
-	Role     *string   `json:"role,omitempty"`
-	Enabled  *bool     `json:"enabled,omitempty"`
-	RouteIDs *[]string `json:"route_ids,omitempty"`
+	Username   *string             `json:"username,omitempty"`
+	Password   string              `json:"password,omitempty"`
+	Role       *string             `json:"role,omitempty"`
+	Enabled    *bool               `json:"enabled,omitempty"`
+	RouteIDs   *[]string           `json:"route_ids,omitempty"`
+	GroupIDs   *[]string           `json:"group_ids,omitempty"`
+	RoutePaths *map[string][]string `json:"route_paths,omitempty"`
 }
 
 func UserResponse(user store.User) User {
@@ -51,13 +57,15 @@ func UserResponse(user store.User) User {
 	updatedAt := user.UpdatedAt
 	enabled := user.Enabled
 	return User{
-		ID:        user.ID,
-		Username:  user.Username,
-		Role:      user.Role,
-		Enabled:   &enabled,
-		RouteIDs:  user.RouteIDs,
-		CreatedAt: &createdAt,
-		UpdatedAt: &updatedAt,
+		ID:         user.ID,
+		Username:   user.Username,
+		Role:       user.Role,
+		Enabled:    &enabled,
+		RouteIDs:   user.RouteIDs,
+		GroupIDs:   user.GroupIDs,
+		RoutePaths: user.RoutePaths,
+		CreatedAt:  &createdAt,
+		UpdatedAt:  &updatedAt,
 	}
 }
 

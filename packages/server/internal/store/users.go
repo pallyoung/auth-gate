@@ -8,14 +8,16 @@ import (
 )
 
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"password_hash"`
-	Role         string    `json:"role"`
-	Enabled      bool      `json:"enabled"`
-	RouteIDs     []string  `json:"route_ids,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string              `json:"id"`
+	Username     string              `json:"username"`
+	PasswordHash string              `json:"password_hash"`
+	Role         string              `json:"role"`
+	Enabled      bool                `json:"enabled"`
+	RouteIDs     []string            `json:"route_ids,omitempty"`
+	GroupIDs     []string            `json:"group_ids,omitempty"`
+	RoutePaths   map[string][]string `json:"route_paths,omitempty"`
+	CreatedAt    time.Time           `json:"created_at"`
+	UpdatedAt    time.Time           `json:"updated_at"`
 }
 
 const (
@@ -66,6 +68,42 @@ func UserHasRouteAccess(user *User, routeID string) bool {
 	for _, allowedRouteID := range user.RouteIDs {
 		if allowedRouteID == routeID {
 			return true
+		}
+	}
+	return false
+}
+
+func UserHasPathAccess(user *User, routeID, requestPath string) bool {
+	if user == nil || !user.Enabled {
+		return false
+	}
+	if user.Role == RoleAdmin {
+		return true
+	}
+	allowedPaths, ok := user.RoutePaths[routeID]
+	if !ok || len(allowedPaths) == 0 {
+		return true // 未配置path限制 → 该路由全量放行
+	}
+	return matchAllowedPaths(allowedPaths, requestPath)
+}
+
+func matchAllowedPaths(allowedPaths []string, requestPath string) bool {
+	for _, p := range allowedPaths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if p == "*" {
+			return true
+		}
+		if p == requestPath {
+			return true
+		}
+		if strings.HasSuffix(p, "/*") {
+			prefix := strings.TrimSuffix(p, "/*")
+			if strings.HasPrefix(requestPath, prefix+"/") || requestPath == prefix {
+				return true
+			}
 		}
 	}
 	return false

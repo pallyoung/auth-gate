@@ -321,7 +321,7 @@ func TestRouteAccessClaims_RejectsDisabledUser(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	token, err := auth.GenerateRouteAccessToken(user.ID, user.Username, user.Role, user.RouteIDs)
+	token, err := auth.GenerateRouteAccessToken(user.ID, user.Username, user.Role, user.RouteIDs, nil)
 	if err != nil {
 		t.Fatalf("GenerateRouteAccessToken() error = %v", err)
 	}

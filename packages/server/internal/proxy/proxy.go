@@ -523,6 +523,16 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			// Gateway 登录认证
 			if !authenticated && cfg.GatewayEnabled {
 				if claims, ok := routeAccessClaims(c, routerMgr.DB()); ok && routeAllowedByClaims(claims, route.ID) {
+					if !pathAllowedByClaims(claims, route.ID, path) {
+						c.JSON(http.StatusForbidden, httpresponse.ErrorEnvelope{
+							Error: httpresponse.ErrorDetail{
+								Code:    "path_access_denied",
+								Message: "access to this path is not allowed",
+							},
+						})
+						c.Abort()
+						return
+					}
 					authenticated = true
 				}
 			}
@@ -997,6 +1007,35 @@ func routeAllowedByClaims(claims *auth.Claims, routeID string) bool {
 	for _, id := range claims.RouteIDs {
 		if id == routeID {
 			return true
+		}
+	}
+	return false
+}
+
+func pathAllowedByClaims(claims *auth.Claims, routeID, requestPath string) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.Role == "admin" {
+		return true
+	}
+	allowedPaths, ok := claims.RoutePaths[routeID]
+	if !ok || len(allowedPaths) == 0 {
+		return true
+	}
+	for _, p := range allowedPaths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if p == "*" || p == requestPath {
+			return true
+		}
+		if strings.HasSuffix(p, "/*") {
+			prefix := strings.TrimSuffix(p, "/*")
+			if strings.HasPrefix(requestPath, prefix+"/") || requestPath == prefix {
+				return true
+			}
 		}
 	}
 	return false

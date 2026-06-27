@@ -222,3 +222,14 @@ type HostEntry struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// PermissionGroup is a named set of per-route path permissions that can be
+// assigned to multiple users, avoiding repetitive per-user configuration.
+type PermissionGroup struct {
+	ID         string              `json:"id"`
+	Name       string              `json:"name"`
+	RouteIDs   []string            `json:"route_ids,omitempty"`  // routes this group grants access to
+	RoutePaths map[string][]string `json:"route_paths"`          // routeID -> allowed paths
+	CreatedAt  time.Time           `json:"created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+}

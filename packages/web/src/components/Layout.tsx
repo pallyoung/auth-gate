@@ -2,6 +2,7 @@ import React from 'react'
 import {
   FileKey,
   KeyRound,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -109,6 +110,13 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
         icon: Users,
         label: t('sections.users.label'),
         description: t('sections.users.description'),
+        visible: user?.permissions?.can_manage_users === true,
+      },
+      {
+        path: '/groups',
+        icon: Layers,
+        label: t('sections.groups.label'),
+        description: t('sections.groups.description'),
         visible: user?.permissions?.can_manage_users === true,
       },
       {

@@ -38,6 +38,10 @@ export const layoutEn = {
       label: 'Users',
       description: 'Directory and access',
     },
+    groups: {
+      label: 'Permission Groups',
+      description: 'Reusable path access sets',
+    },
     settings: {
       label: 'Settings',
       description: 'Runtime operations',
@@ -88,6 +92,10 @@ export const layoutZhCN = {
     users: {
       label: '用户',
       description: '目录与访问',
+    },
+    groups: {
+      label: '权限组',
+      description: '可复用的路径访问集',
     },
     settings: {
       label: '设置',

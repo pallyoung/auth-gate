@@ -122,10 +122,29 @@ func (s *Service) LoginForRoute(routeID, username, password string) (*RouteSessi
 		return nil, newError(ErrCodeInvalidCredentials, "invalid credentials", nil)
 	}
 	if !store.UserHasRouteAccess(user, routeID) {
-		return nil, newError(ErrCodeRouteAccessDenied, "route access denied", nil)
+		// Also check if any of the user's groups grant access to this route
+		groups, _ := s.db.GetPermissionGroupsByIDs(user.GroupIDs)
+		groupAllowed := false
+		for _, g := range groups {
+			for _, rid := range g.RouteIDs {
+				if rid == routeID {
+					groupAllowed = true
+					break
+				}
+			}
+			if groupAllowed {
+				break
+			}
+		}
+		if !groupAllowed {
+			return nil, newError(ErrCodeRouteAccessDenied, "route access denied", nil)
+		}
 	}
 
-	token, err := auth.GenerateRouteAccessToken(user.ID, user.Username, user.Role, user.RouteIDs)
+	effectiveRouteIDs := buildEffectiveRouteIDs(s.db, user)
+	effectivePaths := buildEffectivePaths(s.db, user)
+
+	token, err := auth.GenerateRouteAccessToken(user.ID, user.Username, user.Role, effectiveRouteIDs, effectivePaths)
 	if err != nil {
 		return nil, newError(ErrCodeTokenGeneration, "failed to generate token", err)
 	}
@@ -134,4 +153,86 @@ func (s *Service) LoginForRoute(routeID, username, password string) (*RouteSessi
 		Token: token,
 		User:  *user,
 	}, nil
+}
+
+// buildEffectiveRouteIDs merges user's personal RouteIDs with all assigned
+// permission groups' RouteIDs into a deduplicated slice.
+func buildEffectiveRouteIDs(db store.Store, user *store.User) []string {
+	if user.Role == store.RoleAdmin {
+		return user.RouteIDs
+	}
+
+	seen := make(map[string]struct{})
+	var result []string
+	for _, id := range user.RouteIDs {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			result = append(result, id)
+		}
+	}
+
+	if len(user.GroupIDs) > 0 {
+		groups, err := db.GetPermissionGroupsByIDs(user.GroupIDs)
+		if err == nil {
+			for _, g := range groups {
+				for _, id := range g.RouteIDs {
+					if _, ok := seen[id]; !ok {
+						seen[id] = struct{}{}
+						result = append(result, id)
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// buildEffectivePaths merges user's personal RoutePaths with all assigned
+// permission groups' RoutePaths into a single map (union).
+func buildEffectivePaths(db store.Store, user *store.User) map[string][]string {
+	if user.Role == store.RoleAdmin {
+		return nil
+	}
+
+	merged := make(map[string][]string)
+
+	// Merge group paths first
+	if len(user.GroupIDs) > 0 {
+		groups, err := db.GetPermissionGroupsByIDs(user.GroupIDs)
+		if err == nil {
+			for _, g := range groups {
+				for routeID, paths := range g.RoutePaths {
+					merged[routeID] = append(merged[routeID], paths...)
+				}
+			}
+		}
+	}
+
+	// Merge user's personal paths
+	for routeID, paths := range user.RoutePaths {
+		merged[routeID] = append(merged[routeID], paths...)
+	}
+
+	// Dedup each route's paths
+	for routeID, paths := range merged {
+		merged[routeID] = dedup(paths)
+	}
+
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func dedup(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			result = append(result, p)
+		}
+	}
+	return result
 }

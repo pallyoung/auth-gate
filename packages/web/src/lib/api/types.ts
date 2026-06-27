@@ -25,6 +25,8 @@ export interface User {
   role: string
   enabled?: boolean
   route_ids?: string[]
+  group_ids?: string[]
+  route_paths?: Record<string, string[]>
   created_at?: string
   updated_at?: string
 }
@@ -35,6 +37,23 @@ export interface UserInput {
   role: string
   enabled: boolean
   route_ids: string[]
+  group_ids?: string[]
+  route_paths?: Record<string, string[]>
+}
+
+export interface PermissionGroup {
+  id: string
+  name: string
+  route_ids?: string[]
+  route_paths: Record<string, string[]>
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PermissionGroupInput {
+  name: string
+  route_ids?: string[]
+  route_paths?: Record<string, string[]>
 }
 
 export interface Route {

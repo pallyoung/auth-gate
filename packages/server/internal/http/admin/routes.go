@@ -23,6 +23,7 @@ import (
 	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
+	groupsservice "github.com/pallyoung/auth-gate/packages/server/internal/service/groups"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
 	sessionservice "github.com/pallyoung/auth-gate/packages/server/internal/service/session"
 	systemservice "github.com/pallyoung/auth-gate/packages/server/internal/service/system"
@@ -67,6 +68,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	userSvc := usersservice.NewService(db)
 	accessLogSvc := accesslogservice.NewService(accessLogStore)
 	authRuleSvc := authrulesservice.NewService(db, nil)
+	groupSvc := groupsservice.NewService(db)
 
 	group.POST("/auth/logout", logoutHandler())
 	group.GET("/auth/me", meHandler(db, certSvc))
@@ -141,6 +143,13 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
 		adminOnly.DELETE("/users/:id", deleteUser(userSvc))
+
+		adminOnly.GET("/permission-groups", listPermissionGroups(groupSvc))
+		adminOnly.GET("/permission-groups/:id", getPermissionGroup(groupSvc))
+		adminOnly.POST("/permission-groups", createPermissionGroup(groupSvc))
+		adminOnly.PUT("/permission-groups/:id", updatePermissionGroup(groupSvc))
+		adminOnly.DELETE("/permission-groups/:id", deletePermissionGroup(groupSvc))
+
 		adminOnly.GET("/metrics", metricsHandler())
 
 		if hostSvc != nil {
@@ -526,11 +535,13 @@ func createUser(userSvc *usersservice.Service) gin.HandlerFunc {
 		}
 
 		user, err := userSvc.Create(usersservice.CreateInput{
-			Username: req.Username,
-			Password: req.Password,
-			Role:     req.Role,
-			Enabled:  req.Enabled == nil || *req.Enabled,
-			RouteIDs: req.RouteIDs,
+			Username:   req.Username,
+			Password:   req.Password,
+			Role:       req.Role,
+			Enabled:    req.Enabled == nil || *req.Enabled,
+			RouteIDs:   req.RouteIDs,
+			GroupIDs:   req.GroupIDs,
+			RoutePaths: req.RoutePaths,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -549,11 +560,13 @@ func updateUser(userSvc *usersservice.Service) gin.HandlerFunc {
 		}
 
 		user, err := userSvc.Update(c.Param("id"), usersservice.UpdateInput{
-			Username: req.Username,
-			Password: req.Password,
-			Role:     req.Role,
-			Enabled:  req.Enabled,
-			RouteIDs: req.RouteIDs,
+			Username:   req.Username,
+			Password:   req.Password,
+			Role:       req.Role,
+			Enabled:    req.Enabled,
+			RouteIDs:   req.RouteIDs,
+			GroupIDs:   req.GroupIDs,
+			RoutePaths: req.RoutePaths,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -566,6 +579,78 @@ func updateUser(userSvc *usersservice.Service) gin.HandlerFunc {
 func deleteUser(userSvc *usersservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := userSvc.Delete(c.Param("id")); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, httpresponse.Message{Message: "deleted"})
+	}
+}
+
+func listPermissionGroups(groupSvc *groupsservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		groups, err := groupSvc.List()
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.PermissionGroupListResponse(groups))
+	}
+}
+
+func getPermissionGroup(groupSvc *groupsservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		g, err := groupSvc.Get(c.Param("id"))
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.PermissionGroupResponse(*g))
+	}
+}
+
+func createPermissionGroup(groupSvc *groupsservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req dto.PermissionGroupCreateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		g, err := groupSvc.Create(groupsservice.CreateInput{
+			Name:       req.Name,
+			RouteIDs:   req.RouteIDs,
+			RoutePaths: req.RoutePaths,
+		})
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusCreated, dto.PermissionGroupResponse(*g))
+	}
+}
+
+func updatePermissionGroup(groupSvc *groupsservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req dto.PermissionGroupUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		g, err := groupSvc.Update(c.Param("id"), groupsservice.UpdateInput{
+			Name:       req.Name,
+			RouteIDs:   req.RouteIDs,
+			RoutePaths: req.RoutePaths,
+		})
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.PermissionGroupResponse(*g))
+	}
+}
+
+func deletePermissionGroup(groupSvc *groupsservice.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := groupSvc.Delete(c.Param("id")); err != nil {
 			writeServiceError(c, err)
 			return
 		}
@@ -717,6 +802,7 @@ func writeServiceError(c *gin.Context, err error) {
 	case hostServiceError(c, err):
 	case apiKeyServiceError(c, err):
 	case routeAuthServiceError(c, err):
+	case groupServiceError(c, err):
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
@@ -1264,6 +1350,22 @@ func routeAuthServiceError(c *gin.Context, err error) bool {
 	case routeauthservice.ErrCodeRouteAuthNotFound:
 		writeError(c, http.StatusNotFound, targetCode, target.Error())
 	case routeauthservice.ErrCodeRouteNotFound:
+		writeError(c, http.StatusBadRequest, targetCode, target.Error())
+	default:
+		writeError(c, http.StatusInternalServerError, targetCode, target.Error())
+	}
+	return true
+}
+
+func groupServiceError(c *gin.Context, err error) bool {
+	var target *groupsservice.Error
+	if !errors.As(err, &target) {
+		return false
+	}
+	switch targetCode := groupsservice.Code(err); targetCode {
+	case groupsservice.ErrCodeGroupNotFound:
+		writeError(c, http.StatusNotFound, targetCode, target.Error())
+	case groupsservice.ErrCodeInvalidName, groupsservice.ErrCodeDuplicateName:
 		writeError(c, http.StatusBadRequest, targetCode, target.Error())
 	default:
 		writeError(c, http.StatusInternalServerError, targetCode, target.Error())

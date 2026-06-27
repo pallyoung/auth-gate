@@ -9,13 +9,15 @@ import { ApiError } from '../lib/api/client'
 import { LocalizedError, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { routesApi } from '../lib/api/routes'
 import { usersApi } from '../lib/api/users'
+import { permissionGroupsApi } from '../lib/api/groups'
 import { getSessionUser } from '../lib/session-store'
-import type { Route, User, UserInput } from '../lib/api/types'
+import type { PermissionGroup, Route, User, UserInput } from '../lib/api/types'
 
 export function UsersPage() {
   const { t } = useTranslation('users')
   const [users, setUsers] = React.useState<User[]>([])
   const [routes, setRoutes] = React.useState<Route[]>([])
+  const [groups, setGroups] = React.useState<PermissionGroup[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [userListUnavailable, setUserListUnavailable] = React.useState(false)
@@ -80,7 +82,11 @@ export function UsersPage() {
       setUserListUnavailable(false)
       setUserDirectoryUnavailable(false)
       setRouteListUnavailable(false)
-      const [usersResult, routesResult] = await Promise.allSettled([usersApi.list(), routesApi.list()])
+      const [usersResult, routesResult, groupsResult] = await Promise.allSettled([
+        usersApi.list(),
+        routesApi.list(),
+        permissionGroupsApi.list(),
+      ])
 
       if (requestGenerationRef.current !== requestGeneration) {
         return
@@ -101,6 +107,12 @@ export function UsersPage() {
       } else {
         setRoutes([])
         setRouteListUnavailable(true)
+      }
+
+      if (groupsResult.status === 'fulfilled') {
+        setGroups(groupsResult.value)
+      } else {
+        setGroups([])
       }
 
       if (usersResult.status === 'rejected') {
@@ -366,6 +378,7 @@ export function UsersPage() {
         <UserForm
           user={editingUser}
           routes={routes}
+          groups={groups}
           routeListUnavailable={routeListUnavailable}
           onSubmit={editingUser ? handleUpdate : handleCreate}
           onCancel={() => {

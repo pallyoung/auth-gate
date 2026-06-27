@@ -17,11 +17,12 @@ import (
 )
 
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	Scope    string   `json:"scope,omitempty"`
-	RouteIDs []string `json:"route_ids,omitempty"`
+	UserID     string              `json:"user_id"`
+	Username   string              `json:"username"`
+	Role       string              `json:"role"`
+	Scope      string              `json:"scope,omitempty"`
+	RouteIDs   []string            `json:"route_ids,omitempty"`
+	RoutePaths map[string][]string `json:"route_paths,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -98,13 +99,14 @@ func GenerateControlPlaneToken(userID, username, role string) (string, error) {
 	return signClaims(claims)
 }
 
-func GenerateRouteAccessToken(userID, username, role string, routeIDs []string) (string, error) {
+func GenerateRouteAccessToken(userID, username, role string, routeIDs []string, routePaths map[string][]string) (string, error) {
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Role:     role,
-		Scope:    ScopeRouteAccess,
-		RouteIDs: append([]string(nil), routeIDs...),
+		UserID:     userID,
+		Username:   username,
+		Role:       role,
+		Scope:      ScopeRouteAccess,
+		RouteIDs:   append([]string(nil), routeIDs...),
+		RoutePaths: routePaths,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

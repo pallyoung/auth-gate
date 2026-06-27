@@ -51,19 +51,23 @@ func newError(code, message string, cause error) error {
 }
 
 type CreateInput struct {
-	Username string
-	Password string
-	Role     string
-	Enabled  bool
-	RouteIDs []string
+	Username   string
+	Password   string
+	Role       string
+	Enabled    bool
+	RouteIDs   []string
+	GroupIDs   []string
+	RoutePaths map[string][]string
 }
 
 type UpdateInput struct {
-	Username *string
-	Password string
-	Role     *string
-	Enabled  *bool
-	RouteIDs *[]string
+	Username   *string
+	Password   string
+	Role       *string
+	Enabled    *bool
+	RouteIDs   *[]string
+	GroupIDs   *[]string
+	RoutePaths *map[string][]string
 }
 
 type Service struct {
@@ -121,6 +125,8 @@ func (s *Service) Create(input CreateInput) (*store.User, error) {
 		Role:         role,
 		Enabled:      input.Enabled,
 		RouteIDs:     routeIDs,
+		GroupIDs:     input.GroupIDs,
+		RoutePaths:   input.RoutePaths,
 	}
 	if err := s.db.CreateUser(user); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -178,6 +184,12 @@ func (s *Service) Update(id string, input UpdateInput) (*store.User, error) {
 		user.Enabled = *input.Enabled
 	}
 	user.RouteIDs = routeIDs
+	if input.GroupIDs != nil {
+		user.GroupIDs = *input.GroupIDs
+	}
+	if input.RoutePaths != nil {
+		user.RoutePaths = *input.RoutePaths
+	}
 
 	if strings.TrimSpace(input.Password) != "" {
 		hash, err := store.HashPassword(input.Password)

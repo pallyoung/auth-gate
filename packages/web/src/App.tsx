@@ -8,6 +8,7 @@ import { RoutesPage } from './pages/RoutesPage'
 import { RouteAuthPage } from './pages/RouteAuthPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
+import { GroupsPage } from './pages/GroupsPage'
 import { CertificatesPage } from './pages/CertificatesPage'
 import { HostsPage } from './pages/HostsPage'
 import { AccessLogsPage } from './pages/AccessLogsPage'
@@ -20,6 +21,7 @@ const knownControlPlanePaths = new Set([
   '/access-login',
   '/auth',
   '/certificates',
+  '/groups',
   '/routes',
   '/settings',
   '/users',
@@ -66,11 +68,12 @@ export default function App() {
   const [pathname, search = ''] = path.split('?')
   const searchParams = React.useMemo(() => new URLSearchParams(search), [search])
   const normalizedPathname = knownControlPlanePaths.has(pathname) ? pathname : null
+  const needsUsersPermission = normalizedPathname === '/users' || normalizedPathname === '/groups'
   const waitingForUsersPermissionBootstrap =
-    normalizedPathname === '/users' && bootstrapping && token && user
+    needsUsersPermission && bootstrapping && token && user
   const effectivePathname =
     !waitingForUsersPermissionBootstrap &&
-    normalizedPathname === '/users' &&
+    needsUsersPermission &&
     token &&
     user &&
     user.permissions?.can_manage_users !== true
@@ -126,6 +129,7 @@ export default function App() {
       case '/auth': return <RouteAuthPage />
       case '/routes': return <RoutesPage />
       case '/users': return <UsersPage />
+      case '/groups': return <GroupsPage />
       case '/certificates': return <CertificatesPage />
       case '/settings': return <SettingsPage />
       case '/hosts': return <HostsPage />

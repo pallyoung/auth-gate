@@ -30,6 +30,7 @@ type storeData struct {
 	RouteAuthConfigs map[string]RouteAuthConfig `json:"route_auth_configs"`
 	ApiKeys          map[string]ApiKey          `json:"api_keys"`
 	Users            map[string]User            `json:"users"`
+	PermissionGroups map[string]PermissionGroup `json:"permission_groups"`
 	Certificates     map[string]Certificate     `json:"certificates"`
 	CACertificates   map[string]CACertificate   `json:"ca_certificates"`
 	HostProfiles     map[string]HostProfile     `json:"host_profiles"`
@@ -59,6 +60,7 @@ func (s *JSONStore) load() error {
 			RouteAuthConfigs: make(map[string]RouteAuthConfig),
 			ApiKeys:          make(map[string]ApiKey),
 			Users:            make(map[string]User),
+			PermissionGroups: make(map[string]PermissionGroup),
 			Certificates:     make(map[string]Certificate),
 			CACertificates:   make(map[string]CACertificate),
 			HostProfiles:     make(map[string]HostProfile),
@@ -82,6 +84,9 @@ func (s *JSONStore) load() error {
 	}
 	if s.data.Settings == nil {
 		s.data.Settings = make(map[string]string)
+	}
+	if s.data.PermissionGroups == nil {
+		s.data.PermissionGroups = make(map[string]PermissionGroup)
 	}
 	// Migrate old AuthRules to RouteAuthConfigs + ApiKeys
 	if len(s.data.AuthRules) > 0 {
@@ -911,6 +916,100 @@ func normalizeAuthRule(r *AuthRule) {
 	r.Config.Username = strings.TrimSpace(r.Config.Username)
 	// Password is intentionally NOT trimmed (may contain meaningful whitespace).
 	r.Config.LoginMode = strings.TrimSpace(r.Config.LoginMode)
+}
+
+// ---- Permission Groups ----
+
+func (s *JSONStore) ListPermissionGroups() ([]PermissionGroup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	groups := make([]PermissionGroup, 0, len(s.data.PermissionGroups))
+	for _, g := range s.data.PermissionGroups {
+		groups = append(groups, g)
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Name < groups[j].Name
+	})
+	return groups, nil
+}
+
+func (s *JSONStore) GetPermissionGroup(id string) (*PermissionGroup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	g, ok := s.data.PermissionGroups[id]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	return &g, nil
+}
+
+func (s *JSONStore) GetPermissionGroupsByIDs(ids []string) ([]PermissionGroup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	groups := make([]PermissionGroup, 0, len(ids))
+	for _, id := range ids {
+		if g, ok := s.data.PermissionGroups[id]; ok {
+			groups = append(groups, g)
+		}
+	}
+	return groups, nil
+}
+
+func (s *JSONStore) CreatePermissionGroup(g *PermissionGroup) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if g.ID == "" {
+		g.ID = uuid.New().String()
+	}
+	for _, existing := range s.data.PermissionGroups {
+		if existing.Name == g.Name {
+			return fmt.Errorf("UNIQUE constraint failed: permission_groups.name")
+		}
+	}
+	now := time.Now()
+	g.CreatedAt = now
+	g.UpdatedAt = now
+	s.data.PermissionGroups[g.ID] = *g
+	return s.save()
+}
+
+func (s *JSONStore) UpdatePermissionGroup(g *PermissionGroup) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.PermissionGroups[g.ID]; !ok {
+		return sql.ErrNoRows
+	}
+	for id, existing := range s.data.PermissionGroups {
+		if id != g.ID && existing.Name == g.Name {
+			return fmt.Errorf("UNIQUE constraint failed: permission_groups.name")
+		}
+	}
+	g.UpdatedAt = time.Now()
+	s.data.PermissionGroups[g.ID] = *g
+	return s.save()
+}
+
+func (s *JSONStore) DeletePermissionGroup(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.PermissionGroups[id]; !ok {
+		return sql.ErrNoRows
+	}
+	delete(s.data.PermissionGroups, id)
+	// Remove group reference from all users
+	for uid, u := range s.data.Users {
+		newIDs := make([]string, 0, len(u.GroupIDs))
+		for _, gid := range u.GroupIDs {
+			if gid != id {
+				newIDs = append(newIDs, gid)
+			}
+		}
+		if len(newIDs) != len(u.GroupIDs) {
+			u.GroupIDs = newIDs
+			s.data.Users[uid] = u
+		}
+	}
+	return s.save()
 }
 
 // ---- Settings ----

@@ -5,6 +5,7 @@ import { authRulesEn, authRulesZhCN } from './authRules'
 import { certificatesEn, certificatesZhCN } from './certificates'
 import { commonEn, commonZhCN } from './common'
 import { dashboardEn, dashboardZhCN } from './dashboard'
+import { groupsEn, groupsZhCN } from './groups'
 import { hostsEn, hostsZhCN } from './hosts'
 import { layoutEn, layoutZhCN } from './layout'
 import { loginEn, loginZhCN } from './login'
@@ -25,6 +26,7 @@ export const resources = {
     routes: routesEn,
     authRules: authRulesEn,
     users: usersEn,
+    groups: groupsEn,
     certificates: certificatesEn,
     settings: settingsEn,
     hosts: hostsEn,
@@ -40,6 +42,7 @@ export const resources = {
     routes: routesZhCN,
     authRules: authRulesZhCN,
     users: usersZhCN,
+    groups: groupsZhCN,
     certificates: certificatesZhCN,
     settings: settingsZhCN,
     hosts: hostsZhCN,

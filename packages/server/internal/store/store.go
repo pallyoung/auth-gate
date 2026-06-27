@@ -75,6 +75,14 @@ type Store interface {
 	ReorderHostEntries(profileID string, orderedIDs []string) error
 	ListEnabledHostEntries(profileID string) ([]HostEntry, error)
 
+	// Permission Groups
+	ListPermissionGroups() ([]PermissionGroup, error)
+	GetPermissionGroup(id string) (*PermissionGroup, error)
+	GetPermissionGroupsByIDs(ids []string) ([]PermissionGroup, error)
+	CreatePermissionGroup(g *PermissionGroup) error
+	UpdatePermissionGroup(g *PermissionGroup) error
+	DeletePermissionGroup(id string) error
+
 	// Settings (key-value)
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
