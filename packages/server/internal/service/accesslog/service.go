@@ -59,3 +59,48 @@ func (s *Service) Stats(duration time.Duration) (*store.AccessLogStats, error) {
 	since := time.Now().Add(-duration)
 	return s.store.Stats(since)
 }
+
+// Aggregate groups access log entries by the specified dimension.
+func (s *Service) Aggregate(duration time.Duration, groupBy, sortBy, sortOrder string, page, perPage int) store.AggregateResult {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	// Validate groupBy
+	switch groupBy {
+	case "route_id", "client_ip", "username", "status_code", "auth_result":
+		// valid
+	default:
+		groupBy = "client_ip"
+	}
+
+	// Validate sortBy
+	switch sortBy {
+	case "count", "errors", "avg_latency", "p95_latency":
+		// valid
+	default:
+		sortBy = "count"
+	}
+
+	if sortOrder != "asc" {
+		sortOrder = "desc"
+	}
+
+	since := time.Now().Add(-duration)
+	offset := (page - 1) * perPage
+
+	return s.store.Aggregate(store.AggregateFilter{
+		Since:     &since,
+		GroupBy:   groupBy,
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
+		Offset:    offset,
+		Limit:     perPage,
+	})
+}

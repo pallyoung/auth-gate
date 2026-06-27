@@ -80,6 +80,40 @@ type IPCount struct {
 	Count int    `json:"count"`
 }
 
+// AggregateGroup represents aggregated metrics for a single group.
+type AggregateGroup struct {
+	Key           string    `json:"key"`
+	RouteName     string    `json:"route_name,omitempty"` // populated when group_by=route_id
+	Count         int       `json:"count"`
+	Errors        int       `json:"errors"`
+	ErrorRate     float64   `json:"error_rate"`
+	AuthFailures  int       `json:"auth_failures"`
+	AvgLatencyMs  float64   `json:"avg_latency_ms"`
+	P95LatencyMs  int64     `json:"p95_latency_ms"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
+}
+
+// AggregateResult holds the paginated result of an aggregation query.
+type AggregateResult struct {
+	GroupBy     string           `json:"group_by"`
+	TotalGroups int              `json:"total_groups"`
+	Page        int              `json:"page"`
+	PerPage     int              `json:"per_page"`
+	TotalPages  int              `json:"total_pages"`
+	Groups      []AggregateGroup `json:"groups"`
+}
+
+// AggregateFilter defines parameters for aggregation queries.
+type AggregateFilter struct {
+	Since     *time.Time
+	GroupBy   string // route_id, client_ip, username, status_code, auth_result
+	SortBy    string // count, errors, avg_latency, p95_latency
+	SortOrder string // asc, desc
+	Offset    int
+	Limit     int
+}
+
 // AccessLogStore is an in-memory ring buffer with periodic file persistence.
 type AccessLogStore struct {
 	mu         sync.RWMutex
@@ -222,6 +256,158 @@ func (s *AccessLogStore) Stats(since time.Time) (*AccessLogStats, error) {
 	stats.TopIPs = s.computeTopIPs(entries, 10)
 
 	return stats, nil
+}
+
+// Aggregate groups entries by the specified dimension and computes per-group metrics.
+func (s *AccessLogStore) Aggregate(filter AggregateFilter) AggregateResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	all := s.collectEntries()
+
+	// Filter by time
+	var entries []AccessLogEntry
+	if filter.Since != nil {
+		entries = make([]AccessLogEntry, 0, len(all))
+		for _, e := range all {
+			if !e.Timestamp.Before(*filter.Since) {
+				entries = append(entries, e)
+			}
+		}
+	} else {
+		entries = all
+	}
+
+	type bucket struct {
+		key       string
+		count     int
+		errors    int
+		authFails int
+		latencies []int64
+		firstSeen time.Time
+		lastSeen  time.Time
+	}
+
+	buckets := make(map[string]*bucket)
+
+	for _, entry := range entries {
+		var key string
+		switch filter.GroupBy {
+		case "route_id":
+			key = entry.RouteID
+		case "client_ip":
+			key = entry.ClientIP
+		case "username":
+			key = entry.Username
+		case "status_code":
+			key = fmt.Sprintf("%d", entry.StatusCode)
+		case "auth_result":
+			key = entry.AuthResult
+		default:
+			key = entry.ClientIP
+		}
+
+		b, ok := buckets[key]
+		if !ok {
+			b = &bucket{key: key, firstSeen: entry.Timestamp, lastSeen: entry.Timestamp}
+			buckets[key] = b
+		}
+		b.count++
+		if entry.StatusCode >= 400 {
+			b.errors++
+		}
+		if entry.AuthResult == "fail" {
+			b.authFails++
+		}
+		b.latencies = append(b.latencies, entry.BackendLatencyMs)
+		if entry.Timestamp.Before(b.firstSeen) {
+			b.firstSeen = entry.Timestamp
+		}
+		if entry.Timestamp.After(b.lastSeen) {
+			b.lastSeen = entry.Timestamp
+		}
+	}
+
+	// Build groups with computed metrics
+	groups := make([]AggregateGroup, 0, len(buckets))
+	for _, b := range buckets {
+		g := AggregateGroup{
+			Key:          b.key,
+			Count:        b.count,
+			Errors:       b.errors,
+			AuthFailures: b.authFails,
+			FirstSeen:    b.firstSeen,
+			LastSeen:     b.lastSeen,
+		}
+		if b.count > 0 {
+			g.ErrorRate = float64(b.errors) * 100 / float64(b.count)
+		}
+		if len(b.latencies) > 0 {
+			var total int64
+			for _, l := range b.latencies {
+				total += l
+			}
+			g.AvgLatencyMs = float64(total) / float64(len(b.latencies))
+			sort.Slice(b.latencies, func(i, j int) bool { return b.latencies[i] < b.latencies[j] })
+			p95 := int(float64(len(b.latencies)) * 0.95)
+			if p95 >= len(b.latencies) {
+				p95 = len(b.latencies) - 1
+			}
+			g.P95LatencyMs = b.latencies[p95]
+		}
+		groups = append(groups, g)
+	}
+
+	// Sort
+	sort.Slice(groups, func(i, j int) bool {
+		var less bool
+		switch filter.SortBy {
+		case "errors":
+			less = groups[i].Errors < groups[j].Errors
+		case "avg_latency":
+			less = groups[i].AvgLatencyMs < groups[j].AvgLatencyMs
+		case "p95_latency":
+			less = groups[i].P95LatencyMs < groups[j].P95LatencyMs
+		default: // count
+			less = groups[i].Count < groups[j].Count
+		}
+		if filter.SortOrder == "asc" {
+			return less
+		}
+		return !less
+	})
+
+	total := len(groups)
+	page := filter.Offset/filter.Limit + 1
+	if filter.Limit <= 0 {
+		page = 1
+	}
+	totalPages := 1
+	if filter.Limit > 0 {
+		totalPages = (total + filter.Limit - 1) / filter.Limit
+		if totalPages == 0 {
+			totalPages = 1
+		}
+	}
+
+	// Paginate
+	start := filter.Offset
+	if start > total {
+		start = total
+	}
+	end := start + filter.Limit
+	if end > total || filter.Limit <= 0 {
+		end = total
+	}
+
+	return AggregateResult{
+		GroupBy:     filter.GroupBy,
+		TotalGroups: total,
+		Page:        page,
+		PerPage:     filter.Limit,
+		TotalPages:  totalPages,
+		Groups:      groups[start:end],
+	}
 }
 
 // StartFlusher starts a goroutine that periodically flushes entries to disk.

@@ -78,3 +78,38 @@ type AccessLogQueryParams struct {
 	Page       int    `form:"page"`
 	PerPage    int    `form:"per_page"`
 }
+
+// AccessLogAggregateQueryParams contains query parameters for log aggregation.
+type AccessLogAggregateQueryParams struct {
+	GroupBy   string `form:"group_by" binding:"required"`
+	Duration  string `form:"duration"`
+	SortBy    string `form:"sort_by"`
+	SortOrder string `form:"sort_order"`
+	Page      int    `form:"page"`
+	PerPage   int    `form:"per_page"`
+}
+
+// AccessLogAggregateGroup represents aggregated metrics for a single group.
+type AccessLogAggregateGroup struct {
+	Key          string  `json:"key"`
+	RouteName    string  `json:"route_name,omitempty"`
+	Count        int     `json:"count"`
+	Errors       int     `json:"errors"`
+	ErrorRate    float64 `json:"error_rate"`
+	AuthFailures int     `json:"auth_failures"`
+	AvgLatencyMs float64 `json:"avg_latency_ms"`
+	P95LatencyMs int64   `json:"p95_latency_ms"`
+	FirstSeen    string  `json:"first_seen"`
+	LastSeen     string  `json:"last_seen"`
+}
+
+// AccessLogAggregateResponse is the response for log aggregation.
+type AccessLogAggregateResponse struct {
+	GroupBy     string                       `json:"group_by"`
+	Duration    string                       `json:"duration"`
+	TotalGroups int                          `json:"total_groups"`
+	Page        int                          `json:"page"`
+	PerPage     int                          `json:"per_page"`
+	TotalPages  int                          `json:"total_pages"`
+	Groups      []AccessLogAggregateGroup    `json:"groups"`
+}

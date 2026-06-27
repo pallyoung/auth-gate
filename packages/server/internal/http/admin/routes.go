@@ -84,6 +84,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 	if accessLogStore != nil {
 		group.GET("/access-logs", listAccessLogs(accessLogSvc, routerMgr))
 		group.GET("/access-logs/stats", getAccessLogStats(accessLogSvc))
+		group.GET("/access-logs/aggregate", aggregateAccessLogs(accessLogSvc, routerMgr))
 	}
 
 	// Certificate endpoints
@@ -1005,6 +1006,62 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 			LatencyPerHour:    latencyPerHour,
 			TopPaths:          topPaths,
 			TopIPs:            topIPs,
+		})
+	}
+}
+
+func aggregateAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var params dto.AccessLogAggregateQueryParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_params", "group_by is required")
+			return
+		}
+
+		durationStr := params.Duration
+		if durationStr == "" {
+			durationStr = "24h"
+		}
+		duration, err := time.ParseDuration(durationStr)
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_duration", "invalid duration format")
+			return
+		}
+
+		result := svc.Aggregate(duration, params.GroupBy, params.SortBy, params.SortOrder, params.Page, params.PerPage)
+
+		groups := make([]dto.AccessLogAggregateGroup, len(result.Groups))
+		for i, g := range result.Groups {
+			groups[i] = dto.AccessLogAggregateGroup{
+				Key:          g.Key,
+				Count:        g.Count,
+				Errors:       g.Errors,
+				ErrorRate:    g.ErrorRate,
+				AuthFailures: g.AuthFailures,
+				AvgLatencyMs: g.AvgLatencyMs,
+				P95LatencyMs: g.P95LatencyMs,
+				FirstSeen:    g.FirstSeen.Format(time.RFC3339),
+				LastSeen:     g.LastSeen.Format(time.RFC3339),
+			}
+			// Resolve route names when grouping by route_id
+			if result.GroupBy == "route_id" && routerMgr != nil {
+				if r := routerMgr.FindByID(g.Key); r != nil {
+					groups[i].RouteName = r.Name
+					if groups[i].RouteName == "" {
+						groups[i].RouteName = r.Host + r.PathPrefix
+					}
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, dto.AccessLogAggregateResponse{
+			GroupBy:     result.GroupBy,
+			Duration:    durationStr,
+			TotalGroups: result.TotalGroups,
+			Page:        result.Page,
+			PerPage:     result.PerPage,
+			TotalPages:  result.TotalPages,
+			Groups:      groups,
 		})
 	}
 }

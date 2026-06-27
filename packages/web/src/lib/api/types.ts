@@ -378,6 +378,38 @@ export interface AccessLogQueryParams {
   per_page?: number
 }
 
+export interface AccessLogAggregateParams {
+  group_by: 'route_id' | 'client_ip' | 'username' | 'status_code' | 'auth_result'
+  duration?: string
+  sort_by?: 'count' | 'errors' | 'avg_latency' | 'p95_latency'
+  sort_order?: 'asc' | 'desc'
+  page?: number
+  per_page?: number
+}
+
+export interface AccessLogAggregateGroup {
+  key: string
+  route_name?: string
+  count: number
+  errors: number
+  error_rate: number
+  auth_failures: number
+  avg_latency_ms: number
+  p95_latency_ms: number
+  first_seen: string
+  last_seen: string
+}
+
+export interface AccessLogAggregateResponse {
+  group_by: string
+  duration: string
+  total_groups: number
+  page: number
+  per_page: number
+  total_pages: number
+  groups: AccessLogAggregateGroup[]
+}
+
 export interface ListenEntry {
   addr: string
   tls: boolean

@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { AccessLogEntry, AccessLogListResponse, AccessLogStats, AccessLogQueryParams } from './types'
+import type { AccessLogEntry, AccessLogListResponse, AccessLogStats, AccessLogQueryParams, AccessLogAggregateParams, AccessLogAggregateResponse } from './types'
 
 export const accessLogsApi = {
   list: (params: AccessLogQueryParams): Promise<AccessLogListResponse> => {
@@ -18,5 +18,15 @@ export const accessLogsApi = {
   },
   stats: (duration: string = '1h'): Promise<AccessLogStats> => {
     return request(`/access-logs/stats?duration=${duration}`)
+  },
+  aggregate: (params: AccessLogAggregateParams): Promise<AccessLogAggregateResponse> => {
+    const searchParams = new URLSearchParams()
+    searchParams.append('group_by', params.group_by)
+    if (params.duration) searchParams.append('duration', params.duration)
+    if (params.sort_by) searchParams.append('sort_by', params.sort_by)
+    if (params.sort_order) searchParams.append('sort_order', params.sort_order)
+    if (params.page) searchParams.append('page', params.page.toString())
+    if (params.per_page) searchParams.append('per_page', params.per_page.toString())
+    return request(`/access-logs/aggregate?${searchParams.toString()}`)
   },
 }
