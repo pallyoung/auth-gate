@@ -104,6 +104,9 @@ export const certificatesEn = {
     locality: 'City / Locality (L)',
     localityPlaceholder: 'San Francisco',
     subjectHint: 'Optional — leave empty to omit',
+    validityDays: 'Validity (days)',
+    validityDaysPlaceholder: '90',
+    validityDaysHint: 'Certificate validity period in days (default: 90)',
   },
 } as const
 
@@ -209,5 +212,8 @@ export const certificatesZhCN = {
     locality: '城市 (L)',
     localityPlaceholder: '北京',
     subjectHint: '可选——留空则省略该字段',
+    validityDays: '有效期（天）',
+    validityDaysPlaceholder: '90',
+    validityDaysHint: '证书有效期天数（默认：90）',
   },
 } as const

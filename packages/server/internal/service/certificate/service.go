@@ -65,7 +65,7 @@ func NewService(db store.Store, cfg Config, reloader runtime.Reloader) (*Service
 // ProvisionLocal signs a new certificate with the local CA. If info is
 // non-nil its non-empty fields are embedded in the certificate Subject.
 // Synchronous.
-func (s *Service) ProvisionLocal(_ context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error) {
+func (s *Service) ProvisionLocal(_ context.Context, name, domain string, days int, info *localca.SubjectInfo) (*store.Certificate, error) {
 	var err error
 	name, err = normalizeCertificateName(name)
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *Service) ProvisionLocal(_ context.Context, name, domain string, info *l
 		return nil, newError(ErrCodeDomainExists, "certificate already exists for domain: "+domain, nil)
 	}
 
-	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(domain, defaultLeafDays, info)
+	certPEM, keyPEM, nb, na, err := s.ca.SignCertificate(domain, days, info)
 	if err != nil {
 		return nil, newError(ErrCodeLocalCA, "sign certificate: "+err.Error(), err)
 	}

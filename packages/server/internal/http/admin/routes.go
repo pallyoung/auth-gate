@@ -36,7 +36,7 @@ import (
 type CertService interface {
 	List() ([]store.Certificate, error)
 	Get(id string) (*store.Certificate, error)
-	ProvisionLocal(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error)
+	ProvisionLocal(ctx context.Context, name, domain string, days int, info *localca.SubjectInfo) (*store.Certificate, error)
 	Import(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
 	Resign(id string) (*store.Certificate, error)
 	Delete(id string) error
@@ -618,7 +618,7 @@ func createCertificate(certSvc CertService) gin.HandlerFunc {
 					Locality:           req.Locality,
 				}
 			}
-			cert, err = certSvc.ProvisionLocal(context.Background(), req.Name, req.Domain, info)
+			cert, err = certSvc.ProvisionLocal(context.Background(), req.Name, req.Domain, req.DaysValue(), info)
 		case dto.CertificateSourceImported:
 			cert, err = certSvc.Import(context.Background(), req.Name, req.Domain, req.CertPEM, req.KeyPEM)
 		default:

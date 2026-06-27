@@ -43,6 +43,7 @@ type CertificateWriteRequest struct {
 	Name               string `json:"name" binding:"required"`
 	Domain             string `json:"domain" binding:"required"`
 	Source             string `json:"source,omitempty"`
+	Days               *int   `json:"days,omitempty"`
 	CertPEM            string `json:"cert_pem,omitempty"`
 	KeyPEM             string `json:"key_pem,omitempty"`
 	Organization       string `json:"organization,omitempty"`
@@ -97,4 +98,13 @@ func formatTime(t time.Time) string {
 		return ""
 	}
 	return t.Format(time.RFC3339)
+}
+
+// DaysValue returns the validity period in days, defaulting to 0 (which lets
+// the service layer pick the default) when the field is nil.
+func (r *CertificateWriteRequest) DaysValue() int {
+	if r.Days == nil {
+		return 0
+	}
+	return *r.Days
 }

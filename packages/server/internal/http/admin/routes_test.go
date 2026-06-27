@@ -91,7 +91,7 @@ func (s *stubCertService) Get(id string) (*store.Certificate, error) {
 	return nil, nil
 }
 
-func (s *stubCertService) ProvisionLocal(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error) {
+func (s *stubCertService) ProvisionLocal(ctx context.Context, name, domain string, days int, info *localca.SubjectInfo) (*store.Certificate, error) {
 	if s.provisionFn != nil {
 		return s.provisionFn(ctx, name, domain, info)
 	}

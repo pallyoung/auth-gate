@@ -16,6 +16,7 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
   const [mode, setMode] = React.useState<FormMode>('local_ca')
   const [name, setName] = React.useState('')
   const [domain, setDomain] = React.useState('')
+  const [days, setDays] = React.useState('')
   const [certPem, setCertPem] = React.useState('')
   const [keyPem, setKeyPem] = React.useState('')
   const [organization, setOrganization] = React.useState('')
@@ -69,6 +70,10 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
         input.cert_pem = certPem.trim()
         input.key_pem = keyPem.trim()
       } else {
+        const parsedDays = parseInt(days, 10)
+        if (!isNaN(parsedDays) && parsedDays > 0) {
+          input.days = parsedDays
+        }
         const trimmedOrg = organization.trim()
         const trimmedOU = organizationalUnit.trim()
         const trimmedCountry = country.trim()
@@ -148,6 +153,18 @@ export function CertificateForm({ onSubmit, onCancel }: CertificateFormProps) {
             required
             hint={t('form.domainHint')}
           />
+          {mode === 'local_ca' && (
+            <Input
+              label={t('form.validityDays')}
+              type="number"
+              value={days}
+              onChange={(event) => setDays(event.target.value)}
+              placeholder={t('form.validityDaysPlaceholder')}
+              min={1}
+              max={3650}
+              hint={t('form.validityDaysHint')}
+            />
+          )}
         </div>
       </Card>
 

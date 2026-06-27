@@ -256,6 +256,7 @@ export interface CertificateInput {
   name: string
   domain: string
   source?: string
+  days?: number
   cert_pem?: string
   key_pem?: string
   organization?: string
