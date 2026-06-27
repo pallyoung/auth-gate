@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,9 +18,9 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 )
 
-type fakeReloader struct{ called int }
+type fakeReloader struct{ called atomic.Int64 }
 
-func (r *fakeReloader) Reload() { r.called++ }
+func (r *fakeReloader) Reload() { r.called.Add(1) }
 
 func newTestSetup(t *testing.T) (*Service, *localca.CA, store.Store, *fakeReloader) {
 	t.Helper()
@@ -78,7 +79,7 @@ func TestService_ProvisionLocal(t *testing.T) {
 		}
 	}
 	time.Sleep(50 * time.Millisecond) // let triggerReload goroutine run
-	if rel.called == 0 {
+	if rel.called.Load() == 0 {
 		t.Error("expected reloader to fire")
 	}
 
@@ -160,7 +161,7 @@ func TestService_Resign_LocalCA(t *testing.T) {
 	originalNotAfter := cert.NotAfter
 	row, _ := db.GetCertificate(cert.ID)
 
-	rel.called = 0
+	rel.called.Store(0)
 	resigned, err := svc.Resign(cert.ID)
 	if err != nil {
 		t.Fatalf("Resign: %v", err)
@@ -169,7 +170,7 @@ func TestService_Resign_LocalCA(t *testing.T) {
 		t.Errorf("expected NotAfter to advance, got %v (was %v)", resigned.NotAfter, originalNotAfter)
 	}
 	time.Sleep(50 * time.Millisecond)
-	if rel.called == 0 {
+	if rel.called.Load() == 0 {
 		t.Error("reloader should fire on Resign")
 	}
 	// File should be re-written with new content
