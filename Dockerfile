@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine AS web-builder
+FROM node:20-alpine AS web-builder
 WORKDIR /app
 COPY packages/web/package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY packages/web/ ./
 RUN npm run build
 
 # Server stage
-FROM golang:1.21-alpine AS server-builder
+FROM golang:1.25-alpine AS server-builder
 WORKDIR /app
 COPY packages/server/go.mod packages/server/go.sum ./
 RUN go mod download
