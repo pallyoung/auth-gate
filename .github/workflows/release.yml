@@ -83,8 +83,15 @@ jobs:
 
             # Copy config files
             cp packages/server/configs/config.yaml "$PKG_DIR/config.yaml.example"
-            cp scripts/auth-gate.service "$PKG_DIR/"
             cp install.sh "$PKG_DIR/"
+
+            # Copy platform-specific service files
+            OS="${platform%%-*}"
+            if [ "$OS" = "linux" ]; then
+              cp scripts/auth-gate.service "$PKG_DIR/"
+            elif [ "$OS" = "darwin" ]; then
+              cp scripts/com.authgate.server.plist "$PKG_DIR/"
+            fi
 
             # Create tar.gz
             tar -czvf "dist/release/${PKG_DIR}.tar.gz" "$PKG_DIR"
