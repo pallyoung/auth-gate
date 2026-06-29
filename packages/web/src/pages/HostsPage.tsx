@@ -1,5 +1,5 @@
 import React from 'react'
-import { Network, Plus } from 'lucide-react'
+import { Network, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '../components/PageHeader'
 import { HostsTable } from '../components/Hosts/HostsTable'
@@ -21,6 +21,7 @@ export function HostsPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [markerBanner, setMarkerBanner] = React.useState(false)
   const [showProfileForm, setShowProfileForm] = React.useState(false)
+  const [editingProfile, setEditingProfile] = React.useState<HostProfile | null>(null)
   const [showEntryForm, setShowEntryForm] = React.useState(false)
   const [editingEntry, setEditingEntry] = React.useState<HostEntry | null>(null)
   const canManage = getSessionUser()?.permissions?.can_manage_hosts ?? false
@@ -91,6 +92,24 @@ export function HostsPage() {
     setProfiles(result.profiles)
     if (!activeProfileIdRef.current && result.profiles.length > 0) {
       setActiveProfileId(result.profiles[0].id)
+    }
+  }
+
+  const handleUpdateProfile = async (data: HostProfileInput) => {
+    if (!editingProfile) return
+    await hostsApi.update(editingProfile.id, data)
+    setEditingProfile(null)
+    const result = await hostsApi.list()
+    setProfiles(result.profiles)
+  }
+
+  const handleDeleteProfile = async (profile: HostProfile) => {
+    if (!window.confirm(t('deleteProfileConfirm', { name: profile.name }))) return
+    await hostsApi.delete(profile.id)
+    const result = await hostsApi.list()
+    setProfiles(result.profiles)
+    if (activeProfileId === profile.id) {
+      setActiveProfileId(result.profiles.length > 0 ? result.profiles[0].id : null)
     }
   }
 
@@ -178,9 +197,31 @@ export function HostsPage() {
           <Card>
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-                  {activeProfile?.name ?? t('title')}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                    {activeProfile?.name ?? t('title')}
+                  </h3>
+                  {canManage && activeProfile && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEditingProfile(activeProfile)}
+                        className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                        title={t('editProfile')}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProfile(activeProfile)}
+                        className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--color-danger-500)]"
+                        title={t('deleteProfile')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
                 {activeProfile?.description && (
                   <p className="mt-1 text-sm text-[var(--text-muted)]">{activeProfile.description}</p>
                 )}
@@ -209,6 +250,16 @@ export function HostsPage() {
           <HostProfileForm
             onSubmit={handleCreateProfile}
             onCancel={() => setShowProfileForm(false)}
+          />
+        )}
+      </Modal>
+
+      <Modal open={!!editingProfile} onClose={() => setEditingProfile(null)} title={t('editProfile')}>
+        {editingProfile && (
+          <HostProfileForm
+            initial={{ name: editingProfile.name, description: editingProfile.description }}
+            onSubmit={handleUpdateProfile}
+            onCancel={() => setEditingProfile(null)}
           />
         )}
       </Modal>
