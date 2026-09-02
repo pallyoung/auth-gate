@@ -14,16 +14,16 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/api/dto"
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	"github.com/pallyoung/auth-gate/packages/server/internal/config"
+	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	"github.com/pallyoung/auth-gate/packages/server/internal/localca"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
-	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	accesslogservice "github.com/pallyoung/auth-gate/packages/server/internal/service/accesslog"
 	apikeyservice "github.com/pallyoung/auth-gate/packages/server/internal/service/apikeys"
-	routeauthservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routeauth"
-	httpresponse "github.com/pallyoung/auth-gate/packages/server/internal/http/response"
 	authrulesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/authrules"
 	certservice "github.com/pallyoung/auth-gate/packages/server/internal/service/certificate"
 	groupsservice "github.com/pallyoung/auth-gate/packages/server/internal/service/groups"
+	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
+	routeauthservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routeauth"
 	routesservice "github.com/pallyoung/auth-gate/packages/server/internal/service/routes"
 	sessionservice "github.com/pallyoung/auth-gate/packages/server/internal/service/session"
 	systemservice "github.com/pallyoung/auth-gate/packages/server/internal/service/system"
@@ -762,8 +762,8 @@ func caExportHandler(certSvc CertService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, dto.CAExportResponse{
-			CertPEM: certPEM,
-			Name:    name,
+			CertPEM:  certPEM,
+			Name:     name,
 			NotAfter: notAfter.Format(time.RFC3339),
 		})
 	}
@@ -1173,9 +1173,10 @@ func aggregateAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manage
 func getRouteAuthConfig(db store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		routeID := c.Param("routeId")
-		cfg, err := db.GetRouteAuthConfig(routeID)
+		svc := routeauthservice.NewService(db, nil)
+		cfg, err := svc.Get(routeID)
 		if err != nil {
-			c.JSON(http.StatusOK, dto.RouteAuthConfigResponseFromStore(store.RouteAuthConfig{RouteID: routeID}))
+			writeServiceError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, dto.RouteAuthConfigResponseFromStore(*cfg))

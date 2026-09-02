@@ -1,10 +1,12 @@
 import { useTranslation } from 'react-i18next'
+import { changeAppLocale } from '../lib/i18n'
+import type { AppLocale } from '../lib/i18n/config'
 import { cn } from '../lib/utils'
 
-const languageOptions = [
+const languageOptions: ReadonlyArray<{ value: AppLocale; label: string; ariaLabel: string }> = [
   { value: 'en', label: 'EN', ariaLabel: 'English' },
   { value: 'zh-CN', label: '中文', ariaLabel: '中文' },
-] as const
+]
 
 interface LanguageSwitcherProps {
   className?: string
@@ -12,7 +14,7 @@ interface LanguageSwitcherProps {
 
 export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
   const { i18n, t } = useTranslation('common')
-  const active = i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
+  const active: AppLocale = i18n.resolvedLanguage === 'zh-CN' ? 'zh-CN' : 'en'
 
   return (
     <div
@@ -31,7 +33,7 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
             type="button"
             aria-label={option.ariaLabel}
             aria-pressed={isActive}
-            onClick={() => void i18n.changeLanguage(option.value)}
+            onClick={() => void changeAppLocale(i18n, option.value)}
             className={cn(
               'inline-flex min-h-8 min-w-8 items-center justify-center rounded-[6px] px-3 py-1 text-xs font-medium transition-colors',
               isActive

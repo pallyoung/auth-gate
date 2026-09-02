@@ -483,6 +483,16 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			return
 		}
 
+		// Handle an allowed CORS preflight before route authentication. Browsers do
+		// not attach application credentials to preflight requests, and the
+		// preflight itself never reaches the upstream service.
+		if route.AuthConfig != nil && route.AuthConfig.CORSAllowedOrigins != "" {
+			_, preflightAbort := handleCORS(route, c)
+			if preflightAbort {
+				return
+			}
+		}
+
 		// 鉴权
 		authenticated := false
 		if route.AuthConfig != nil && route.AuthConfig.HasAuth() {
@@ -577,14 +587,6 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 				}
 			}
 
-			// CORS：检测 OPTIONS 预检请求并尽早响应
-			if cfg.CORSAllowedOrigins != "" {
-				corsAllowed, preflightAbort := handleCORS(cfg, c)
-				if preflightAbort {
-					return
-				}
-				_ = corsAllowed
-			}
 		}
 
 		// 静态文件服务：当路由类型为 "static" 时，直接从本地目录提供文件
@@ -708,12 +710,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		// 自定义响应头：在返回客户端前添加/删除
 		if len(route.AddResponseHeaders) > 0 || len(route.RemoveResponseHeaders) > 0 {
 			proxy.ModifyResponse = func(resp *http.Response) error {
-				for k, v := range route.AddResponseHeaders {
-					resp.Header.Set(k, v)
-				}
-				for _, k := range route.RemoveResponseHeaders {
-					resp.Header.Del(k)
-				}
+				applyResponseHeaderRules(resp.Header, route)
 				return nil
 			}
 		}
@@ -1095,15 +1092,17 @@ func writeUnauthorized(c *gin.Context, route *router.Route) {
 // handleCORS applies CORS headers for a route.
 // Returns (allowedOrigin, true) if a preflight (OPTIONS) was handled and the request should abort.
 // Returns ("", false) if normal request processing should continue.
-func handleCORS(cfg *router.RouteAuthConfig, c *gin.Context) (string, bool) {
+func handleCORS(route *router.Route, c *gin.Context) (string, bool) {
+	cfg := route.AuthConfig
 	origin := c.Request.Header.Get("Origin")
 	if origin == "" {
 		return "", false
 	}
+	addHeaderToken(c.Writer.Header(), "Vary", "Origin")
 
 	allowedOrigins := cfg.CORSAllowedOrigins
 	allowAll := strings.TrimSpace(allowedOrigins) == "*"
-	if !allowAll && !originMatches(origin, allowedOrigins) {
+	if !validCORSOrigin(origin) || (!allowAll && !originMatches(origin, allowedOrigins)) {
 		return "", false
 	}
 
@@ -1128,15 +1127,44 @@ func handleCORS(cfg *router.RouteAuthConfig, c *gin.Context) (string, bool) {
 	c.Header("Access-Control-Allow-Headers", allowedHeaders)
 	c.Header("Access-Control-Max-Age", fmt.Sprintf("%d", maxAge))
 
-	if c.Request.Method == http.MethodOptions {
+	if c.Request.Method == http.MethodOptions && c.GetHeader("Access-Control-Request-Method") != "" {
+		applyResponseHeaderRules(c.Writer.Header(), route)
+		for _, token := range []string{"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"} {
+			addHeaderToken(c.Writer.Header(), "Vary", token)
+		}
 		c.AbortWithStatus(http.StatusNoContent)
 		return origin, true
 	}
 	return origin, false
 }
 
+func applyResponseHeaderRules(header http.Header, route *router.Route) {
+	for k, v := range route.AddResponseHeaders {
+		header.Set(k, v)
+	}
+	for _, k := range route.RemoveResponseHeaders {
+		header.Del(k)
+	}
+}
+
+func addHeaderToken(header http.Header, name, token string) {
+	for _, value := range header.Values(name) {
+		for _, existing := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(existing), token) {
+				return
+			}
+		}
+	}
+	header.Add(name, token)
+}
+
 // originMatches checks if origin matches any pattern (exact or .domain wildcard).
 func originMatches(origin, allowed string) bool {
+	parsedOrigin, ok := parseCORSOrigin(origin)
+	if !ok {
+		return false
+	}
+
 	allowedList := strings.Split(allowed, ",")
 	for _, pattern := range allowedList {
 		pattern = strings.TrimSpace(pattern)
@@ -1145,8 +1173,8 @@ func originMatches(origin, allowed string) bool {
 		}
 		if pattern[0] == '.' {
 			domain := strings.ToLower(pattern[1:])
-			lowerOrigin := strings.ToLower(origin)
-			if strings.HasSuffix(lowerOrigin, domain) {
+			hostname := strings.ToLower(parsedOrigin.Hostname())
+			if domain != "" && (hostname == domain || strings.HasSuffix(hostname, "."+domain)) {
 				return true
 			}
 		} else if strings.EqualFold(pattern, origin) {
@@ -1154,6 +1182,22 @@ func originMatches(origin, allowed string) bool {
 		}
 	}
 	return false
+}
+
+func validCORSOrigin(origin string) bool {
+	_, ok := parseCORSOrigin(origin)
+	return ok
+}
+
+func parseCORSOrigin(origin string) (*url.URL, bool) {
+	parsed, err := url.Parse(origin)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.Hostname() == "" {
+		return nil, false
+	}
+	if parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, false
+	}
+	return parsed, true
 }
 
 // spaFileSystem wraps http.FileSystem to serve index.html for missing files (SPA fallback).

@@ -197,6 +197,257 @@ func TestWriteUnauthorized_Returns401JSON(t *testing.T) {
 	}
 }
 
+func TestProtectedRouteCORSPreflightReturnsHeadersBeforeAuthentication(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:                    "route-cors",
+		Name:                  "Protected API",
+		PathPrefix:            "/api",
+		Backend:               upstream.URL,
+		Enabled:               true,
+		AddResponseHeaders:    map[string]string{"X-Response-From": "gateway"},
+		RemoveResponseHeaders: []string{"Access-Control-Max-Age"},
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+	if err := db.CreateOrUpdateRouteAuthConfig(&store.RouteAuthConfig{
+		RouteID:              "route-cors",
+		ApiKeyEnabled:        true,
+		ApiKeyHeader:         "X-API-Key",
+		CORSAllowedOrigins:   "https://app.example.com",
+		CORSAllowedMethods:   "GET,POST,OPTIONS",
+		CORSAllowedHeaders:   "Authorization,Content-Type",
+		CORSAllowCredentials: true,
+		CORSMaxAge:           7200,
+	}); err != nil {
+		t.Fatalf("CreateOrUpdateRouteAuthConfig() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr, nil))
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/users", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "Authorization,Content-Type")
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusNoContent, resp.Body.String())
+	}
+	if got := resp.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want %q", got, "https://app.example.com")
+	}
+	if got := resp.Header().Get("Access-Control-Allow-Methods"); got != "GET,POST,OPTIONS" {
+		t.Fatalf("Access-Control-Allow-Methods = %q, want %q", got, "GET,POST,OPTIONS")
+	}
+	if got := resp.Header().Get("Access-Control-Allow-Headers"); got != "Authorization,Content-Type" {
+		t.Fatalf("Access-Control-Allow-Headers = %q, want %q", got, "Authorization,Content-Type")
+	}
+	if got := resp.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("Access-Control-Allow-Credentials = %q, want true", got)
+	}
+	if got := resp.Header().Get("X-Response-From"); got != "gateway" {
+		t.Fatalf("X-Response-From = %q, want gateway", got)
+	}
+	if got := resp.Header().Get("Access-Control-Max-Age"); got != "" {
+		t.Fatalf("Access-Control-Max-Age = %q, want empty", got)
+	}
+	for _, token := range []string{"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"} {
+		if !headerContainsToken(resp.Header(), "Vary", token) {
+			t.Fatalf("Vary = %q, want token %q", resp.Header().Values("Vary"), token)
+		}
+	}
+	if upstreamCalls != 0 {
+		t.Fatalf("upstream calls = %d, want 0", upstreamCalls)
+	}
+}
+
+func TestCORSPreflightPreservesRequiredVaryAfterCustomHeaderRules(t *testing.T) {
+	tests := []struct {
+		name                  string
+		addResponseHeaders    map[string]string
+		removeResponseHeaders []string
+		wantAdditionalVary    string
+	}{
+		{
+			name:               "custom Vary value",
+			addResponseHeaders: map[string]string{"Vary": "Accept-Encoding"},
+			wantAdditionalVary: "Accept-Encoding",
+		},
+		{
+			name:                  "custom Vary removal",
+			removeResponseHeaders: []string{"Vary"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodOptions, "/api", nil)
+			c.Request.Header.Set("Origin", "https://app.example.com")
+			c.Request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+			c.Request.Header.Set("Access-Control-Request-Headers", "Authorization")
+
+			_, handled := handleCORS(&router.Route{
+				AddResponseHeaders:    tt.addResponseHeaders,
+				RemoveResponseHeaders: tt.removeResponseHeaders,
+				AuthConfig: &router.RouteAuthConfig{
+					CORSAllowedOrigins: "https://app.example.com",
+				},
+			}, c)
+
+			if !handled {
+				t.Fatal("handleCORS() did not handle the preflight request")
+			}
+			for _, token := range []string{"Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"} {
+				if !headerContainsToken(w.Header(), "Vary", token) {
+					t.Fatalf("Vary = %q, want token %q", w.Header().Values("Vary"), token)
+				}
+			}
+			if tt.wantAdditionalVary != "" && !headerContainsToken(w.Header(), "Vary", tt.wantAdditionalVary) {
+				t.Fatalf("Vary = %q, want custom token %q", w.Header().Values("Vary"), tt.wantAdditionalVary)
+			}
+		})
+	}
+}
+
+func TestOriginMatchesDomainWildcardUsesHostnameBoundary(t *testing.T) {
+	tests := []struct {
+		name   string
+		origin string
+		want   bool
+	}{
+		{name: "apex domain", origin: "https://example.com", want: true},
+		{name: "subdomain", origin: "https://api.example.com", want: true},
+		{name: "subdomain with port", origin: "https://api.example.com:8443", want: true},
+		{name: "deceptive suffix", origin: "https://evil-example.com", want: false},
+		{name: "hostname prefix without scheme", origin: "api.example.com", want: false},
+		{name: "unsupported scheme", origin: "ftp://api.example.com", want: false},
+		{name: "origin with path", origin: "https://api.example.com/path", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := originMatches(tt.origin, ".example.com"); got != tt.want {
+				t.Fatalf("originMatches(%q, %q) = %v, want %v", tt.origin, ".example.com", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOriginMatchesRejectsMalformedExactOrigin(t *testing.T) {
+	if originMatches("not-an-origin", "not-an-origin") {
+		t.Fatal("originMatches() accepted an origin without an HTTP(S) scheme and host")
+	}
+}
+
+func TestHandleCORSRejectedOriginDoesNotSetResponseHeaders(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodOptions, "/api", nil)
+	c.Request.Header.Set("Origin", "https://evil-example.com")
+	c.Request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+
+	_, handled := handleCORS(&router.Route{
+		AuthConfig: &router.RouteAuthConfig{CORSAllowedOrigins: ".example.com"},
+	}, c)
+
+	if handled {
+		t.Fatal("handleCORS() handled a rejected origin")
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
+	}
+}
+
+func TestProtectedRouteCORSOrdinaryOptionsReachesUpstream(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+		if r.Method != http.MethodOptions {
+			t.Errorf("upstream method = %q, want OPTIONS", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("options-ok"))
+	}))
+	defer upstream.Close()
+
+	db := newProxyTestDB(t)
+	if err := db.CreateRoute(&store.Route{
+		ID:         "route-options",
+		Name:       "Protected API",
+		PathPrefix: "/api",
+		Backend:    upstream.URL,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatalf("CreateRoute() error = %v", err)
+	}
+	if err := db.CreateOrUpdateRouteAuthConfig(&store.RouteAuthConfig{
+		RouteID:            "route-options",
+		ApiKeyEnabled:      true,
+		ApiKeyHeader:       "X-API-Key",
+		CORSAllowedOrigins: "https://app.example.com",
+	}); err != nil {
+		t.Fatalf("CreateOrUpdateRouteAuthConfig() error = %v", err)
+	}
+	if err := db.CreateApiKey(&store.ApiKey{
+		RouteID: "route-options",
+		Name:    "test",
+		Secret:  "test-secret",
+		Status:  "active",
+	}); err != nil {
+		t.Fatalf("CreateApiKey() error = %v", err)
+	}
+
+	mgr := router.NewManager(db)
+	engine := gin.New()
+	engine.Any("/*proxyPath", Handler(mgr, nil))
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/users", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("X-API-Key", "test-secret")
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if resp.Body.String() != "options-ok" {
+		t.Fatalf("body = %q, want %q", resp.Body.String(), "options-ok")
+	}
+	if upstreamCalls != 1 {
+		t.Fatalf("upstream calls = %d, want 1", upstreamCalls)
+	}
+	if !headerContainsToken(resp.Header(), "Vary", "Origin") {
+		t.Fatalf("Vary = %q, want Origin", resp.Header().Values("Vary"))
+	}
+	if headerContainsToken(resp.Header(), "Vary", "Access-Control-Request-Method") {
+		t.Fatalf("Vary = %q, ordinary OPTIONS must not vary on preflight headers", resp.Header().Values("Vary"))
+	}
+}
+
+func headerContainsToken(header http.Header, name, want string) bool {
+	for _, value := range header.Values(name) {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestProxyNormalizesLegacyStoredAPIKeyAuthRuleType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -30,7 +30,7 @@ export function SettingsPage() {
   const [configError, setConfigError] = React.useState<SettingsAlertState>(null)
 
   // Log retention state
-  const [retentionDays, setRetentionDays] = React.useState(0)
+  const [retentionDays, setRetentionDays] = React.useState('0')
   const [retentionLoading, setRetentionLoading] = React.useState(true)
   const [retentionSaving, setRetentionSaving] = React.useState(false)
   const [retentionMessage, setRetentionMessage] = React.useState<SettingsAlertState>(null)
@@ -51,7 +51,7 @@ export function SettingsPage() {
   React.useEffect(() => {
     if (!isAdmin) { setRetentionLoading(false); return }
     configApi.getLogRetention().then((res) => {
-      setRetentionDays(res.days)
+      setRetentionDays(String(res.days))
     }).catch(() => {
       // Ignore - use defaults
     }).finally(() => setRetentionLoading(false))
@@ -137,11 +137,17 @@ export function SettingsPage() {
   }
 
   const handleSaveRetention = async () => {
-    setRetentionSaving(true)
     setRetentionMessage(null)
     setRetentionError(null)
+    const parsedDays = retentionDays.trim() === '' ? 0 : Number(retentionDays)
+    if (!Number.isInteger(parsedDays) || parsedDays < 0) {
+      setRetentionError({ translationKey: 'logRetention.invalidDays' })
+      return
+    }
+
+    setRetentionSaving(true)
     try {
-      await configApi.updateLogRetention(retentionDays)
+      await configApi.updateLogRetention(parsedDays)
       setRetentionMessage({ translationKey: 'logRetention.saved' })
     } catch {
       setRetentionError({ translationKey: 'logRetention.saveFailed' })
@@ -360,7 +366,7 @@ export function SettingsPage() {
                           {t('logRetention.label')}
                         </h3>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">
-                          {retentionDays > 0
+                          {Number(retentionDays) > 0
                             ? t('logRetention.description')
                             : t('logRetention.disabled')}
                         </p>
@@ -369,8 +375,9 @@ export function SettingsPage() {
                         <Input
                           type="number"
                           min={0}
-                          value={String(retentionDays)}
-                          onChange={(e) => setRetentionDays(Math.max(0, parseInt(e.target.value) || 0))}
+                          step={1}
+                          value={retentionDays}
+                          onChange={(e) => setRetentionDays(e.target.value)}
                           className="w-24"
                         />
                         <span className="text-sm text-[var(--text-muted)]">{t('logRetention.unit')}</span>
@@ -389,7 +396,7 @@ export function SettingsPage() {
                         <Button
                           variant="secondary"
                           loading={purging}
-                          disabled={retentionDays <= 0}
+                          disabled={!Number.isInteger(Number(retentionDays)) || Number(retentionDays) <= 0}
                           onClick={handlePurge}
                           size="sm"
                           icon={<Trash2 className="h-3.5 w-3.5" />}

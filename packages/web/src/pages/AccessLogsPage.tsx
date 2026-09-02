@@ -38,6 +38,7 @@ export function AccessLogsPage() {
   })
   const [total, setTotal] = React.useState(0)
   const [totalPages, setTotalPages] = React.useState(0)
+  const detailRequestRef = React.useRef(0)
 
   // Aggregate view state
   const [aggData, setAggData] = React.useState<AccessLogAggregateResponse | null>(null)
@@ -46,8 +47,12 @@ export function AccessLogsPage() {
   const [sortBy, setSortBy] = React.useState<string>('count')
   const [duration, setDuration] = React.useState<string>('24h')
   const [aggPage, setAggPage] = React.useState(1)
+  const aggregateRequestRef = React.useRef(0)
 
   const fetchDetailData = React.useCallback(async () => {
+    const requestId = detailRequestRef.current + 1
+    detailRequestRef.current = requestId
+    aggregateRequestRef.current += 1
     try {
       setLoading(true)
       setError(null)
@@ -55,18 +60,23 @@ export function AccessLogsPage() {
         accessLogsApi.list(filters),
         accessLogsApi.stats('24h'),
       ])
+      if (detailRequestRef.current !== requestId) return
       setEntries(listResult.entries)
       setTotal(listResult.total)
       setTotalPages(listResult.total_pages)
       setStats(statsResult)
     } catch (err) {
+      if (detailRequestRef.current !== requestId) return
       setError(err instanceof Error ? err.message : 'Failed to fetch access logs')
     } finally {
-      setLoading(false)
+      if (detailRequestRef.current === requestId) setLoading(false)
     }
   }, [filters])
 
   const fetchAggregateData = React.useCallback(async () => {
+    const requestId = aggregateRequestRef.current + 1
+    aggregateRequestRef.current = requestId
+    detailRequestRef.current += 1
     try {
       setAggLoading(true)
       setError(null)
@@ -77,21 +87,23 @@ export function AccessLogsPage() {
         page: aggPage,
         per_page: 20,
       })
+      if (aggregateRequestRef.current !== requestId) return
       setAggData(result)
     } catch (err) {
+      if (aggregateRequestRef.current !== requestId) return
       setError(err instanceof Error ? err.message : 'Failed to fetch aggregate data')
     } finally {
-      setAggLoading(false)
+      if (aggregateRequestRef.current === requestId) setAggLoading(false)
     }
   }, [groupBy, sortBy, duration, aggPage])
 
   React.useEffect(() => {
-    if (viewMode === 'detail') {
-      fetchDetailData()
-    } else {
-      fetchAggregateData()
-    }
-  }, [viewMode, fetchDetailData, fetchAggregateData])
+    if (viewMode === 'detail') fetchDetailData()
+  }, [viewMode, fetchDetailData])
+
+  React.useEffect(() => {
+    if (viewMode === 'aggregate') fetchAggregateData()
+  }, [viewMode, fetchAggregateData])
 
   const handlePageChange = (page: number) => {
     setFilters({ ...filters, page })

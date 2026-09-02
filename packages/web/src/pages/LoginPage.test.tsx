@@ -12,6 +12,15 @@ describe('LoginPage', () => {
     onLogin.mockReset()
   })
 
+  it('does not submit while required credentials are empty', async () => {
+    const user = userEvent.setup()
+    await renderWithI18n(<LoginPage onLogin={onLogin} />)
+
+    await user.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    expect(onLogin).not.toHaveBeenCalled()
+  })
+
   it('renders translated login copy in zh-CN', async () => {
     await renderWithI18n(<LoginPage onLogin={onLogin} />, { locale: 'zh-CN' })
 

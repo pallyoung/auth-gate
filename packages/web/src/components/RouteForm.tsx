@@ -14,19 +14,37 @@ interface RouteFormProps {
 
 type TLSCertMode = 'system' | 'upload'
 
-function getInitialBackends(route: Route | null): RouteBackend[] {
+type RouteBackendDraft = Omit<
+  RouteBackend,
+  'weight' | 'dial_timeout_ms' | 'read_timeout_ms' | 'write_timeout_ms' | 'max_idle_conns'
+> & {
+  weight: string
+  dial_timeout_ms: string
+  read_timeout_ms: string
+  write_timeout_ms: string
+  max_idle_conns: string
+}
+
+type RouteFormDraft = Omit<RouteInput, 'priority' | 'timeout_ms' | 'retry_attempts' | 'backends'> & {
+  priority: string
+  timeout_ms: string
+  retry_attempts: string
+  backends: RouteBackendDraft[]
+}
+
+function getInitialBackends(route: Route | null): RouteBackendDraft[] {
   return (route?.backends || []).map((backend) => ({
     ...backend,
     url: backend.url || '',
-    weight: backend.weight || 1,
-    dial_timeout_ms: backend.dial_timeout_ms || 0,
-    read_timeout_ms: backend.read_timeout_ms || 0,
-    write_timeout_ms: backend.write_timeout_ms || 0,
-    max_idle_conns: backend.max_idle_conns || 0,
+    weight: String(backend.weight || 1),
+    dial_timeout_ms: String(backend.dial_timeout_ms || 0),
+    read_timeout_ms: String(backend.read_timeout_ms || 0),
+    write_timeout_ms: String(backend.write_timeout_ms || 0),
+    max_idle_conns: String(backend.max_idle_conns || 0),
   }))
 }
 
-function getInitialRouteForm(route: Route | null): RouteInput {
+function getInitialRouteForm(route: Route | null): RouteFormDraft {
   return {
     name: route?.name || '',
     host: route?.host || '',
@@ -35,7 +53,7 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     backends: getInitialBackends(route),
     strip_prefix: route?.strip_prefix ?? true,
     enabled: route?.enabled ?? true,
-    priority: route?.priority || 0,
+    priority: String(route?.priority || 0),
     type: route?.type || 'proxy',
     static_root: route?.static_root || '',
     static_spa: route?.static_spa ?? false,
@@ -44,8 +62,8 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     tls_enabled: route?.tls_enabled ?? false,
     https_redirect: route?.https_redirect ?? false,
     certificate_id: route?.certificate_id || '',
-    timeout_ms: route?.timeout_ms || 0,
-    retry_attempts: route?.retry_attempts || 0,
+    timeout_ms: String(route?.timeout_ms || 0),
+    retry_attempts: String(route?.retry_attempts || 0),
     path_match_mode: route?.path_match_mode || '',
     header_name: route?.header_name || '',
     header_value: route?.header_value || '',
@@ -57,6 +75,16 @@ function getInitialRouteForm(route: Route | null): RouteInput {
     add_response_headers: route?.add_response_headers || {},
     remove_response_headers: route?.remove_response_headers || [],
   }
+}
+
+function parseIntegerDraft(value: string): number | null {
+  const parsed = value.trim() === '' ? 0 : Number(value)
+  return Number.isInteger(parsed) ? parsed : null
+}
+
+function parseNonNegativeIntegerDraft(value: string): number | null {
+  const parsed = parseIntegerDraft(value)
+  return parsed != null && parsed >= 0 ? parsed : null
 }
 
 function normalizeHost(host: string | undefined) {
@@ -212,7 +240,7 @@ function HeaderListSection({
 
 export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteFormProps) {
   const { t } = useTranslation('routes')
-  const [form, setForm] = React.useState<RouteInput>(() => getInitialRouteForm(route))
+  const [form, setForm] = React.useState<RouteFormDraft>(() => getInitialRouteForm(route))
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const activeSubmitRef = React.useRef<symbol | null>(null)
@@ -241,7 +269,7 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
     setUploadKeyPem('')
   }, [initialFormSeed])
 
-  const updateBackend = (index: number, updater: (current: RouteBackend) => RouteBackend) => {
+  const updateBackend = (index: number, updater: (current: RouteBackendDraft) => RouteBackendDraft) => {
     setForm((current) => ({
       ...current,
       backends: (current.backends || []).map((backend, backendIndex) => (
@@ -255,7 +283,7 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
       ...current,
       backends: [
         ...(current.backends || []),
-        { url: '', weight: 1, dial_timeout_ms: 0, read_timeout_ms: 0, write_timeout_ms: 0, max_idle_conns: 0 },
+        { url: '', weight: '1', dial_timeout_ms: '0', read_timeout_ms: '0', write_timeout_ms: '0', max_idle_conns: '0' },
       ],
     }))
   }
@@ -278,6 +306,50 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
     setError(null)
     setSubmitting(true)
     try {
+      const priority = parseIntegerDraft(form.priority)
+      const timeoutMs = parseNonNegativeIntegerDraft(form.timeout_ms)
+      const retryAttempts = parseNonNegativeIntegerDraft(form.retry_attempts)
+      if (priority == null || timeoutMs == null || retryAttempts == null) {
+        setError({ translationKey: 'form.invalidIntegerFields' })
+        return
+      }
+
+      const normalizedBackends: RouteBackend[] = []
+      for (const backend of form.backends || []) {
+        const url = (backend.url || '').trim()
+        if (!url) continue
+
+        const weight = parseNonNegativeIntegerDraft(backend.weight)
+        const dialTimeoutMs = parseNonNegativeIntegerDraft(backend.dial_timeout_ms)
+        const readTimeoutMs = parseNonNegativeIntegerDraft(backend.read_timeout_ms)
+        const writeTimeoutMs = parseNonNegativeIntegerDraft(backend.write_timeout_ms)
+        const maxIdleConns = parseNonNegativeIntegerDraft(backend.max_idle_conns)
+        if (weight == null || weight <= 0) {
+          setError({ translationKey: 'errors.invalidRouteBackendWeight' })
+          return
+        }
+        if (
+          dialTimeoutMs == null ||
+          readTimeoutMs == null ||
+          writeTimeoutMs == null ||
+          maxIdleConns == null
+        ) {
+          setError({ translationKey: 'form.invalidIntegerFields' })
+          return
+        }
+
+        normalizedBackends.push({
+          url,
+          weight,
+          ...(dialTimeoutMs ? { dial_timeout_ms: dialTimeoutMs } : {}),
+          ...(readTimeoutMs ? { read_timeout_ms: readTimeoutMs } : {}),
+          ...(writeTimeoutMs ? { write_timeout_ms: writeTimeoutMs } : {}),
+          ...(maxIdleConns ? { max_idle_conns: maxIdleConns } : {}),
+          ...(backend.rewrite_target ? { rewrite_target: backend.rewrite_target } : {}),
+          ...(backend.redirect_code ? { redirect_code: backend.redirect_code } : {}),
+        })
+      }
+
       // If TLS is enabled and user chose upload mode, create the certificate first.
       let certificateId = form.certificate_id || ''
       if (form.tls_enabled && tlsCertMode === 'upload') {
@@ -317,21 +389,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         certificateId = newCert.id
       }
 
-      const normalizedBackends = (form.backends || [])
-        .map((backend) => ({
-          url: (backend.url || '').trim(),
-          weight: backend.weight,
-          ...(backend.dial_timeout_ms ? { dial_timeout_ms: backend.dial_timeout_ms } : {}),
-          ...(backend.read_timeout_ms ? { read_timeout_ms: backend.read_timeout_ms } : {}),
-          ...(backend.write_timeout_ms ? { write_timeout_ms: backend.write_timeout_ms } : {}),
-          ...(backend.max_idle_conns ? { max_idle_conns: backend.max_idle_conns } : {}),
-          ...(backend.rewrite_target ? { rewrite_target: backend.rewrite_target } : {}),
-          ...(backend.redirect_code ? { redirect_code: backend.redirect_code } : {}),
-        }))
-        .filter((backend) => backend.url !== '')
-
       await onSubmit({
         ...form,
+        priority,
+        timeout_ms: timeoutMs,
+        retry_attempts: retryAttempts,
         host: normalizeHost(form.host),
         backend: (form.backend || '').trim(),
         backends: normalizedBackends,
@@ -392,7 +454,7 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
   ]
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
 
       <Card tone="soft" className="space-y-5">
@@ -480,8 +542,9 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
         <Input
           label={t('form.priority')}
           type="number"
+          step={1}
           value={form.priority}
-          onChange={(event) => setForm({ ...form, priority: parseInt(event.target.value, 10) || 0 })}
+          onChange={(event) => setForm({ ...form, priority: event.target.value })}
           hint={t('form.priorityHint')}
         />
 
@@ -490,16 +553,18 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
             label={t('form.timeoutMs')}
             type="number"
             min={0}
-            value={form.timeout_ms || 0}
-            onChange={(event) => setForm({ ...form, timeout_ms: parseInt(event.target.value, 10) || 0 })}
+            step={1}
+            value={form.timeout_ms}
+            onChange={(event) => setForm({ ...form, timeout_ms: event.target.value })}
             hint={t('form.timeoutMsHint')}
           />
           <Input
             label={t('form.retryAttempts')}
             type="number"
             min={0}
-            value={form.retry_attempts || 0}
-            onChange={(event) => setForm({ ...form, retry_attempts: parseInt(event.target.value, 10) || 0 })}
+            step={1}
+            value={form.retry_attempts}
+            onChange={(event) => setForm({ ...form, retry_attempts: event.target.value })}
             hint={t('form.retryAttemptsHint')}
           />
         </div>
@@ -607,10 +672,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
                     label={t('form.backendWeightWithCount', { count: index + 1 })}
                     type="number"
                     min={1}
+                    step={1}
                     value={backend.weight}
                     onChange={(event) => updateBackend(index, (current) => ({
                       ...current,
-                      weight: parseInt(event.target.value, 10) || 0,
+                      weight: event.target.value,
                     }))}
                     hint={t('form.backendWeightHint')}
                   />
@@ -622,10 +688,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
                     label={t('form.backendDialTimeoutWithCount', { count: index + 1 })}
                     type="number"
                     min={0}
-                    value={backend.dial_timeout_ms || 0}
+                    step={1}
+                    value={backend.dial_timeout_ms}
                     onChange={(event) => updateBackend(index, (current) => ({
                       ...current,
-                      dial_timeout_ms: parseInt(event.target.value, 10) || 0,
+                      dial_timeout_ms: event.target.value,
                     }))}
                     hint={t('form.backendTimeoutHint')}
                   />
@@ -634,10 +701,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
                     label={t('form.backendReadTimeoutWithCount', { count: index + 1 })}
                     type="number"
                     min={0}
-                    value={backend.read_timeout_ms || 0}
+                    step={1}
+                    value={backend.read_timeout_ms}
                     onChange={(event) => updateBackend(index, (current) => ({
                       ...current,
-                      read_timeout_ms: parseInt(event.target.value, 10) || 0,
+                      read_timeout_ms: event.target.value,
                     }))}
                     hint={t('form.backendTimeoutHint')}
                   />
@@ -646,10 +714,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
                     label={t('form.backendWriteTimeoutWithCount', { count: index + 1 })}
                     type="number"
                     min={0}
-                    value={backend.write_timeout_ms || 0}
+                    step={1}
+                    value={backend.write_timeout_ms}
                     onChange={(event) => updateBackend(index, (current) => ({
                       ...current,
-                      write_timeout_ms: parseInt(event.target.value, 10) || 0,
+                      write_timeout_ms: event.target.value,
                     }))}
                     hint={t('form.backendTimeoutHint')}
                   />
@@ -661,10 +730,11 @@ export function RouteForm({ route, certificates, onSubmit, onCancel }: RouteForm
                     label={t('form.backendMaxIdleConnsWithCount', { count: index + 1 })}
                     type="number"
                     min={0}
-                    value={backend.max_idle_conns || 0}
+                    step={1}
+                    value={backend.max_idle_conns}
                     onChange={(event) => updateBackend(index, (current) => ({
                       ...current,
-                      max_idle_conns: parseInt(event.target.value, 10) || 0,
+                      max_idle_conns: event.target.value,
                     }))}
                     hint={t('form.backendMaxIdleConnsHint')}
                   />

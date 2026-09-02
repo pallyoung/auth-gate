@@ -54,6 +54,7 @@ function getSafeNavigator(): NavigatorLike | null {
   return null
 }
 
+/** Manual preference previously saved by the language switcher. */
 export function getPersistedLocale() {
   try {
     return normalizeLocale(getSafeStorage()?.getItem(LOCALE_STORAGE_KEY))
@@ -62,6 +63,7 @@ export function getPersistedLocale() {
   }
 }
 
+/** Persist a user-chosen locale. Browser auto-detect must not call this. */
 export function persistLocale(locale: string) {
   const normalized = normalizeLocale(locale) ?? DEFAULT_LOCALE
 
@@ -72,10 +74,8 @@ export function persistLocale(locale: string) {
   }
 }
 
-export function detectInitialLocale() {
-  const persisted = getPersistedLocale()
-  if (persisted) return persisted
-
+/** Resolve locale from the browser only (ignores localStorage). */
+export function detectBrowserLocale(): AppLocale {
   const currentNavigator = getSafeNavigator()
   const languages = Array.isArray(currentNavigator?.languages) ? currentNavigator.languages : []
   for (const candidate of languages) {
@@ -84,4 +84,22 @@ export function detectInitialLocale() {
   }
 
   return normalizeLocale(currentNavigator?.language) ?? DEFAULT_LOCALE
+}
+
+/**
+ * Initial locale resolution:
+ * 1. User manual preference (localStorage)
+ * 2. Browser language
+ * 3. Default (en)
+ */
+export function detectInitialLocale() {
+  return getPersistedLocale() ?? detectBrowserLocale()
+}
+
+export function applyDocumentLocale(locale: string) {
+  const normalized = normalizeLocale(locale) ?? DEFAULT_LOCALE
+  const root = globalThis.document?.documentElement
+  if (root) {
+    root.lang = normalized
+  }
 }

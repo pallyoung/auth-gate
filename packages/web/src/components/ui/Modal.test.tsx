@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { Modal } from './Modal'
 import { renderWithI18n } from '../../test/render'
 
@@ -87,5 +88,42 @@ describe('Modal', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('keeps stacked dialogs labelled and lets only the top dialog handle Escape', async () => {
+    const baseOnClose = vi.fn()
+    const user = userEvent.setup()
+
+    function StackedDialogs() {
+      const [confirmOpen, setConfirmOpen] = useState(true)
+      return (
+        <>
+          <Modal open onClose={baseOnClose} title="Route editor">
+            <button type="button">Save</button>
+          </Modal>
+          <Modal
+            open={confirmOpen}
+            onClose={() => setConfirmOpen(false)}
+            title="Discard changes?"
+            dialogRole="alertdialog"
+            showCloseButton={false}
+          >
+            <button type="button">Keep editing</button>
+          </Modal>
+        </>
+      )
+    }
+
+    await renderWithI18n(<StackedDialogs />, { locale: 'en' })
+
+    expect(screen.getByRole('dialog', { name: 'Route editor' })).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('alertdialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Route editor' })).toBeInTheDocument()
+    expect(document.body).toHaveStyle({ overflow: 'hidden' })
+    expect(baseOnClose).not.toHaveBeenCalled()
   })
 })

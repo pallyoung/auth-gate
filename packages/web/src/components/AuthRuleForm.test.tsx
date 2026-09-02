@@ -44,6 +44,12 @@ function renderForm(rule: AuthRule | null, onSubmit?: (data: AuthRuleInput) => P
 }
 
 describe('AuthRuleForm', () => {
+  it('uses app-owned validation instead of native browser bubbles', async () => {
+    const { container } = await renderForm(null)
+
+    expect(container.querySelector('form')).toHaveAttribute('novalidate')
+  })
+
   it('submits only apikey config fields for apikey rules', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
@@ -79,7 +85,7 @@ describe('AuthRuleForm', () => {
     await user.type(screen.getByLabelText('Rate Limit'), '15')
     await user.type(screen.getByLabelText('Burst'), '30')
     await user.type(screen.getByLabelText('Allowed Origins'), ' https://app.example.com , .example.com ')
-    await user.type(screen.getByLabelText('Allowed Methods'), ' GET, POST, OPTIONS ')
+    await user.type(screen.getByLabelText('Allowed Methods'), ' get, post, options ')
     await user.type(screen.getByLabelText('Allowed Headers'), ' Authorization, Content-Type ')
     await user.click(screen.getByLabelText('Allow Credentials'))
     await user.type(screen.getByLabelText('Max Age'), '7200')
@@ -102,6 +108,60 @@ describe('AuthRuleForm', () => {
         cors_max_age: 7200,
       })
     })
+  })
+
+  it.each([
+    ['Rate Limit', '-1'],
+    ['Burst', '1.5'],
+    ['Max Age', '-2.5'],
+  ])('keeps an invalid %s draft editable and validates it on submit', async (label, value) => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    await renderForm(null, onSubmit)
+
+    const input = screen.getByLabelText(label)
+    await user.type(input, value)
+
+    expect(input).toHaveValue(Number(value))
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Create Rule' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(await screen.findByText('Enter a whole number greater than or equal to 0.')).toBeInTheDocument()
+  })
+
+  it('keeps numeric fields empty while the user is editing', async () => {
+    const user = userEvent.setup()
+    await renderForm({
+      id: 'rule-1',
+      route_id: 'route-1',
+      type: 'none',
+      config: {},
+      rate_limit: 15,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    })
+
+    const input = screen.getByLabelText('Rate Limit')
+    await user.clear(input)
+
+    expect(input).toHaveValue(null)
+  })
+
+  it('rejects invalid CORS method tokens on submit without changing the draft', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    await renderForm(null, onSubmit)
+
+    const input = screen.getByLabelText('Allowed Methods')
+    await user.type(input, 'GET,PO ST')
+    expect(input).toHaveValue('GET,PO ST')
+
+    await user.click(screen.getByRole('button', { name: 'Create Rule' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(await screen.findByText('Use comma-separated HTTP method tokens, such as GET, POST, or OPTIONS.')).toBeInTheDocument()
   })
 
   it('does not block API key edits when no secret input exists', async () => {

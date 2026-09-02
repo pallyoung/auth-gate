@@ -38,6 +38,31 @@ afterEach(() => {
 })
 
 describe('SettingsPage i18n', () => {
+  it('keeps log retention empty while editing and converts it only when saving', async () => {
+    setSessionUser({
+      id: 'admin-1',
+      username: 'admin',
+      role: 'admin',
+      permissions: {
+        can_manage_routes: true,
+        can_manage_auth: true,
+        can_manage_users: true,
+        can_view_logs: true,
+        can_manage_hosts: true,
+      },
+    })
+    const user = userEvent.setup()
+
+    await renderWithI18n(<SettingsPage />, { locale: 'en' })
+
+    const retentionInput = await screen.findByRole('spinbutton')
+    await user.clear(retentionInput)
+    expect(retentionInput).toHaveValue(null)
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(configApi.updateLogRetention).toHaveBeenCalledWith(0)
+  })
+
   it('translates the active role label', async () => {
     setSessionUser({
       id: 'admin-1',

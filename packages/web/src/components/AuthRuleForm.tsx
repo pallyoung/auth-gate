@@ -1,6 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { getLocalizedTextState, resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
+import { normalizeCORSMethods } from '../lib/cors'
 import type { AuthRule, AuthRuleInput, Route } from '../lib/api/types'
 import { Alert, Button, Card, Input, Select, Switch } from './ui'
 
@@ -25,6 +26,28 @@ function normalizeCommaSeparatedValue(value: string): string {
 
 function normalizeOptionalNumber(value: number | undefined): number | undefined {
   return value && value > 0 ? value : undefined
+}
+
+function parseOptionalNonNegativeInteger(value: string): number | undefined | null {
+  if (value.trim() === '') return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+type NumericDrafts = {
+  rateLimit: string
+  burst: string
+  corsMaxAge: string
+}
+
+type PolicyFieldErrors = Partial<Record<'rateLimit' | 'burst' | 'corsMaxAge' | 'corsAllowedMethods', string>>
+
+function createNumericDrafts(form: AuthRuleInput): NumericDrafts {
+  return {
+    rateLimit: form.rate_limit == null ? '' : String(form.rate_limit),
+    burst: form.burst == null ? '' : String(form.burst),
+    corsMaxAge: form.cors_max_age == null ? '' : String(form.cors_max_age),
+  }
 }
 
 function getInitialAuthRuleForm(rule: AuthRule | null, routes: Route[], defaultRouteId?: string): AuthRuleInput {
@@ -54,6 +77,8 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
   const initialForm = getInitialAuthRuleForm(rule, routes, defaultRouteId)
   const [form, setForm] = React.useState<AuthRuleInput>(() => initialForm)
   const [whitelistText, setWhitelistText] = React.useState(() => (initialForm.whitelist || []).join(', '))
+  const [numericDrafts, setNumericDrafts] = React.useState<NumericDrafts>(() => createNumericDrafts(initialForm))
+  const [fieldErrors, setFieldErrors] = React.useState<PolicyFieldErrors>({})
   const [error, setError] = React.useState<LocalizedTextState>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const activeSubmitRef = React.useRef<symbol | null>(null)
@@ -63,6 +88,8 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
   React.useEffect(() => {
     setForm(initialForm)
     setWhitelistText((initialForm.whitelist || []).join(', '))
+    setNumericDrafts(createNumericDrafts(initialForm))
+    setFieldErrors({})
     setError(null)
   }, [initialFormSeed])
 
@@ -87,7 +114,12 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
     }))
   }
 
-  const buildSubmitPayload = (): AuthRuleInput => {
+  const buildSubmitPayload = (
+    rateLimit: number | undefined,
+    burst: number | undefined,
+    corsMaxAge: number | undefined,
+    corsAllowedMethods: string
+  ): AuthRuleInput => {
     const routeID = form.route_id.trim()
     const headerName = (config.header_name || '').trim()
     const username = (config.username || '').trim()
@@ -96,29 +128,25 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
     const loginMode = (config.login_mode || '').trim()
     const whitelist = form.whitelist || []
     const initialWhitelist = initialForm.whitelist || []
-    const rateLimit = normalizeOptionalNumber(form.rate_limit)
-    const initialRateLimit = normalizeOptionalNumber(initialForm.rate_limit)
-    const burst = normalizeOptionalNumber(form.burst)
-    const initialBurst = normalizeOptionalNumber(initialForm.burst)
+    const initialRateLimit = initialForm.rate_limit
+    const initialBurst = initialForm.burst
     const corsAllowedOrigins = normalizeCommaSeparatedValue(form.cors_allowed_origins || '')
     const initialCORSAllowedOrigins = normalizeCommaSeparatedValue(initialForm.cors_allowed_origins || '')
-    const corsAllowedMethods = normalizeCommaSeparatedValue(form.cors_allowed_methods || '')
-    const initialCORSAllowedMethods = normalizeCommaSeparatedValue(initialForm.cors_allowed_methods || '')
+    const initialCORSAllowedMethods = normalizeCORSMethods(initialForm.cors_allowed_methods || '') || ''
     const corsAllowedHeaders = normalizeCommaSeparatedValue(form.cors_allowed_headers || '')
     const initialCORSAllowedHeaders = normalizeCommaSeparatedValue(initialForm.cors_allowed_headers || '')
     const corsAllowCredentials = !!form.cors_allow_credentials
     const initialCORSAllowCredentials = !!initialForm.cors_allow_credentials
-    const corsMaxAge = normalizeOptionalNumber(form.cors_max_age)
-    const initialCORSMaxAge = normalizeOptionalNumber(initialForm.cors_max_age)
+    const initialCORSMaxAge = initialForm.cors_max_age
     const runtimePolicy: Omit<AuthRuleInput, 'route_id' | 'type' | 'config'> = {
       ...(whitelist.length > 0 || initialWhitelist.length > 0 ? { whitelist } : {}),
-      ...(rateLimit !== undefined || initialRateLimit !== undefined ? { rate_limit: rateLimit || 0 } : {}),
-      ...(burst !== undefined || initialBurst !== undefined ? { burst: burst || 0 } : {}),
+      ...(rateLimit !== undefined || initialRateLimit !== undefined ? { rate_limit: rateLimit ?? 0 } : {}),
+      ...(burst !== undefined || initialBurst !== undefined ? { burst: burst ?? 0 } : {}),
       ...(corsAllowedOrigins || initialCORSAllowedOrigins ? { cors_allowed_origins: corsAllowedOrigins } : {}),
       ...(corsAllowedMethods || initialCORSAllowedMethods ? { cors_allowed_methods: corsAllowedMethods } : {}),
       ...(corsAllowedHeaders || initialCORSAllowedHeaders ? { cors_allowed_headers: corsAllowedHeaders } : {}),
       ...(corsAllowCredentials || initialCORSAllowCredentials ? { cors_allow_credentials: corsAllowCredentials } : {}),
-      ...(corsMaxAge !== undefined || initialCORSMaxAge !== undefined ? { cors_max_age: corsMaxAge || 0 } : {}),
+      ...(corsMaxAge !== undefined || initialCORSMaxAge !== undefined ? { cors_max_age: corsMaxAge ?? 0 } : {}),
     }
 
     switch (type) {
@@ -156,12 +184,30 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
       return
     }
 
+    const rateLimit = parseOptionalNonNegativeInteger(numericDrafts.rateLimit)
+    const burst = parseOptionalNonNegativeInteger(numericDrafts.burst)
+    const corsMaxAge = parseOptionalNonNegativeInteger(numericDrafts.corsMaxAge)
+    const corsAllowedMethods = normalizeCORSMethods(form.cors_allowed_methods || '')
+    const nextFieldErrors: PolicyFieldErrors = {}
+    const numberError = t('form.nonNegativeIntegerError')
+    if (rateLimit === null) nextFieldErrors.rateLimit = numberError
+    if (burst === null) nextFieldErrors.burst = numberError
+    if (corsMaxAge === null) nextFieldErrors.corsMaxAge = numberError
+    if (corsAllowedMethods === null) {
+      nextFieldErrors.corsAllowedMethods = t('form.allowedMethodsError')
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      return
+    }
+
     const submitToken = Symbol('auth-rule-form-submit')
     activeSubmitRef.current = submitToken
     setError(null)
+    setFieldErrors({})
     setSubmitting(true)
     try {
-      await onSubmit(buildSubmitPayload())
+      await onSubmit(buildSubmitPayload(rateLimit, burst, corsMaxAge, corsAllowedMethods))
     } catch (err) {
       setError(getLocalizedTextState(err))
     } finally {
@@ -179,7 +225,7 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
   ]
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
 
       <Card tone="soft" className="space-y-5">
@@ -272,8 +318,13 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
           label={t('form.rateLimit')}
           type="number"
           min={0}
-          value={form.rate_limit ?? ''}
-          onChange={(event) => updatePolicy({ rate_limit: event.target.value === '' ? undefined : Number(event.target.value) })}
+          step={1}
+          value={numericDrafts.rateLimit}
+          onChange={(event) => {
+            setNumericDrafts((current) => ({ ...current, rateLimit: event.target.value }))
+            setFieldErrors((current) => ({ ...current, rateLimit: undefined }))
+          }}
+          error={fieldErrors.rateLimit}
           placeholder="15"
           hint={t('form.rateLimitHint')}
         />
@@ -281,8 +332,13 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
           label={t('form.burst')}
           type="number"
           min={0}
-          value={form.burst ?? ''}
-          onChange={(event) => updatePolicy({ burst: event.target.value === '' ? undefined : Number(event.target.value) })}
+          step={1}
+          value={numericDrafts.burst}
+          onChange={(event) => {
+            setNumericDrafts((current) => ({ ...current, burst: event.target.value }))
+            setFieldErrors((current) => ({ ...current, burst: undefined }))
+          }}
+          error={fieldErrors.burst}
           placeholder="30"
           hint={t('form.burstHint')}
         />
@@ -300,7 +356,11 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
           <Input
             label={t('form.allowedMethods')}
             value={form.cors_allowed_methods || ''}
-            onChange={(event) => updatePolicy({ cors_allowed_methods: event.target.value })}
+            onChange={(event) => {
+              updatePolicy({ cors_allowed_methods: event.target.value })
+              setFieldErrors((current) => ({ ...current, corsAllowedMethods: undefined }))
+            }}
+            error={fieldErrors.corsAllowedMethods}
             placeholder="GET,POST,OPTIONS"
             hint={t('form.allowedMethodsHint')}
           />
@@ -315,8 +375,13 @@ export function AuthRuleForm({ rule, routes, defaultRouteId, onSubmit, onCancel 
             label={t('form.maxAge')}
             type="number"
             min={0}
-            value={form.cors_max_age ?? ''}
-            onChange={(event) => updatePolicy({ cors_max_age: event.target.value === '' ? undefined : Number(event.target.value) })}
+            step={1}
+            value={numericDrafts.corsMaxAge}
+            onChange={(event) => {
+              setNumericDrafts((current) => ({ ...current, corsMaxAge: event.target.value }))
+              setFieldErrors((current) => ({ ...current, corsMaxAge: undefined }))
+            }}
+            error={fieldErrors.corsMaxAge}
             placeholder="7200"
             hint={t('form.maxAgeHint')}
           />

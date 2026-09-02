@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -68,13 +69,13 @@ func seedRoute(t *testing.T, db store.Store) {
 // overridden via the corresponding field, otherwise it returns a benign
 // zero result so the harness can wire it up to RegisterRoutes.
 type stubCertService struct {
-	listFn        func() ([]store.Certificate, error)
-	getFn         func(id string) (*store.Certificate, error)
-	provisionFn   func(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error)
-	importFn      func(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
-	resignFn      func(id string) (*store.Certificate, error)
-	deleteFn      func(id string) error
-	caExportFn    func() (certPEM, name string, notAfter time.Time, err error)
+	listFn      func() ([]store.Certificate, error)
+	getFn       func(id string) (*store.Certificate, error)
+	provisionFn func(ctx context.Context, name, domain string, info *localca.SubjectInfo) (*store.Certificate, error)
+	importFn    func(ctx context.Context, name, domain, certPEM, keyPEM string) (*store.Certificate, error)
+	resignFn    func(id string) (*store.Certificate, error)
+	deleteFn    func(id string) error
+	caExportFn  func() (certPEM, name string, notAfter time.Time, err error)
 }
 
 func (s *stubCertService) List() ([]store.Certificate, error) {
@@ -147,6 +148,41 @@ func performRequest(t *testing.T, engine *gin.Engine, method, path string, token
 	resp := httptest.NewRecorder()
 	engine.ServeHTTP(resp, req)
 	return resp
+}
+
+type routeAuthReadFailureStore struct {
+	store.Store
+	err error
+}
+
+func (s routeAuthReadFailureStore) GetRouteAuthConfig(string) (*store.RouteAuthConfig, error) {
+	return nil, s.err
+}
+
+func TestGetRouteAuthConfigReturnsStoreFailure(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "routeId", Value: "route-1"}}
+
+	getRouteAuthConfig(routeAuthReadFailureStore{
+		Store: newTestDB(t),
+		err:   errors.New("storage unavailable"),
+	})(c)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+	var payload struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, body=%s", err, w.Body.String())
+	}
+	if payload.Error.Code != "route_auth_store_failure" {
+		t.Fatalf("error.code = %q, want %q", payload.Error.Code, "route_auth_store_failure")
+	}
 }
 
 func TestRegisterRoutes_UsesStructuredErrorEnvelope(t *testing.T) {

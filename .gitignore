@@ -58,3 +58,4 @@ output
 # Temporary server run artifacts
 packages/server/config.yaml
 packages/server/tmp.*/
+/data/

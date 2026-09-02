@@ -18,6 +18,7 @@ describe('app i18n runtime', () => {
     const i18n = await createAppI18n()
 
     expect(i18n.resolvedLanguage).toBe('zh-CN')
+    expect(document.documentElement.lang).toBe('zh-CN')
   })
 
   it('maps browser zh variants to zh-CN when nothing is persisted', async () => {
@@ -31,6 +32,8 @@ describe('app i18n runtime', () => {
     const i18n = await createAppI18n()
 
     expect(i18n.resolvedLanguage).toBe('zh-CN')
+    expect(localStorage.getItem('auth-gate.locale')).toBeNull()
+    expect(document.documentElement.lang).toBe('zh-CN')
   })
 
   it('falls back to en when persisted and browser locales are unsupported', async () => {
@@ -47,7 +50,21 @@ describe('app i18n runtime', () => {
     expect(i18n.resolvedLanguage).toBe('en')
   })
 
-  it('persists manual language changes', async () => {
+  it('does not persist browser auto-detect on init', async () => {
+    vi.stubGlobal('navigator', {
+      language: 'zh-CN',
+      languages: ['zh-CN'],
+    })
+
+    const { createAppI18n } = await import('./index')
+
+    const i18n = await createAppI18n()
+
+    expect(i18n.resolvedLanguage).toBe('zh-CN')
+    expect(localStorage.getItem('auth-gate.locale')).toBeNull()
+  })
+
+  it('does not persist programmatic changeLanguage without changeAppLocale', async () => {
     vi.stubGlobal('navigator', {
       language: 'en-US',
       languages: ['en-US'],
@@ -58,7 +75,24 @@ describe('app i18n runtime', () => {
     const i18n = await createAppI18n()
     await i18n.changeLanguage('zh-CN')
 
+    expect(i18n.resolvedLanguage).toBe('zh-CN')
+    expect(localStorage.getItem('auth-gate.locale')).toBeNull()
+    expect(document.documentElement.lang).toBe('zh-CN')
+  })
+
+  it('persists manual language changes via changeAppLocale', async () => {
+    vi.stubGlobal('navigator', {
+      language: 'en-US',
+      languages: ['en-US'],
+    })
+
+    const { changeAppLocale, createAppI18n } = await import('./index')
+
+    const i18n = await createAppI18n()
+    await changeAppLocale(i18n, 'zh-CN')
+
     expect(localStorage.getItem('auth-gate.locale')).toBe('zh-CN')
+    expect(document.documentElement.lang).toBe('zh-CN')
   })
 
   it('does not initialize an i18n instance at import time', async () => {
@@ -74,6 +108,7 @@ describe('app i18n runtime', () => {
     const i18n = await i18nPromise
 
     expect(i18n.resolvedLanguage).toBe('zh-CN')
+    expect(localStorage.getItem('auth-gate.locale')).toBeNull()
   })
 
   it('falls back to en when browser globals are unavailable', async () => {
@@ -99,10 +134,10 @@ describe('app i18n runtime', () => {
       configurable: true,
     })
 
-    const { createAppI18n } = await import('./index')
+    const { changeAppLocale, createAppI18n } = await import('./index')
 
     const i18n = await createAppI18n()
-    await expect(i18n.changeLanguage('zh-CN')).resolves.toBeTypeOf('function')
+    await expect(changeAppLocale(i18n, 'zh-CN')).resolves.toBeUndefined()
     expect(i18n.resolvedLanguage).toBe('zh-CN')
   })
 })

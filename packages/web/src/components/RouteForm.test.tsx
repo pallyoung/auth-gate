@@ -72,6 +72,42 @@ const loadBalancedRoute = {
 } as Route
 
 describe('RouteForm', () => {
+  it('uses app-owned validation instead of native browser bubbles', async () => {
+    const { container } = await renderWithI18n(
+      <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { locale: 'en' }
+    )
+
+    expect(container.querySelector('form')).toHaveAttribute('novalidate')
+  })
+
+  it('allows editable numeric fields to stay empty while the user replaces their values', async () => {
+    const user = userEvent.setup()
+    await renderWithI18n(
+      <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { locale: 'en' }
+    )
+
+    for (const label of ['Priority', 'Timeout (ms)', 'Retry Attempts']) {
+      const input = screen.getByLabelText(label)
+      await user.clear(input)
+      expect(input).toHaveValue(null)
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Add Backend' }))
+    for (const label of [
+      'Weight 1',
+      'Dial Timeout (ms) 1',
+      'Read Timeout (ms) 1',
+      'Write Timeout (ms) 1',
+      'Max Idle Conns 1',
+    ]) {
+      const input = screen.getByLabelText(label)
+      await user.clear(input)
+      expect(input).toHaveValue(null)
+    }
+  })
+
   it('exposes select fields with accessible labels', async () => {
     await renderWithI18n(
       <RouteForm route={null} certificates={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,

@@ -21,6 +21,7 @@ export const accessLogsEn = {
     pass: 'Success',
     fail: 'Failed',
     none: 'No Auth',
+    clear: 'Clear',
     lastHour: 'Last Hour',
     last6Hours: 'Last 6 Hours',
     last24Hours: 'Last 24 Hours',

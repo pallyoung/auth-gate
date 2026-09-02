@@ -21,6 +21,7 @@ export const accessLogsZhCN = {
     pass: '成功',
     fail: '失败',
     none: '无认证',
+    clear: '清除',
     lastHour: '最近 1 小时',
     last6Hours: '最近 6 小时',
     last24Hours: '最近 24 小时',
