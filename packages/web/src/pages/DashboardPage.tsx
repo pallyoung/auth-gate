@@ -8,11 +8,11 @@ import { ProgressBar } from '../components/ui/ProgressBar'
 import { systemApi } from '../lib/api'
 import type { SystemStats } from '../lib/api/types'
 
-function formatBytes(bytes: number): string {
+function formatBytes(bytes: number, locale: string): string {
   if (bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(bytes / Math.pow(1024, i))} ${units[i]}`
 }
 
 function formatUptime(seconds: number, t: (key: string) => string): string {
@@ -27,7 +27,10 @@ function formatUptime(seconds: number, t: (key: string) => string): string {
 }
 
 export function DashboardPage() {
-  const { t } = useTranslation('dashboard')
+  const { t, i18n } = useTranslation('dashboard')
+  const locale = i18n.resolvedLanguage || 'en'
+  const number = (value: number) => new Intl.NumberFormat(locale).format(value)
+  const decimal = (value: number) => new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)
   const [stats, setStats] = React.useState<SystemStats | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -37,7 +40,7 @@ export function DashboardPage() {
       setStats(data)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch system stats')
+      setError('page.loadError')
     }
   }, [])
 
@@ -57,7 +60,7 @@ export function DashboardPage() {
 
       {error && (
         <div className="mb-6 rounded-xl border border-[var(--error)] bg-[var(--error-light)] px-4 py-3 text-sm text-[var(--error)]">
-          {error}
+          {t(error)}
         </div>
       )}
 
@@ -65,22 +68,22 @@ export function DashboardPage() {
       <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <MetricCard
           label={t('metrics.cpu')}
-          value={stats ? `${stats.cpu_usage_percent.toFixed(1)}%` : '-'}
-          hint={stats ? `${stats.cpu_cores} cores` : undefined}
+          value={stats ? `${decimal(stats.cpu_usage_percent)}%` : '-'}
+          hint={stats ? t('format.cores', { count: stats.cpu_cores }) : undefined}
           icon={<Cpu className="h-4 w-4" />}
           tone={stats && stats.cpu_usage_percent >= 85 ? 'error' : stats && stats.cpu_usage_percent >= 60 ? 'warning' : 'primary'}
         />
         <MetricCard
           label={t('metrics.memory')}
-          value={stats ? `${stats.mem_usage_percent.toFixed(1)}%` : '-'}
-          hint={stats ? `${formatBytes(stats.mem_used_bytes)} / ${formatBytes(stats.mem_total_bytes)}` : undefined}
+          value={stats ? `${decimal(stats.mem_usage_percent)}%` : '-'}
+          hint={stats ? `${formatBytes(stats.mem_used_bytes, locale)} / ${formatBytes(stats.mem_total_bytes, locale)}` : undefined}
           icon={<MemoryStick className="h-4 w-4" />}
           tone={stats && stats.mem_usage_percent >= 85 ? 'error' : stats && stats.mem_usage_percent >= 60 ? 'warning' : 'accent'}
         />
         <MetricCard
           label={t('metrics.disk')}
-          value={stats ? `${stats.disk_usage_percent.toFixed(1)}%` : '-'}
-          hint={stats ? `${formatBytes(stats.disk_used_bytes)} / ${formatBytes(stats.disk_total_bytes)}` : undefined}
+          value={stats ? `${decimal(stats.disk_usage_percent)}%` : '-'}
+          hint={stats ? `${formatBytes(stats.disk_used_bytes, locale)} / ${formatBytes(stats.disk_total_bytes, locale)}` : undefined}
           icon={<HardDrive className="h-4 w-4" />}
           tone={stats && stats.disk_usage_percent >= 85 ? 'error' : stats && stats.disk_usage_percent >= 60 ? 'warning' : 'neutral'}
         />
@@ -91,7 +94,7 @@ export function DashboardPage() {
         />
         <MetricCard
           label={t('metrics.goroutines')}
-          value={stats?.goroutines ?? '-'}
+          value={stats ? number(stats.goroutines) : '-'}
           icon={<Gauge className="h-4 w-4" />}
         />
       </div>
@@ -107,9 +110,9 @@ export function DashboardPage() {
             <CardContent>
               {stats ? (
                 <div className="space-y-5">
-                  <ProgressBar value={stats.cpu_usage_percent} label={t('resources.cpu')} />
-                  <ProgressBar value={stats.mem_usage_percent} label={t('resources.memory')} />
-                  <ProgressBar value={stats.disk_usage_percent} label={t('resources.disk')} />
+                  <ProgressBar value={stats.cpu_usage_percent} detail={decimal(stats.cpu_usage_percent) + '%'} label={t('resources.cpu')} />
+                  <ProgressBar value={stats.mem_usage_percent} detail={decimal(stats.mem_usage_percent) + '%'} label={t('resources.memory')} />
+                  <ProgressBar value={stats.disk_usage_percent} detail={decimal(stats.disk_usage_percent) + '%'} label={t('resources.disk')} />
                 </div>
               ) : (
                 <div className="flex h-32 items-center justify-center">
@@ -127,11 +130,11 @@ export function DashboardPage() {
             <CardContent>
               {stats ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  <InfoItem label={t('runtime.goroutines')} value={String(stats.goroutines)} />
-                  <InfoItem label={t('runtime.heapAlloc')} value={formatBytes(stats.heap_alloc_bytes)} />
-                  <InfoItem label={t('runtime.heapInuse')} value={formatBytes(stats.heap_inuse_bytes)} />
-                  <InfoItem label={t('runtime.gcCycles')} value={String(stats.gc_count)} />
-                  <InfoItem label={t('runtime.gcPause')} value={`${stats.gc_pause_total_ms.toFixed(1)} ms`} />
+                  <InfoItem label={t('runtime.goroutines')} value={number(stats.goroutines)} />
+                  <InfoItem label={t('runtime.heapAlloc')} value={formatBytes(stats.heap_alloc_bytes, locale)} />
+                  <InfoItem label={t('runtime.heapInuse')} value={formatBytes(stats.heap_inuse_bytes, locale)} />
+                  <InfoItem label={t('runtime.gcCycles')} value={number(stats.gc_count)} />
+                  <InfoItem label={t('runtime.gcPause')} value={`${decimal(stats.gc_pause_total_ms)} ms`} />
                 </div>
               ) : null}
             </CardContent>
@@ -151,7 +154,7 @@ export function DashboardPage() {
                   <InfoRow icon={<Server className="h-4 w-4" />} label={t('system.os')} value={`${stats.platform || stats.os} ${stats.arch}`} />
                   <InfoRow icon={<Server className="h-4 w-4" />} label={t('system.kernel')} value={stats.kernel_version} />
                   <InfoRow icon={<Cpu className="h-4 w-4" />} label={t('system.goVersion')} value={stats.go_version} />
-                  <InfoRow icon={<RouteIcon className="h-4 w-4" />} label={t('system.activeRoutes')} value={`${stats.active_routes} / ${stats.total_routes}`} />
+                  <InfoRow icon={<RouteIcon className="h-4 w-4" />} label={t('system.activeRoutes')} value={`${number(stats.active_routes)} / ${number(stats.total_routes)}`} />
                 </div>
               ) : null}
             </CardContent>
@@ -170,10 +173,10 @@ export function DashboardPage() {
                   </div>
                   <div>
                     <div className="text-3xl font-bold tabular-nums text-[var(--text-primary)]">
-                      {stats.active_routes}
+                      {number(stats.active_routes)}
                     </div>
                     <div className="text-sm text-[var(--text-muted)]">
-                      {t('system.activeRoutes')} / {stats.total_routes} {t('system.totalRoutes')}
+                      {t('system.activeRoutes')} / {number(stats.total_routes)} {t('system.totalRoutes')}
                     </div>
                   </div>
                 </div>

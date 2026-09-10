@@ -67,6 +67,29 @@ describe('RoutesPage i18n', () => {
     expect(screen.getByText('尚未配置路由')).toBeInTheDocument()
   })
 
+  it('translates the populated route directory and summary cards when switching languages', async () => {
+    vi.mocked(routesApi.list).mockResolvedValue([{
+      id: 'screenshot-route', name: 'Example', host: 'api.example.com', path_prefix: '/api',
+      backend: 'http://localhost:3000', enabled: true, priority: 0, tls_enabled: false,
+    } as any])
+    const { i18n, container } = await renderWithI18n(<RoutesPage />, { locale: 'zh-CN' })
+    await screen.findAllByText('Example')
+    for (const label of ['主机', '路径前缀', '连接安全']) {
+      expect(screen.getByRole('columnheader', { name: label })).toBeInTheDocument()
+    }
+    expect(screen.getByText('鉴权规则')).toBeInTheDocument()
+    expect(screen.getByText('证书')).toBeInTheDocument()
+    expect(screen.getAllByText('未加密').length).toBeGreaterThan(0)
+    expect(container.textContent).not.toMatch(/table\.|Unlicensed|All Valid|Auth Rules|Certificates|Public/)
+    await act(async () => { await i18n.changeLanguage('en') })
+    expect(screen.getByRole('columnheader', { name: 'Host' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Path Prefix' })).toBeInTheDocument()
+    expect(screen.getAllByText('Unencrypted').length).toBeGreaterThan(0)
+    expect(screen.getByText('Auth Rules')).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/table\.|Unlicensed|All Valid/)
+    expect(screen.getAllByText('api.example.com').length).toBeGreaterThan(0)
+  })
+
   it('shows read-only empty state guidance for viewer accounts', async () => {
     sessionUser.username = 'viewer-debug'
     sessionUser.role = 'viewer'

@@ -1,4 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react'
+import { I18nextProvider } from 'react-i18next'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AccessLogFilters } from './AccessLogFilters'
 import { renderWithI18n } from '../test/render'
@@ -27,6 +28,16 @@ describe('AccessLogFilters', () => {
 
     act(() => vi.advanceTimersByTime(1))
     expect(onChange).toHaveBeenCalledWith({ page: 1, per_page: 20, username: 'alice' })
+  })
+
+  it('filters by incoming domain and keeps the current time bounds', async () => {
+    vi.useFakeTimers()
+    const onChange = vi.fn()
+    const filters = { start_time: '2026-09-01T00:00:00Z', end_time: '2026-09-02T00:00:00Z' }
+    await renderWithI18n(<AccessLogFilters filters={filters} onChange={onChange} />, { locale: 'en' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Domain' }), { target: { value: 'api.example.com' } })
+    act(() => vi.advanceTimersByTime(300))
+    expect(onChange).toHaveBeenCalledWith({ ...filters, host: 'api.example.com' })
   })
 
   it('does not commit a filter while an IME composition is active', async () => {
@@ -72,5 +83,16 @@ describe('AccessLogFilters', () => {
 
     act(() => vi.advanceTimersByTime(300))
     expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not restore a pending draft after an external reset', async () => {
+    vi.useFakeTimers()
+    const onChange = vi.fn()
+    const view = await renderWithI18n(<AccessLogFilters filters={{ host: 'old.example.com' }} onChange={onChange} />, { locale: 'en' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Domain' }), { target: { value: 'pending.example.com' } })
+    view.rerender(<I18nextProvider i18n={view.i18n}><AccessLogFilters filters={{}} onChange={onChange} /></I18nextProvider>)
+    act(() => vi.advanceTimersByTime(300))
+    expect(screen.getByRole('textbox', { name: 'Domain' })).toHaveValue('')
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

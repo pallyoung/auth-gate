@@ -47,8 +47,7 @@ function getSystemTheme(): 'dark' | 'light' {
 }
 
 export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
-  const { t, i18n } = useTranslation(['layout', 'users'])
-  const isZh = i18n.resolvedLanguage === 'zh-CN'
+  const { t } = useTranslation(['layout', 'users'])
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [themeMode, setThemeMode] = React.useState<'dark' | 'light' | 'system'>(() => {
     const stored = localStorage.getItem('theme')
@@ -101,8 +100,8 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
       {
         path: '/auth',
         icon: Shield,
-        label: '鉴权配置',
-        description: '配置路由级认证方式和 API Key',
+        label: t('sections.auth.label'),
+        description: t('sections.auth.description'),
         visible: true,
       },
       {
@@ -253,7 +252,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
               Auth Gate
             </div>
             <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-              API GATEWAY
+              {t('brand.gateway')}
             </div>
           </div>
         </div>
@@ -298,17 +297,17 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
           {themeMode === 'system' ? (
             <>
               <Monitor className="h-4 w-4" />
-              {isZh ? '跟随系统' : 'System'}
+              {t('theme.system')}
             </>
           ) : themeMode === 'dark' ? (
             <>
               <Moon className="h-4 w-4" />
-              {isZh ? '深色模式' : 'Dark Mode'}
+              {t('theme.dark')}
             </>
           ) : (
             <>
               <Sun className="h-4 w-4" />
-              {isZh ? '浅色模式' : 'Light Mode'}
+              {t('theme.light')}
             </>
           )}
         </button>
@@ -323,7 +322,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
             className="flex items-center gap-2 rounded-[10px] bg-[var(--bg-soft-primary)] px-3 py-2.5 text-sm font-medium text-[var(--primary-600)] transition-colors hover:bg-[rgba(15,143,139,0.15)]"
           >
             <Settings className="h-4 w-4" />
-            Admin Panel
+            {t('brand.controlPlane')}
           </a>
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--bg-soft-primary)] text-[var(--primary-600)]">
@@ -331,7 +330,7 @@ export function Layout({ children, currentPath, user, onLogout }: LayoutProps) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-[var(--text-primary)]">{user.username}</p>
-              <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Admin Profile</p>
+              <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">{roleLabel(user.role)}</p>
             </div>
             <button
               type="button"

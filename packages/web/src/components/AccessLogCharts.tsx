@@ -11,25 +11,26 @@ interface AccessLogChartsProps {
 }
 
 export const AccessLogCharts: React.FC<AccessLogChartsProps> = ({ stats }) => {
-  const { t } = useTranslation('accessLogs')
+  const { t, i18n } = useTranslation('accessLogs')
 
   if (!stats) {
     return null
   }
 
-  const requestsData = stats.requests_per_minute.map((item) => ({
-    time: new Date(item.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  const formatTime = (time: string) => new Date(time).toLocaleString(i18n.resolvedLanguage, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const requestsData = (stats.requests_per_minute ?? []).map((item) => ({
+    time: formatTime(item.time),
     count: item.count,
   }))
 
-  const latencyData = stats.latency_per_hour.map((item) => ({
-    time: new Date(item.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  const latencyData = (stats.latency_per_hour ?? []).map((item) => ({
+    time: formatTime(item.time),
     avg: item.avg_ms,
     p95: item.p95_ms,
   }))
 
-  const errorData = stats.error_rate_per_hour.map((item) => ({
-    time: new Date(item.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  const errorData = (stats.error_rate_per_hour ?? []).map((item) => ({
+    time: formatTime(item.time),
     count: item.count,
   }))
 
@@ -61,6 +62,7 @@ export const AccessLogCharts: React.FC<AccessLogChartsProps> = ({ stats }) => {
             <Line
               type="monotone"
               dataKey="count"
+              name={t('charts.requests')}
               stroke="var(--primary-500)"
               strokeWidth={2}
               dot={false}
@@ -137,6 +139,7 @@ export const AccessLogCharts: React.FC<AccessLogChartsProps> = ({ stats }) => {
             />
             <Bar
               dataKey="count"
+              name={t('charts.errors')}
               fill="var(--error)"
               radius={[4, 4, 0, 0]}
             />

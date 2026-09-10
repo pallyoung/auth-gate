@@ -10,7 +10,7 @@ interface AccessLogDetailProps {
 }
 
 export const AccessLogDetail: React.FC<AccessLogDetailProps> = ({ entry, onClose }) => {
-  const { t } = useTranslation('accessLogs')
+  const { t, i18n } = useTranslation('accessLogs')
 
   if (!entry) {
     return null
@@ -45,13 +45,17 @@ export const AccessLogDetail: React.FC<AccessLogDetailProps> = ({ entry, onClose
   return (
     <Modal open={!!entry} onClose={onClose} title={t('detail.title')} modalSize="lg">
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 break-words sm:grid-cols-2">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-secondary)]">{t('table.host')}</p>
+            <p className="mt-1 break-all font-mono text-sm text-[var(--text-primary)]">{entry.host || t('table.unknownHost')}</p>
+          </div>
           <div>
             <label className="text-sm font-medium text-[var(--text-secondary)]">
               {t('table.timestamp')}
             </label>
             <p className="mt-1 text-sm text-[var(--text-primary)]">
-              {new Date(entry.timestamp).toLocaleString('zh-CN')}
+              {new Date(entry.timestamp).toLocaleString(i18n.resolvedLanguage)}
             </p>
           </div>
 
@@ -110,13 +114,13 @@ export const AccessLogDetail: React.FC<AccessLogDetailProps> = ({ entry, onClose
               {t('table.latency')}
             </label>
             <p className="mt-1 text-sm text-[var(--text-primary)]">
-              {entry.backend_latency_ms} ms
+              {entry.backend_latency_ms.toLocaleString(i18n.resolvedLanguage)} ms
             </p>
           </div>
         </div>
 
         <div className="border-t border-[var(--border-default)] pt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 break-all sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium text-[var(--text-secondary)]">
                 {t('detail.requestID')}

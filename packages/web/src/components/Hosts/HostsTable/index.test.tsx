@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { HostsTable } from './index'
@@ -30,6 +30,19 @@ const entries = [
 ]
 
 describe('HostsTable', () => {
+  it('switches column names, actions and accessible labels while preserving hostnames', async () => {
+    const { i18n } = await renderWithI18n(
+      <HostsTable entries={entries} canManage onEdit={vi.fn()} onDelete={vi.fn()} onToggleEnabled={vi.fn()} />,
+      { locale: 'zh-CN' }
+    )
+    expect(screen.getByRole('columnheader', { name: '主机名' })).toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox', { name: '启用' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: '删除' })).toHaveLength(2)
+    await act(async () => { await i18n.changeLanguage('en') })
+    expect(screen.getByRole('columnheader', { name: 'Hostnames' })).toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox', { name: 'Enabled' })).toHaveLength(2)
+    expect(screen.getByText('api.local db.local')).toBeInTheDocument()
+  })
   it('renders entries and dispatches edit / delete / toggle callbacks', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()

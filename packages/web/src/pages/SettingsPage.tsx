@@ -7,6 +7,7 @@ import { configApi } from '../lib/api/config'
 import { ApiError } from '../lib/api/client'
 import { getSessionUser } from '../lib/session-store'
 import type { ListenEntry } from '../lib/api/types'
+import { AccessLogCleanup } from '../components/AccessLogCleanup'
 
 type SettingsAlertState = {
   translationKey: string
@@ -35,7 +36,8 @@ export function SettingsPage() {
   const [retentionSaving, setRetentionSaving] = React.useState(false)
   const [retentionMessage, setRetentionMessage] = React.useState<SettingsAlertState>(null)
   const [retentionError, setRetentionError] = React.useState<SettingsAlertState>(null)
-  const [purging, setPurging] = React.useState(false)
+  const [cleanupOpen, setCleanupOpen] = React.useState(false)
+  const [savedRetentionDays, setSavedRetentionDays] = React.useState(0)
 
   const sessionUser = getSessionUser()
   const isAdmin = sessionUser?.role === 'admin'
@@ -52,6 +54,7 @@ export function SettingsPage() {
     if (!isAdmin) { setRetentionLoading(false); return }
     configApi.getLogRetention().then((res) => {
       setRetentionDays(String(res.days))
+      setSavedRetentionDays(res.days)
     }).catch(() => {
       // Ignore - use defaults
     }).finally(() => setRetentionLoading(false))
@@ -148,29 +151,12 @@ export function SettingsPage() {
     setRetentionSaving(true)
     try {
       await configApi.updateLogRetention(parsedDays)
+      setSavedRetentionDays(parsedDays)
       setRetentionMessage({ translationKey: 'logRetention.saved' })
     } catch {
       setRetentionError({ translationKey: 'logRetention.saveFailed' })
     } finally {
       setRetentionSaving(false)
-    }
-  }
-
-  const handlePurge = async () => {
-    setPurging(true)
-    setRetentionMessage(null)
-    setRetentionError(null)
-    try {
-      const res = await configApi.purgeLogs()
-      if (res.removed > 0) {
-        setRetentionMessage({ translationKey: 'logRetention.purgeSuccess' })
-      } else {
-        setRetentionMessage({ translationKey: 'logRetention.purgeNothing' })
-      }
-    } catch {
-      setRetentionError({ translationKey: 'logRetention.purgeFailed' })
-    } finally {
-      setPurging(false)
     }
   }
 
@@ -374,6 +360,8 @@ export function SettingsPage() {
                       <div className="flex items-center gap-3">
                         <Input
                           type="number"
+                          id="log-retention-days"
+                          aria-label={t('logRetention.label')}
                           min={0}
                           step={1}
                           value={retentionDays}
@@ -395,13 +383,12 @@ export function SettingsPage() {
                         </Button>
                         <Button
                           variant="secondary"
-                          loading={purging}
-                          disabled={!Number.isInteger(Number(retentionDays)) || Number(retentionDays) <= 0}
-                          onClick={handlePurge}
+                          disabled={savedRetentionDays <= 0 || retentionSaving}
+                          onClick={() => setCleanupOpen(true)}
                           size="sm"
                           icon={<Trash2 className="h-3.5 w-3.5" />}
                         >
-                          {purging ? t('logRetention.purging') : t('logRetention.purge')}
+                          {t('logRetention.purge')}
                         </Button>
                       </div>
                     </div>
@@ -459,6 +446,12 @@ export function SettingsPage() {
           </Card>
         </div>
       </div>
+      {isAdmin && cleanupOpen && <AccessLogCleanup filters={{}} initialMode="expired" onClose={() => setCleanupOpen(false)} onPurged={(removed) => {
+        setCleanupOpen(false)
+        setRetentionError(null)
+        setRetentionMessage({ translationKey: removed > 0 ? 'logRetention.purgeSuccess' : 'logRetention.purgeNothing' })
+      }}
+      />}
     </div>
   )
 }

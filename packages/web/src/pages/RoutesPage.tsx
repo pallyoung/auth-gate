@@ -76,7 +76,8 @@ function getBackendTimeoutSummary(route: Route, t: ReturnType<typeof useTranslat
 }
 
 export function RoutesPage() {
-  const { t } = useTranslation('routes')
+  const { t, i18n } = useTranslation('routes')
+  const number = (value: number) => new Intl.NumberFormat(i18n.resolvedLanguage).format(value)
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [certificates, setCertificates] = React.useState<Certificate[]>([])
   const [authRules, setAuthRules] = React.useState<AuthRule[]>([])
@@ -258,11 +259,11 @@ export function RoutesPage() {
     },
     {
       key: 'tls_enabled',
-      header: t('table.authType'),
+      header: t('table.transportSecurity'),
       className: 'w-32',
       render: (_value: boolean, row: Route) => (
         <Badge variant={row.tls_enabled ? 'primary' : 'default'} badgeSize="sm">
-          {row.tls_enabled ? 'TLS' : row.certificate_id ? 'Cert' : 'Public'}
+          {row.tls_enabled ? 'TLS' : t('table.unencrypted')}
         </Badge>
       ),
     },
@@ -320,29 +321,29 @@ export function RoutesPage() {
         <div className="mb-6 grid gap-4 md:grid-cols-4">
           <MetricCard
             label={t('page.totalRoutes')}
-            value={routes.length}
+            value={number(routes.length)}
             hint={t('page.totalRoutesHint')}
             icon={<RouteIcon className="h-5 w-5" />}
             tone="primary"
           />
           <MetricCard
             label={t('page.activeRoutes')}
-            value={`${activeCount}/${routes.length}`}
-            hint="Unlicensed"
+            value={`${number(activeCount)}/${number(routes.length)}`}
+            hint={t('page.activeRoutesHint')}
             icon={<Server className="h-5 w-5" />}
             tone="accent"
           />
           <MetricCard
-            label="Auth Rules"
-            value={authRules.length}
-            hint="Enabled"
+            label={t('page.authRules')}
+            value={number(authRules.length)}
+            hint={t('page.authRulesHint')}
             icon={<Shield className="h-5 w-5" />}
             tone="warning"
           />
           <MetricCard
-            label="Certificates"
-            value={certificates.length}
-            hint="All Valid"
+            label={t('page.certificates')}
+            value={number(certificates.length)}
+            hint={t('page.certificatesHint')}
             icon={<Shield className="h-5 w-5" />}
             tone="primary"
           />

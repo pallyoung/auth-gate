@@ -4,6 +4,7 @@ export const dashboardEn = {
     title: 'Dashboard',
     description: 'System health, resource usage, and runtime metrics at a glance.',
     autoRefresh: 'Auto-refreshes every 10 seconds',
+    loadError: 'Could not load system statistics. Check your connection and try again.',
   },
   metrics: {
     cpu: 'CPU',
@@ -39,6 +40,7 @@ export const dashboardEn = {
     gcPause: 'GC Pause Total',
   },
   format: {
+    cores: '{{count, number}} cores',
     days: 'd',
     hours: 'h',
     minutes: 'm',
@@ -52,6 +54,7 @@ export const dashboardZhCN = {
     title: '仪表盘',
     description: '系统健康状况、资源使用和运行时指标一览。',
     autoRefresh: '每 10 秒自动刷新',
+    loadError: '无法加载系统统计。请检查网络连接后重试。',
   },
   metrics: {
     cpu: 'CPU',
@@ -87,6 +90,7 @@ export const dashboardZhCN = {
     gcPause: 'GC 暂停总时长',
   },
   format: {
+    cores: '{{count, number}} 核',
     days: '天',
     hours: '时',
     minutes: '分',

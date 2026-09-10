@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pallyoung/auth-gate/packages/server/internal/router"
@@ -50,8 +51,12 @@ func TestRateLimit_429(t *testing.T) {
 	}
 
 	mgr := router.NewManager(db)
+	logs, err := store.NewAccessLogStore(t.TempDir(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
 	engine := gin.New()
-	engine.Any("/*path", Handler(mgr, nil))
+	engine.Any("/*path", Handler(mgr, logs))
 
 	// Send 5 requests as fast as possible from the same client IP.
 	// With a 1 req/sec refill rate, only the first two should fit in the
@@ -84,10 +89,18 @@ func TestRateLimit_429(t *testing.T) {
 		t.Errorf("no 429 received; expected requests after burst=%d to be rejected", 2)
 	}
 	t.Logf("allowed=%d rejected=%d", allowed, rejected)
+	stats, err := logs.Stats(time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.TotalRequests != allowed+rejected || stats.AuthFailures != 0 || stats.ErrorCount != rejected {
+		t.Fatalf("rate limiting must count as HTTP errors without auth failures: %+v", stats)
+	}
 }
 
 // accessLogJSON matches the JSON structure written to stdout by proxy.go.
 type accessLogJSON struct {
+	Host             string `json:"host"`
 	RequestID        string `json:"request_id"`
 	RouteID          string `json:"route_id"`
 	Method           string `json:"method"`
@@ -158,15 +171,12 @@ func TestAccessLog_Output(t *testing.T) {
 	scanner := bufio.NewScanner(strings.NewReader(string(captured)))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.Contains(line, `"request_id":`) {
-			continue
-		}
 		// The log line format is: <timestamp> access <json>
-		idx := strings.Index(line, `{"request_id":`)
+		idx := strings.Index(line, " access ")
 		if idx < 0 {
 			continue
 		}
-		if err := json.Unmarshal([]byte(line[idx:]), &entry); err != nil {
+		if err := json.Unmarshal([]byte(line[idx+len(" access "):]), &entry); err != nil {
 			t.Fatalf("failed to parse access log JSON: %v\nline: %s", err, line)
 		}
 		found = true
@@ -186,6 +196,7 @@ func TestAccessLog_Output(t *testing.T) {
 		}
 	}
 	assertField("request_id", entry.RequestID, "")
+	assertField("host", entry.Host, "example.com")
 	assertField("route_id", entry.RouteID, "log-route")
 	assertField("method", entry.Method, "GET")
 	assertField("path", entry.Path, "/api/logged/users")
@@ -244,11 +255,11 @@ func TestCustomRequestHeaders(t *testing.T) {
 
 	db := newProxyTestDB(t)
 	if err := db.CreateRoute(&store.Route{
-		ID:         "hdr-req",
-		Name:       "hdr-req",
-		PathPrefix: "/api",
-		Backend:    backend.URL,
-		Enabled:    true,
+		ID:                   "hdr-req",
+		Name:                 "hdr-req",
+		PathPrefix:           "/api",
+		Backend:              backend.URL,
+		Enabled:              true,
 		SetRequestHeaders:    map[string]string{"X-Custom-Token": "secret123", "X-Gateway": "auth-gate"},
 		RemoveRequestHeaders: []string{"X-Remove-Me", "X-Also-Remove"},
 	}); err != nil {
@@ -308,11 +319,11 @@ func TestCustomResponseHeaders(t *testing.T) {
 
 	db := newProxyTestDB(t)
 	if err := db.CreateRoute(&store.Route{
-		ID:         "hdr-resp",
-		Name:       "hdr-resp",
-		PathPrefix: "/api",
-		Backend:    backend.URL,
-		Enabled:    true,
+		ID:                    "hdr-resp",
+		Name:                  "hdr-resp",
+		PathPrefix:            "/api",
+		Backend:               backend.URL,
+		Enabled:               true,
 		AddResponseHeaders:    map[string]string{"X-Request-Id": "req-42", "X-Response-From": "gateway"},
 		RemoveResponseHeaders: []string{"X-Powered-By", "Server"},
 	}); err != nil {

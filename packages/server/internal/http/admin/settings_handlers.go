@@ -47,6 +47,10 @@ func updateLogRetention(db store.Store) gin.HandlerFunc {
 
 func purgeLogs(db store.Store, logStore *store.AccessLogStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if logStore == nil {
+			writeError(c, http.StatusServiceUnavailable, "logs_unavailable", "access log store is unavailable")
+			return
+		}
 		val, err := db.GetSetting(settingLogRetentionDays)
 		if err != nil {
 			writeError(c, http.StatusInternalServerError, "read_failed", "failed to read setting")
@@ -58,7 +62,11 @@ func purgeLogs(db store.Store, logStore *store.AccessLogStore) gin.HandlerFunc {
 			return
 		}
 		cutoff := time.Now().AddDate(0, 0, -days)
-		removed := logStore.PurgeOlderThan(cutoff)
+		removed, err := logStore.PurgeOlderThan(cutoff)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "purge_failed", "failed to persist access log cleanup")
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"removed": removed, "cutoff_days": days})
 	}
 }

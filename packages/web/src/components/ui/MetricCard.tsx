@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 
 type MetricCardTone = 'primary' | 'accent' | 'neutral' | 'warning' | 'error'
@@ -32,6 +33,8 @@ export function MetricCard({
   className,
   ...props
 }: MetricCardProps) {
+  const { i18n } = useTranslation()
+  const displayValue = typeof value === 'number' ? new Intl.NumberFormat(i18n.resolvedLanguage || 'en').format(value) : value
   return (
     <div
       className={cn(
@@ -43,7 +46,7 @@ export function MetricCard({
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">{label}</div>
-          <div className="mt-2 text-2xl font-bold tracking-[-0.02em] text-[var(--text-primary)]">{value}</div>
+          <div className="mt-2 text-2xl font-bold tracking-[-0.02em] text-[var(--text-primary)]">{displayValue}</div>
           {hint && (
             <div className="mt-1.5 text-xs text-[var(--text-muted)]">{hint}</div>
           )}

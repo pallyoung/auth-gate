@@ -48,12 +48,16 @@ describe('Layout language switching', () => {
     )
 
     expect(screen.getAllByText('Routes')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Auth Rules')[0]).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Language switcher' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '中文' }))
 
     expect(screen.getAllByText('路由')[0]).toBeInTheDocument()
-    expect(screen.getByText('Admin Profile')).toBeInTheDocument()
+    expect(screen.getByText('管理员')).toBeInTheDocument()
+    expect(screen.getAllByText('鉴权规则')[0]).toBeInTheDocument()
+    expect(screen.getByText('API 网关')).toBeInTheDocument()
+    expect(screen.queryByText('Admin Profile')).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '语言切换' })).toBeInTheDocument()
     expect(localStorage.getItem('auth-gate.locale')).toBe('zh-CN')
   })
@@ -266,11 +270,11 @@ describe('Layout language switching', () => {
     const mobileNav = screen.getByRole('navigation', { name: 'Mobile navigation' })
 
     expect(within(desktopNav).getByRole('link', { name: /routes/i })).toBeInTheDocument()
-    expect(within(desktopNav).getByRole('link', { name: /鉴权配置/ })).toBeInTheDocument()
+    expect(within(desktopNav).getByRole('link', { name: /auth rules/i })).toBeInTheDocument()
     expect(within(desktopNav).queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
 
     expect(within(mobileNav).getByRole('link', { name: /routes/i })).toBeInTheDocument()
-    expect(within(mobileNav).getByRole('link', { name: /鉴权配置/ })).toBeInTheDocument()
+    expect(within(mobileNav).getByRole('link', { name: /auth rules/i })).toBeInTheDocument()
     expect(within(mobileNav).queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
   })
 })

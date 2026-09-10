@@ -1,4 +1,6 @@
 export const commonEn = {
+  pagination: { label: 'Pagination', previous: 'Previous page', next: 'Next page', page: 'Page {{page, number}}' },
+  brand: { security: 'Enterprise Security' },
   accessibility: {
     languageSwitcher: 'Language switcher',
   },
@@ -21,6 +23,8 @@ export const commonEn = {
 } as const
 
 export const commonZhCN = {
+  pagination: { label: '分页', previous: '上一页', next: '下一页', page: '第 {{page, number}} 页' },
+  brand: { security: '企业安全' },
   accessibility: {
     languageSwitcher: '语言切换',
   },

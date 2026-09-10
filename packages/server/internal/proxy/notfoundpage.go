@@ -1,14 +1,17 @@
 package proxy
 
+import "github.com/pallyoung/auth-gate/packages/server/internal/pagei18n"
+
 // notFoundPageHTML is a self-contained HTML page shown when no route matches
 // the incoming proxy request. It is served when the client accepts text/html;
 // otherwise a JSON error envelope is returned for API clients.
 const notFoundPageHTML = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>404 - 路由未找到</title>
+<title data-i18n="title">404 - Route not found</title>
+` + pagei18n.Runtime + `
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;background:#0a0f1a;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#e0e6f0}
@@ -31,21 +34,23 @@ p{color:#6b7a90;font-size:15px;line-height:1.7;margin-bottom:32px}
 </head>
 <body>
 <div class="container">
+  ` + pagei18n.Switcher + `
   <div class="code">404</div>
   <div class="icon">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
   </div>
-  <h1>路由未找到</h1>
-  <p>该域名或路径未配置后端服务，<br>请检查访问地址是否正确。</p>
+  <h1 data-i18n="heading">Route not found</h1>
+  <p data-i18n="description">No backend service is configured for this hostname or path. Check the address and try again.</p>
   <div class="host" id="host-info"></div>
   <div class="actions">
     <button class="btn btn-ghost" onclick="history.back()">
       <svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-      返回上一页
+      <span data-i18n="back">Go Back</span>
     </button>
   </div>
 </div>
 <script>
+window.authGateI18n.init({"en":{"title":"404 - Route not found","heading":"Route not found","description":"No backend service is configured for this hostname or path. Check the address and try again.","back":"Go Back","retry":"Retry"},"zh-CN":{"title":"404 - 路由未找到","heading":"路由未找到","description":"该域名或路径未配置后端服务，请检查访问地址是否正确。","back":"返回上一页","retry":"刷新重试"}});
 document.getElementById('host-info').textContent = window.location.hostname + window.location.pathname;
 </script>
 </body>

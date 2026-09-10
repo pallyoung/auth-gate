@@ -1,32 +1,36 @@
-import { request } from './client'
-import type { AccessLogEntry, AccessLogListResponse, AccessLogStats, AccessLogQueryParams, AccessLogAggregateParams, AccessLogAggregateResponse } from './types'
+﻿import { request } from './client'
+import type { AccessLogListResponse, AccessLogStats, AccessLogQueryParams, AccessLogAggregateParams, AccessLogAggregateResponse, AccessLogPurgeRequest, AccessLogPurgeResult } from './types'
+
+export function accessLogSearchParams(params: AccessLogQueryParams): URLSearchParams {
+  const search = new URLSearchParams()
+  for (const key of ['host', 'client_ip', 'path', 'username', 'auth_result', 'route_id', 'status_code', 'start_time', 'end_time', 'page', 'per_page'] as const) {
+    const value = params[key]
+    if (value !== undefined && value !== '') search.set(key, String(value))
+  }
+  return search
+}
 
 export const accessLogsApi = {
-  list: (params: AccessLogQueryParams): Promise<AccessLogListResponse> => {
-    const searchParams = new URLSearchParams()
-    if (params.client_ip) searchParams.append('client_ip', params.client_ip)
-    if (params.path) searchParams.append('path', params.path)
-    if (params.username) searchParams.append('username', params.username)
-    if (params.auth_result) searchParams.append('auth_result', params.auth_result)
-    if (params.route_id) searchParams.append('route_id', params.route_id)
-    if (params.status_code) searchParams.append('status_code', params.status_code.toString())
-    if (params.start_time) searchParams.append('start_time', params.start_time)
-    if (params.end_time) searchParams.append('end_time', params.end_time)
-    if (params.page) searchParams.append('page', params.page.toString())
-    if (params.per_page) searchParams.append('per_page', params.per_page.toString())
-    return request(`/access-logs?${searchParams.toString()}`)
-  },
-  stats: (duration: string = '1h'): Promise<AccessLogStats> => {
-    return request(`/access-logs/stats?duration=${duration}`)
+  list: (params: AccessLogQueryParams): Promise<AccessLogListResponse> =>
+    request(`/access-logs?${accessLogSearchParams(params)}`),
+  stats: (params: AccessLogQueryParams | string = '1h'): Promise<AccessLogStats> => {
+    const search = typeof params === 'string'
+      ? new URLSearchParams({ duration: params })
+      : accessLogSearchParams(params)
+    search.delete('page')
+    search.delete('per_page')
+    if (typeof params !== 'string') search.set('duration', 'all')
+    return request(`/access-logs/stats?${search}`)
   },
   aggregate: (params: AccessLogAggregateParams): Promise<AccessLogAggregateResponse> => {
-    const searchParams = new URLSearchParams()
-    searchParams.append('group_by', params.group_by)
-    if (params.duration) searchParams.append('duration', params.duration)
-    if (params.sort_by) searchParams.append('sort_by', params.sort_by)
-    if (params.sort_order) searchParams.append('sort_order', params.sort_order)
-    if (params.page) searchParams.append('page', params.page.toString())
-    if (params.per_page) searchParams.append('per_page', params.per_page.toString())
-    return request(`/access-logs/aggregate?${searchParams.toString()}`)
+    const search = accessLogSearchParams(params)
+    search.set('group_by', params.group_by)
+    search.set('duration', params.duration || 'all')
+    for (const key of ['duration', 'sort_by', 'sort_order'] as const) {
+      if (params[key]) search.set(key, params[key])
+    }
+    return request(`/access-logs/aggregate?${search}`)
   },
+  purge: (body: AccessLogPurgeRequest): Promise<AccessLogPurgeResult> =>
+    request('/access-logs/purge', { method: 'POST', body: JSON.stringify(body) }),
 }

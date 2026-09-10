@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import type { LoginResponse } from '../lib/api/types'
 import { ApiError } from '../lib/api/client'
+import { resolveLocalizedText, type LocalizedTextState } from '../lib/error-state'
 import { Button } from '../components/ui'
 
 interface SetupPageProps {
@@ -15,7 +16,7 @@ export function SetupPage({ onSetup }: SetupPageProps) {
   const [username, setUsername] = React.useState('admin')
   const [password, setPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
-  const [error, setError] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<LocalizedTextState>(null)
   const [loading, setLoading] = React.useState(false)
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -23,11 +24,11 @@ export function SetupPage({ onSetup }: SetupPageProps) {
     setError(null)
 
     if (password.length < 8) {
-      setError(t('errors.passwordTooShort'))
+      setError({ translationKey: 'errors.passwordTooShort' })
       return
     }
     if (password !== confirmPassword) {
-      setError(t('errors.passwordMismatch'))
+      setError({ translationKey: 'errors.passwordMismatch' })
       return
     }
 
@@ -37,12 +38,12 @@ export function SetupPage({ onSetup }: SetupPageProps) {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'setup_already_completed') {
-          setError(t('errors.setupAlreadyCompleted'))
+          setError({ translationKey: 'errors.setupAlreadyCompleted' })
         } else {
-          setError(err.message)
+          setError({ message: err.message })
         }
       } else {
-        setError(t('errors.network'))
+        setError({ translationKey: 'errors.network' })
       }
     } finally {
       setLoading(false)
@@ -73,7 +74,7 @@ export function SetupPage({ onSetup }: SetupPageProps) {
               Auth Gate
             </h1>
             <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Initial Setup
+              {t('hero.eyebrow')}
             </p>
           </div>
 
@@ -83,7 +84,7 @@ export function SetupPage({ onSetup }: SetupPageProps) {
                 className="rounded-[12px] border border-[rgba(248,113,113,0.2)] bg-[var(--error-light)] px-4 py-3 text-sm font-medium text-[var(--error)]"
                 role="alert"
               >
-                {error}
+                {resolveLocalizedText(t, error)}
               </div>
             )}
 
@@ -168,7 +169,7 @@ export function SetupPage({ onSetup }: SetupPageProps) {
             <Shield className="h-3 w-3" />
             <span>Auth Gate v2.4.0</span>
             <span className="text-[var(--text-subtle)]">•</span>
-            <span>Enterprise Security</span>
+            <span>{t('common:brand.security')}</span>
           </div>
         </div>
       </div>

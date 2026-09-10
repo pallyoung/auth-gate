@@ -131,6 +131,29 @@ describe('RouteAuthPage configuration editing', () => {
     vi.mocked(apiKeyApi.delete).mockReset()
   })
 
+  it('changes locale in an open editor without reloading its draft or losing translated validation and dates', async () => {
+    vi.mocked(apiKeyApi.list).mockResolvedValue([{ ...activeKey, expires_at: '2026-09-20T12:00:00Z' }])
+    const user = userEvent.setup()
+    const { i18n } = await renderWithI18n(<RouteAuthPage />, { locale: 'en' })
+    await user.click((await screen.findAllByRole('button', { name: 'Edit' }))[0])
+    const methods = await screen.findByLabelText('Allowed Methods')
+    await user.clear(methods)
+    await user.type(methods, 'GET,POST')
+    const rate = screen.getByLabelText('Rate (req/s)')
+    await user.clear(rate)
+    await user.type(rate, '-1')
+    await user.click(screen.getByRole('button', { name: 'Save Configuration' }))
+    expect(screen.getByText('Enter a whole number greater than or equal to 0.')).toBeInTheDocument()
+    const calls = vi.mocked(routeAuthApi.getConfig).mock.calls.length
+    await act(async () => { await i18n.changeLanguage('zh-CN') })
+    expect(screen.getByLabelText('允许方法')).toHaveValue('GET,POST')
+    expect(screen.getByText('请输入大于或等于 0 的整数。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '显示 API Key' })).toBeInTheDocument()
+    expect(screen.getByText(/2026\/9\/20/)).toBeInTheDocument()
+    expect(routeAuthApi.getConfig).toHaveBeenCalledTimes(calls)
+    expect(routeAuthApi.updateConfig).not.toHaveBeenCalled()
+  })
+
   it('keeps a comma-separated HTTP method draft intact without saving on each keystroke', async () => {
     const user = await openConfigModal()
     const methodsInput = screen.getByLabelText('Allowed Methods')

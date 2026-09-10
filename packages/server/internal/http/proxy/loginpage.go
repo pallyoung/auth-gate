@@ -1,5 +1,7 @@
 package proxy
 
+import "github.com/pallyoung/auth-gate/packages/server/internal/pagei18n"
+
 // loginPageHTML is a self-contained HTML page for gateway access login.
 // It is served by the proxy engine at /_authgate/access-login when a
 // protected route requires gateway authentication.
@@ -9,11 +11,12 @@ package proxy
 //   - route_name : display name of the route
 //   - next       : redirect target after successful login
 const loginPageHTML = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Auth Gate - 登录</title>
+<title data-i18n="title">Auth Gate - Gateway Login</title>
+` + pagei18n.Runtime + `
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;color:#333}
@@ -33,36 +36,47 @@ h1{font-size:20px;font-weight:600;margin-bottom:4px}
 </head>
 <body>
 <div class="card">
-  <h1>🔐 网关登录</h1>
-  <p class="sub">请登录以访问受保护的资源</p>
-  <div id="route-info" class="route-info" style="display:none"></div>
-  <div id="error" class="error"></div>
-  <form id="login-form">
+  ` + pagei18n.Switcher + `
+  <h1 data-i18n="heading">Gateway Login</h1>
+  <p class="sub" data-i18n="description">Sign in to access protected resources</p>
+  <div id="route-info" class="route-info" style="display:none"><span data-i18n="target">Target: </span><span id="route-name"></span></div>
+  <div id="error" class="error" role="alert"></div>
+  <form id="login-form" novalidate>
     <div class="field">
-      <label for="username">用户名</label>
+      <label for="username" data-i18n="username">Username</label>
       <input id="username" name="username" type="text" autocomplete="username" required>
     </div>
     <div class="field">
-      <label for="password">密码</label>
+      <label for="password" data-i18n="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
     </div>
-    <button class="btn" type="submit" id="submit-btn">登录</button>
+    <button class="btn" type="submit" id="submit-btn" data-i18n="submit">Sign In</button>
   </form>
 </div>
 <script>
 (function(){
+  var i18n = window.authGateI18n;
+  i18n.init({
+    en: {title:'Auth Gate - Gateway Login',heading:'Gateway Login',description:'Sign in to access protected resources',target:'Target: ',username:'Username',password:'Password',submit:'Sign In',submitting:'Signing in...',required:'Enter your username and password.',failed:'Sign-in failed. Check your credentials and try again.',denied:'You do not have access to this resource. Contact your administrator.',network:'Network error. Please try again.'},
+    'zh-CN': {title:'Auth Gate - 网关登录',heading:'网关登录',description:'请登录以访问受保护的资源',target:'目标：',username:'用户名',password:'密码',submit:'登录',submitting:'登录中...',required:'请输入用户名和密码。',failed:'登录失败。请检查凭据后重试。',denied:'你无权访问此资源。请联系管理员。',network:'网络错误，请重试。'}
+  });
   var params = new URLSearchParams(window.location.search);
   var routeId = params.get('route_id') || '';
   var routeName = params.get('route_name') || '';
   var next = params.get('next') || '/';
   var info = document.getElementById('route-info');
-  if (routeName) { info.textContent = '目标：' + routeName; info.style.display = 'block'; }
+  if (routeName) { document.getElementById('route-name').textContent = routeName; info.style.display = 'block'; }
   document.getElementById('login-form').addEventListener('submit', function(e){
     e.preventDefault();
     var errEl = document.getElementById('error');
     var btn = document.getElementById('submit-btn');
+    if (btn.disabled) return;
+    if (!document.getElementById('username').value.trim() || !document.getElementById('password').value) {
+      i18n.setText(errEl, 'required'); errEl.style.display = 'block';
+      return;
+    }
     errEl.style.display = 'none';
-    btn.disabled = true; btn.textContent = '登录中...';
+    btn.disabled = true; i18n.setText(btn, 'submitting');
     fetch('/api/access/login', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -77,13 +91,14 @@ h1{font-size:20px;font-weight:600;margin-bottom:4px}
       if (res.ok) {
         window.location.href = res.data.next || next;
       } else {
-        var msg = (res.data && res.data.error && res.data.error.message) || '登录失败';
-        errEl.textContent = msg; errEl.style.display = 'block';
-        btn.disabled = false; btn.textContent = '登录';
+        var code = res.data && res.data.error && res.data.error.code;
+        i18n.setText(errEl, code === 'access_denied' || code === 'route_access_denied' ? 'denied' : 'failed');
+        errEl.style.display = 'block';
+        btn.disabled = false; i18n.setText(btn, 'submit');
       }
     }).catch(function(){
-      errEl.textContent = '网络错误，请重试'; errEl.style.display = 'block';
-      btn.disabled = false; btn.textContent = '登录';
+      i18n.setText(errEl, 'network'); errEl.style.display = 'block';
+      btn.disabled = false; i18n.setText(btn, 'submit');
     });
   });
   document.getElementById('username').focus();

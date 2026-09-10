@@ -17,6 +17,8 @@ export const loginEn = {
     description:
       'Use an administrator account to manage routes, authentication rules, and runtime operations.',
     submit: 'Sign In',
+    rememberMe: 'Remember me',
+    forgotPassword: 'Forgot Password?',
     sessionHint: 'Session access is scoped by your server-side permissions.',
   },
   fields: {
@@ -56,6 +58,8 @@ export const loginZhCN = {
     title: '登录控制台',
     description: '使用管理员账号管理路由、鉴权规则和运行时操作。',
     submit: '登录',
+    rememberMe: '记住登录',
+    forgotPassword: '忘记密码？',
     sessionHint: '会话访问范围由服务端权限控制。',
   },
   fields: {

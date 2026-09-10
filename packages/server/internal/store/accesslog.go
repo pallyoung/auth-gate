@@ -5,15 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 // AccessLogEntry represents a single access log record.
 type AccessLogEntry struct {
+	Host             string    `json:"host"`
 	RequestID        string    `json:"request_id"`
 	RouteID          string    `json:"route_id"`
 	RouteName        string    `json:"route_name,omitempty"`
@@ -31,6 +37,7 @@ type AccessLogEntry struct {
 
 // AccessLogFilter defines query filters for access logs.
 type AccessLogFilter struct {
+	Host       string
 	ClientIP   string
 	Path       string
 	Username   string
@@ -43,16 +50,20 @@ type AccessLogFilter struct {
 
 // AccessLogStats contains aggregated statistics.
 type AccessLogStats struct {
-	TotalRequests      int             `json:"total_requests"`
-	SuccessCount       int             `json:"success_count"`
-	ErrorCount         int             `json:"error_count"`
-	AvgLatencyMs       float64         `json:"avg_latency_ms"`
-	P95LatencyMs       int64           `json:"p95_latency_ms"`
-	RequestsPerMinute  []TimeBucket    `json:"requests_per_minute"`
-	ErrorRatePerHour   []TimeBucket    `json:"error_rate_per_hour"`
-	LatencyPerHour     []LatencyBucket `json:"latency_per_hour"`
-	TopPaths           []PathCount     `json:"top_paths"`
-	TopIPs             []IPCount       `json:"top_ips"`
+	AuthFailures          int             `json:"auth_failures"`
+	BucketIntervalSeconds int64           `json:"bucket_interval_seconds"`
+	PeriodStart           time.Time       `json:"period_start"`
+	PeriodEnd             time.Time       `json:"period_end"`
+	TotalRequests         int             `json:"total_requests"`
+	SuccessCount          int             `json:"success_count"`
+	ErrorCount            int             `json:"error_count"`
+	AvgLatencyMs          float64         `json:"avg_latency_ms"`
+	P95LatencyMs          int64           `json:"p95_latency_ms"`
+	RequestsPerMinute     []TimeBucket    `json:"requests_per_minute"`
+	ErrorRatePerHour      []TimeBucket    `json:"error_rate_per_hour"`
+	LatencyPerHour        []LatencyBucket `json:"latency_per_hour"`
+	TopPaths              []PathCount     `json:"top_paths"`
+	TopIPs                []IPCount       `json:"top_ips"`
 }
 
 // TimeBucket represents a count at a specific time.
@@ -82,16 +93,16 @@ type IPCount struct {
 
 // AggregateGroup represents aggregated metrics for a single group.
 type AggregateGroup struct {
-	Key           string    `json:"key"`
-	RouteName     string    `json:"route_name,omitempty"` // populated when group_by=route_id
-	Count         int       `json:"count"`
-	Errors        int       `json:"errors"`
-	ErrorRate     float64   `json:"error_rate"`
-	AuthFailures  int       `json:"auth_failures"`
-	AvgLatencyMs  float64   `json:"avg_latency_ms"`
-	P95LatencyMs  int64     `json:"p95_latency_ms"`
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
+	Key          string    `json:"key"`
+	RouteName    string    `json:"route_name,omitempty"` // populated when group_by=route_id
+	Count        int       `json:"count"`
+	Errors       int       `json:"errors"`
+	ErrorRate    float64   `json:"error_rate"`
+	AuthFailures int       `json:"auth_failures"`
+	AvgLatencyMs float64   `json:"avg_latency_ms"`
+	P95LatencyMs int64     `json:"p95_latency_ms"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
 }
 
 // AggregateResult holds the paginated result of an aggregation query.
@@ -106,8 +117,9 @@ type AggregateResult struct {
 
 // AggregateFilter defines parameters for aggregation queries.
 type AggregateFilter struct {
+	Filter    AccessLogFilter
 	Since     *time.Time
-	GroupBy   string // route_id, client_ip, username, status_code, auth_result
+	GroupBy   string // host, route_id, client_ip, username, status_code, auth_result
 	SortBy    string // count, errors, avg_latency, p95_latency
 	SortOrder string // asc, desc
 	Offset    int
@@ -117,12 +129,14 @@ type AggregateFilter struct {
 // AccessLogStore is an in-memory ring buffer with periodic file persistence.
 type AccessLogStore struct {
 	mu         sync.RWMutex
+	diskMu     sync.Mutex // acquired before mu; serializes snapshots and purges
+	stopOnce   sync.Once
+	workers    sync.WaitGroup
 	entries    []AccessLogEntry
 	writeIndex int
 	count      int
 	capacity   int
 	dir        string
-	flushChan  chan struct{}
 	doneChan   chan struct{}
 }
 
@@ -136,8 +150,7 @@ func NewAccessLogStore(dir string, capacity int) (*AccessLogStore, error) {
 		entries:  make([]AccessLogEntry, capacity),
 		capacity: capacity,
 		dir:      dir,
-		flushChan: make(chan struct{}, 1),
-		doneChan:  make(chan struct{}),
+		doneChan: make(chan struct{}),
 	}
 
 	// Load existing logs from file
@@ -150,6 +163,7 @@ func NewAccessLogStore(dir string, capacity int) (*AccessLogStore, error) {
 
 // Record adds a new entry to the ring buffer.
 func (s *AccessLogStore) Record(entry AccessLogEntry) {
+	entry.Host = NormalizeLogHost(entry.Host)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -165,18 +179,26 @@ func (s *AccessLogStore) Query(filter AccessLogFilter, offset, limit int) ([]Acc
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Collect all entries in chronological order
+	// Collect newest records first, preserving insertion order for equal timestamps.
 	all := s.collectEntries()
 
 	// Apply filters
 	filtered := make([]AccessLogEntry, 0, len(all))
-	for _, entry := range all {
+	for i := len(all) - 1; i >= 0; i-- {
+		entry := all[i]
 		if s.matchesFilter(entry, filter) {
 			filtered = append(filtered, entry)
 		}
 	}
 
+	sort.SliceStable(filtered, func(i, j int) bool { return filtered[i].Timestamp.After(filtered[j].Timestamp) })
 	total := len(filtered)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = total
+	}
 
 	// Apply pagination
 	if offset >= total {
@@ -191,71 +213,124 @@ func (s *AccessLogStore) Query(filter AccessLogFilter, offset, limit int) ([]Acc
 	return filtered[offset:end], total
 }
 
-// Stats computes aggregated statistics for entries since the given time.
+// Stats retains the legacy duration-based store interface.
 func (s *AccessLogStore) Stats(since time.Time) (*AccessLogStats, error) {
+	return s.StatsFiltered(AccessLogFilter{StartTime: &since})
+}
+
+// StatsFiltered uses the same inclusive filters as list and aggregate.
+func (s *AccessLogStore) StatsFiltered(filter AccessLogFilter) (*AccessLogStats, error) {
+	if filter.StartTime != nil && filter.EndTime != nil && filter.StartTime.After(*filter.EndTime) {
+		return nil, fmt.Errorf("start_time must not be after end_time")
+	}
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	all := s.collectEntries()
-
-	// Filter by time
+	s.mu.RUnlock()
 	entries := make([]AccessLogEntry, 0, len(all))
 	for _, entry := range all {
-		if entry.Timestamp.After(since) || entry.Timestamp.Equal(since) {
+		if s.matchesFilter(entry, filter) {
 			entries = append(entries, entry)
 		}
 	}
-
-	if len(entries) == 0 {
-		return &AccessLogStats{}, nil
+	end := time.Now()
+	if filter.EndTime != nil {
+		end = *filter.EndTime
 	}
-
+	start := end
+	if filter.StartTime != nil {
+		start = *filter.StartTime
+	} else {
+		for _, entry := range entries {
+			if entry.Timestamp.Before(start) {
+				start = entry.Timestamp
+			}
+		}
+	}
+	// For unbounded queries include future-dated retained entries as well.
+	if filter.EndTime == nil {
+		if start.After(end) {
+			end = start
+		}
+		for _, entry := range entries {
+			if entry.Timestamp.After(end) {
+				end = entry.Timestamp
+			}
+		}
+	}
+	// At most 168 buckets, with a one-minute minimum resolution. The final
+	// bucket includes the inclusive end boundary (no extra terminal bucket).
+	spanSeconds := logElapsedSeconds(start, end)
+	intervalSeconds := int64(math.Ceil(spanSeconds/168/60)) * 60
+	if intervalSeconds < 60 {
+		intervalSeconds = 60
+	}
+	count := int(math.Ceil(spanSeconds / float64(intervalSeconds)))
+	if count < 1 {
+		count = 1
+	}
 	stats := &AccessLogStats{
-		TotalRequests: len(entries),
+		TotalRequests: len(entries), BucketIntervalSeconds: intervalSeconds,
+		PeriodStart: start, PeriodEnd: end,
+		RequestsPerMinute: make([]TimeBucket, count),
+		ErrorRatePerHour:  make([]TimeBucket, count),
+		LatencyPerHour:    make([]LatencyBucket, count),
 	}
-
-	// Compute success/error counts and latency
+	bucketLatencies := make([][]int64, count)
+	for i := 0; i < count; i++ {
+		at := time.Unix(start.Unix()+int64(i)*intervalSeconds, int64(start.Nanosecond())).In(start.Location())
+		stats.RequestsPerMinute[i].Time = at
+		stats.ErrorRatePerHour[i].Time = at
+		stats.LatencyPerHour[i].Time = at
+	}
 	latencies := make([]int64, 0, len(entries))
 	for _, entry := range entries {
-		if entry.StatusCode >= 200 && entry.StatusCode < 400 {
-			stats.SuccessCount++
-		} else {
+		index := int(logElapsedSeconds(start, entry.Timestamp) / float64(intervalSeconds))
+		if index >= count {
+			index = count - 1
+		}
+		if index < 0 {
+			index = 0
+		}
+		stats.RequestsPerMinute[index].Count++
+		if entry.StatusCode >= 400 {
 			stats.ErrorCount++
+			stats.ErrorRatePerHour[index].Count++
+		} else if entry.StatusCode >= 200 {
+			stats.SuccessCount++
+		}
+		if entry.AuthResult == "fail" {
+			stats.AuthFailures++
 		}
 		latencies = append(latencies, entry.BackendLatencyMs)
+		bucketLatencies[index] = append(bucketLatencies[index], entry.BackendLatencyMs)
 	}
-
-	// Average latency
-	var totalLatency int64
-	for _, l := range latencies {
-		totalLatency += l
+	stats.AvgLatencyMs, stats.P95LatencyMs = latencyMetrics(latencies)
+	for i := range bucketLatencies {
+		stats.LatencyPerHour[i].AvgMs, stats.LatencyPerHour[i].P95Ms = latencyMetrics(bucketLatencies[i])
 	}
-	stats.AvgLatencyMs = float64(totalLatency) / float64(len(latencies))
-
-	// P95 latency
-	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
-	p95Index := int(float64(len(latencies)) * 0.95)
-	if p95Index >= len(latencies) {
-		p95Index = len(latencies) - 1
-	}
-	stats.P95LatencyMs = latencies[p95Index]
-
-	// Requests per minute (last 60 minutes)
-	stats.RequestsPerMinute = s.computeRequestsPerMinute(entries)
-
-	// Error rate per hour (last 24 hours)
-	stats.ErrorRatePerHour = s.computeErrorRatePerHour(entries)
-
-	// Latency per hour (last 24 hours)
-	stats.LatencyPerHour = s.computeLatencyPerHour(entries)
-
-	// Top paths
 	stats.TopPaths = s.computeTopPaths(entries, 10)
-
-	// Top IPs
 	stats.TopIPs = s.computeTopIPs(entries, 10)
-
 	return stats, nil
+}
+
+func latencyMetrics(values []int64) (float64, int64) {
+	if len(values) == 0 {
+		return 0, 0
+	}
+	var total int64
+	for _, value := range values {
+		total += value
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	// Nearest-rank percentile.
+	index := int(math.Ceil(float64(len(values))*.95)) - 1
+	return float64(total) / float64(len(values)), values[index]
+}
+
+// time.Duration saturates for ranges longer than about 292 years. RFC3339
+// accepts a wider range, so bucket positioning uses seconds instead.
+func logElapsedSeconds(start, end time.Time) float64 {
+	return float64(end.Unix()-start.Unix()) + float64(end.Nanosecond()-start.Nanosecond())/1e9
 }
 
 // Aggregate groups entries by the specified dimension and computes per-group metrics.
@@ -265,17 +340,15 @@ func (s *AccessLogStore) Aggregate(filter AggregateFilter) AggregateResult {
 
 	all := s.collectEntries()
 
-	// Filter by time
-	var entries []AccessLogEntry
-	if filter.Since != nil {
-		entries = make([]AccessLogEntry, 0, len(all))
-		for _, e := range all {
-			if !e.Timestamp.Before(*filter.Since) {
-				entries = append(entries, e)
-			}
+	query := filter.Filter
+	if query.StartTime == nil {
+		query.StartTime = filter.Since
+	}
+	entries := make([]AccessLogEntry, 0, len(all))
+	for _, entry := range all {
+		if s.matchesFilter(entry, query) {
+			entries = append(entries, entry)
 		}
-	} else {
-		entries = all
 	}
 
 	type bucket struct {
@@ -293,6 +366,8 @@ func (s *AccessLogStore) Aggregate(filter AggregateFilter) AggregateResult {
 	for _, entry := range entries {
 		var key string
 		switch filter.GroupBy {
+		case "host":
+			key = NormalizeLogHost(entry.Host)
 		case "route_id":
 			key = entry.RouteID
 		case "client_ip":
@@ -342,45 +417,39 @@ func (s *AccessLogStore) Aggregate(filter AggregateFilter) AggregateResult {
 		if b.count > 0 {
 			g.ErrorRate = float64(b.errors) * 100 / float64(b.count)
 		}
-		if len(b.latencies) > 0 {
-			var total int64
-			for _, l := range b.latencies {
-				total += l
-			}
-			g.AvgLatencyMs = float64(total) / float64(len(b.latencies))
-			sort.Slice(b.latencies, func(i, j int) bool { return b.latencies[i] < b.latencies[j] })
-			p95 := int(float64(len(b.latencies)) * 0.95)
-			if p95 >= len(b.latencies) {
-				p95 = len(b.latencies) - 1
-			}
-			g.P95LatencyMs = b.latencies[p95]
-		}
+		g.AvgLatencyMs, g.P95LatencyMs = latencyMetrics(b.latencies)
 		groups = append(groups, g)
 	}
 
-	// Sort
+	// Use the key to break ties so pagination remains deterministic.
 	sort.Slice(groups, func(i, j int) bool {
-		var less bool
+		var left, right float64
 		switch filter.SortBy {
 		case "errors":
-			less = groups[i].Errors < groups[j].Errors
+			left, right = float64(groups[i].Errors), float64(groups[j].Errors)
 		case "avg_latency":
-			less = groups[i].AvgLatencyMs < groups[j].AvgLatencyMs
+			left, right = groups[i].AvgLatencyMs, groups[j].AvgLatencyMs
 		case "p95_latency":
-			less = groups[i].P95LatencyMs < groups[j].P95LatencyMs
-		default: // count
-			less = groups[i].Count < groups[j].Count
+			left, right = float64(groups[i].P95LatencyMs), float64(groups[j].P95LatencyMs)
+		default:
+			left, right = float64(groups[i].Count), float64(groups[j].Count)
+		}
+		if left == right {
+			return groups[i].Key < groups[j].Key
 		}
 		if filter.SortOrder == "asc" {
-			return less
+			return left < right
 		}
-		return !less
+		return left > right
 	})
 
 	total := len(groups)
-	page := filter.Offset/filter.Limit + 1
-	if filter.Limit <= 0 {
-		page = 1
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	page := 1
+	if filter.Limit > 0 {
+		page = filter.Offset/filter.Limit + 1
 	}
 	totalPages := 1
 	if filter.Limit > 0 {
@@ -412,14 +481,18 @@ func (s *AccessLogStore) Aggregate(filter AggregateFilter) AggregateResult {
 
 // StartFlusher starts a goroutine that periodically flushes entries to disk.
 func (s *AccessLogStore) StartFlusher(interval time.Duration) {
+	s.workers.Add(1)
 	go func() {
+		defer s.workers.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				s.flush()
+				if err := s.flush(); err != nil {
+					log.Printf("access log flush failed: %v", err)
+				}
 			case <-s.doneChan:
 				return
 			}
@@ -428,57 +501,65 @@ func (s *AccessLogStore) StartFlusher(interval time.Duration) {
 }
 
 // StopFlusher stops the flusher goroutine and performs a final flush.
-func (s *AccessLogStore) StopFlusher() {
-	close(s.doneChan)
-	s.flush()
+func (s *AccessLogStore) StopFlusher() error {
+	s.stopOnce.Do(func() { close(s.doneChan) })
+	s.workers.Wait()
+	return s.flush()
 }
 
-// PurgeOlderThan removes all entries with a Timestamp before cutoff.
-// It returns the number of entries removed and flushes the result to disk.
-func (s *AccessLogStore) PurgeOlderThan(cutoff time.Time) int {
+// PurgeOlderThan retains the legacy retention behavior and reports IO failures.
+func (s *AccessLogStore) PurgeOlderThan(cutoff time.Time) (int, error) {
+	return s.PurgeMatching(AccessLogFilter{}, cutoff, &cutoff)
+}
+
+func (s *AccessLogStore) CountMatching(filter AccessLogFilter, cutoff time.Time, olderThan *time.Time) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	count := 0
+	for _, entry := range s.collectEntries() {
+		if s.matchesPurge(entry, filter, cutoff, olderThan) {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *AccessLogStore) matchesPurge(entry AccessLogEntry, filter AccessLogFilter, cutoff time.Time, olderThan *time.Time) bool {
+	return !entry.Timestamp.After(cutoff) && (olderThan == nil || entry.Timestamp.Before(*olderThan)) && s.matchesFilter(entry, filter)
+}
+
+// PurgeMatching persists the survivors before changing memory. Lock ordering
+// prevents a concurrent flush from restoring an older snapshot after deletion.
+func (s *AccessLogStore) PurgeMatching(filter AccessLogFilter, cutoff time.Time, olderThan *time.Time) (int, error) {
+	s.diskMu.Lock()
+	defer s.diskMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.count == 0 {
-		return 0
-	}
-
-	// Collect surviving entries
 	all := s.collectEntries()
 	keep := make([]AccessLogEntry, 0, len(all))
-	for _, e := range all {
-		if !e.Timestamp.Before(cutoff) {
-			keep = append(keep, e)
+	for _, entry := range all {
+		if !s.matchesPurge(entry, filter, cutoff, olderThan) {
+			keep = append(keep, entry)
 		}
 	}
 	removed := len(all) - len(keep)
-	if removed == 0 {
-		return 0
+	if err := s.writeToDisk(keep); err != nil {
+		return 0, err
 	}
-
-	// Rebuild the ring buffer with surviving entries
 	s.entries = make([]AccessLogEntry, s.capacity)
-	s.writeIndex = 0
-	s.count = 0
-	for _, e := range keep {
-		s.entries[s.writeIndex] = e
-		s.writeIndex = (s.writeIndex + 1) % s.capacity
-		if s.count < s.capacity {
-			s.count++
-		}
-	}
-
-	// Persist immediately (collectEntries works on the rebuilt buffer)
-	s.writeToDisk(s.collectEntries())
-
-	return removed
+	copy(s.entries, keep)
+	s.count = len(keep)
+	s.writeIndex = s.count % s.capacity
+	return removed, nil
 }
 
 // StartCleanup launches a goroutine that purges expired access logs daily
 // at midnight. getRetentionDays is called each cycle to read the current
 // setting; a value <= 0 disables cleanup.
 func (s *AccessLogStore) StartCleanup(getRetentionDays func() int) {
+	s.workers.Add(1)
 	go func() {
+		defer s.workers.Done()
 		// Use a 1-hour ticker and only act in the 00:00–00:30 window.
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
@@ -498,7 +579,11 @@ func (s *AccessLogStore) StartCleanup(getRetentionDays func() int) {
 					continue
 				}
 				cutoff := now.AddDate(0, 0, -days)
-				removed := s.PurgeOlderThan(cutoff)
+				removed, err := s.PurgeOlderThan(cutoff)
+				if err != nil {
+					log.Printf("access log cleanup failed: %v", err)
+					continue
+				}
 				if removed > 0 {
 					log.Printf("access log cleanup: purged %d entries older than %d days", removed, days)
 				}
@@ -511,6 +596,8 @@ func (s *AccessLogStore) StartCleanup(getRetentionDays func() int) {
 
 // flush writes all entries to disk.
 func (s *AccessLogStore) flush() error {
+	s.diskMu.Lock()
+	defer s.diskMu.Unlock()
 	s.mu.RLock()
 	entries := s.collectEntries()
 	s.mu.RUnlock()
@@ -521,38 +608,34 @@ func (s *AccessLogStore) flush() error {
 // writeToDisk atomically writes the given entries to the JSONL file.
 // Does not acquire any lock; the caller is responsible for consistency.
 func (s *AccessLogStore) writeToDisk(entries []AccessLogEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-
 	filePath := filepath.Join(s.dir, "access-logs.jsonl")
-	tmpPath := filePath + ".tmp"
-
-	f, err := os.Create(tmpPath)
+	f, err := os.CreateTemp(s.dir, "access-logs-*.tmp")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return fmt.Errorf("create access log temp file: %w", err)
 	}
+	tmpPath := f.Name()
+	defer os.Remove(tmpPath)
 	defer f.Close()
-
 	writer := bufio.NewWriter(f)
+	encoder := json.NewEncoder(writer)
 	for _, entry := range entries {
-		data, err := json.Marshal(entry)
-		if err != nil {
-			continue
+		if err := encoder.Encode(entry); err != nil {
+			return fmt.Errorf("encode access log: %w", err)
 		}
-		writer.Write(data)
-		writer.WriteByte('\n')
 	}
-
 	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("failed to flush writer: %w", err)
+		return fmt.Errorf("flush access log: %w", err)
 	}
-
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync access log: %w", err)
+	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
+		return fmt.Errorf("close access log: %w", err)
 	}
-
-	return os.Rename(tmpPath, filePath)
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		return fmt.Errorf("replace access log: %w", err)
+	}
+	return nil
 }
 
 // load reads entries from disk.
@@ -610,6 +693,9 @@ func (s *AccessLogStore) collectEntries() []AccessLogEntry {
 
 // matchesFilter checks if an entry matches the given filter.
 func (s *AccessLogStore) matchesFilter(entry AccessLogEntry, filter AccessLogFilter) bool {
+	if filter.Host != "" && NormalizeLogHost(entry.Host) != NormalizeLogHost(filter.Host) {
+		return false
+	}
 	if filter.ClientIP != "" && entry.ClientIP != filter.ClientIP {
 		return false
 	}
@@ -637,109 +723,25 @@ func (s *AccessLogStore) matchesFilter(entry AccessLogEntry, filter AccessLogFil
 	return true
 }
 
-// computeRequestsPerMinute computes request counts per minute for the last 60 minutes.
-func (s *AccessLogStore) computeRequestsPerMinute(entries []AccessLogEntry) []TimeBucket {
-	now := time.Now()
-	buckets := make([]TimeBucket, 60)
-
-	// Initialize buckets
-	for i := 0; i < 60; i++ {
-		buckets[i] = TimeBucket{
-			Time:  now.Add(time.Duration(-59+i) * time.Minute).Truncate(time.Minute),
-			Count: 0,
+// NormalizeLogHost records the incoming hostname, without its transport port.
+// Historical entries with no host remain unknown rather than using a route host.
+func NormalizeLogHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if value, port, err := net.SplitHostPort(host); err == nil {
+		if number, err := strconv.Atoi(port); err == nil && number >= 0 && number <= 65535 {
+			host = value
 		}
 	}
-
-	// Count entries
-	for _, entry := range entries {
-		entryTime := entry.Timestamp.Truncate(time.Minute)
-		for i := 0; i < 60; i++ {
-			if entryTime.Equal(buckets[i].Time) {
-				buckets[i].Count++
-				break
-			}
+	host = strings.TrimSuffix(host, ".")
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		if address, err := netip.ParseAddr(host[1 : len(host)-1]); err == nil {
+			return address.String()
 		}
 	}
-
-	return buckets
-}
-
-// computeErrorRatePerHour computes error counts per hour for the last 24 hours.
-func (s *AccessLogStore) computeErrorRatePerHour(entries []AccessLogEntry) []TimeBucket {
-	now := time.Now()
-	buckets := make([]TimeBucket, 24)
-
-	// Initialize buckets
-	for i := 0; i < 24; i++ {
-		buckets[i] = TimeBucket{
-			Time:  now.Add(time.Duration(-23+i) * time.Hour).Truncate(time.Hour),
-			Count: 0,
-		}
+	if address, err := netip.ParseAddr(host); err == nil {
+		return address.String()
 	}
-
-	// Count error entries
-	for _, entry := range entries {
-		if entry.StatusCode >= 400 {
-			entryTime := entry.Timestamp.Truncate(time.Hour)
-			for i := 0; i < 24; i++ {
-				if entryTime.Equal(buckets[i].Time) {
-					buckets[i].Count++
-					break
-				}
-			}
-		}
-	}
-
-	return buckets
-}
-
-// computeLatencyPerHour computes average and P95 latency per hour for the last 24 hours.
-func (s *AccessLogStore) computeLatencyPerHour(entries []AccessLogEntry) []LatencyBucket {
-	now := time.Now()
-	type bucketData struct {
-		latencies []int64
-	}
-	bucketMap := make(map[time.Time]*bucketData)
-
-	// Initialize buckets
-	for i := 0; i < 24; i++ {
-		t := now.Add(time.Duration(-23+i) * time.Hour).Truncate(time.Hour)
-		bucketMap[t] = &bucketData{}
-	}
-
-	// Collect latencies
-	for _, entry := range entries {
-		entryTime := entry.Timestamp.Truncate(time.Hour)
-		if bd, ok := bucketMap[entryTime]; ok {
-			bd.latencies = append(bd.latencies, entry.BackendLatencyMs)
-		}
-	}
-
-	// Compute stats
-	buckets := make([]LatencyBucket, 24)
-	for i := 0; i < 24; i++ {
-		t := now.Add(time.Duration(-23+i) * time.Hour).Truncate(time.Hour)
-		bd := bucketMap[t]
-
-		bucket := LatencyBucket{Time: t}
-		if len(bd.latencies) > 0 {
-			var total int64
-			for _, l := range bd.latencies {
-				total += l
-			}
-			bucket.AvgMs = float64(total) / float64(len(bd.latencies))
-
-			sort.Slice(bd.latencies, func(i, j int) bool { return bd.latencies[i] < bd.latencies[j] })
-			p95Index := int(float64(len(bd.latencies)) * 0.95)
-			if p95Index >= len(bd.latencies) {
-				p95Index = len(bd.latencies) - 1
-			}
-			bucket.P95Ms = bd.latencies[p95Index]
-		}
-		buckets[i] = bucket
-	}
-
-	return buckets
+	return host
 }
 
 // computeTopPaths returns the top N paths by request count.

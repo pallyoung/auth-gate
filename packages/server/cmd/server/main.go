@@ -356,7 +356,11 @@ func startForeground() {
 		days, _ := strconv.Atoi(v)
 		return days
 	})
-	defer accessLogStore.StopFlusher()
+	defer func() {
+		if err := accessLogStore.StopFlusher(); err != nil {
+			log.Printf("Final access log flush failed: %v", err)
+		}
+	}()
 
 	routerMgr := router.NewManager(db)
 

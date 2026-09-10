@@ -12,7 +12,7 @@ export const groupsEn = {
     editModalTitle: 'Edit Group',
     addModalTitle: 'Add Group',
     deleteConfirm: 'Delete group "{{name}}"?',
-    groupsCount: '{{count}} groups',
+    groupsCount: '{{count, number}} groups',
   },
   table: {
     name: 'Group Name',
@@ -55,7 +55,7 @@ export const groupsZhCN = {
     editModalTitle: '编辑组',
     addModalTitle: '新增组',
     deleteConfirm: '确认删除权限组「{{name}}」？',
-    groupsCount: '{{count}} 个组',
+    groupsCount: '{{count, number}} 个组',
   },
   table: {
     name: '组名称',

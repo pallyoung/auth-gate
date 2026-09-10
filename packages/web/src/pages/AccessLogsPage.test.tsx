@@ -1,7 +1,9 @@
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AccessLogsPage } from './AccessLogsPage'
 import { accessLogsApi } from '../lib/api'
+import { accessLogsApi as cleanupApi } from '../lib/api/access-logs'
+import { setSessionUser } from '../lib/session-store'
 import { renderWithI18n } from '../test/render'
 import type { AccessLogEntry, AccessLogListResponse, AccessLogStats } from '../lib/api/types'
 
@@ -16,6 +18,8 @@ vi.mock('../lib/api', () => ({
 vi.mock('../components/AccessLogCharts', () => ({
   AccessLogCharts: () => <div>charts</div>,
 }))
+
+vi.mock('../lib/api/access-logs', () => ({ accessLogsApi: { purge: vi.fn() } }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -73,10 +77,38 @@ describe('AccessLogsPage request ordering', () => {
     vi.mocked(accessLogsApi.stats).mockReset()
     vi.mocked(accessLogsApi.stats).mockResolvedValue(stats)
     vi.mocked(accessLogsApi.aggregate).mockReset()
+    vi.mocked(cleanupApi.purge).mockReset()
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it.each([
+    ['Domain', 'host', 'api.example.com'],
+    ['IP Address', 'client_ip', '192.0.2.1'],
+    ['Request Path', 'path', '/private'],
+    ['Username', 'username', 'alice'],
+  ])('waits for the visible %s filter before allowing cleanup', async (label, key, value) => {
+    setSessionUser({ id: 'admin', username: 'admin', role: 'admin' })
+    vi.mocked(accessLogsApi.list).mockResolvedValue(makeList(makeEntry('one', '/users')))
+    vi.mocked(cleanupApi.purge).mockResolvedValue({ matched: 1, cutoff_time: '2026-09-09T12:00:00Z' })
+    await renderWithI18n(<AccessLogsPage />, { locale: 'en' })
+    const cleanup = screen.getByRole('button', { name: 'Clear logs' })
+    expect(cleanup).toBeEnabled()
+
+    fireEvent.change(screen.getByRole('textbox', { name: label }), { target: { value } })
+    expect(cleanup).toBeDisabled()
+    fireEvent.click(cleanup)
+    expect(cleanupApi.purge).not.toHaveBeenCalled()
+
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(cleanup).toBeEnabled()
+    fireEvent.click(cleanup)
+    await act(async () => { await Promise.resolve() })
+    expect(cleanupApi.purge).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'filtered', preview: true, filters: expect.objectContaining({ [key]: value }),
+    }))
   })
 
   it('does not let an older filter response replace newer results', async () => {
@@ -113,5 +145,81 @@ describe('AccessLogsPage request ordering', () => {
 
     expect(screen.getByText('/new')).toBeInTheDocument()
     expect(screen.queryByText('/old')).not.toBeInTheDocument()
+  })
+
+  it('keeps cleanup disabled through IME composition and re-enables it after a reset', async () => {
+    setSessionUser({ id: 'admin', username: 'admin', role: 'admin' })
+    vi.mocked(accessLogsApi.list).mockResolvedValue(makeList(makeEntry('one', '/users')))
+    vi.mocked(cleanupApi.purge).mockResolvedValue({ matched: 1, cutoff_time: '2026-09-09T12:00:00Z' })
+    await renderWithI18n(<AccessLogsPage />, { locale: 'en' })
+    const username = screen.getByRole('textbox', { name: 'Username' })
+    const cleanup = screen.getByRole('button', { name: 'Clear logs' })
+
+    fireEvent.compositionStart(username)
+    fireEvent.change(username, { target: { value: '张三' } })
+    await act(async () => { vi.advanceTimersByTime(600) })
+    expect(cleanup).toBeDisabled()
+    fireEvent.compositionEnd(username)
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(cleanup).toBeEnabled()
+
+    fireEvent.change(username, { target: { value: 'pending' } })
+    expect(cleanup).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+    expect(username).toHaveValue('')
+    expect(cleanup).toBeEnabled()
+    fireEvent.click(cleanup)
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(cleanupApi.purge).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(cleanupApi.purge).mock.calls[0][0].filters).not.toHaveProperty('username')
+  })
+
+  it('uses the same domain and period for summaries and grouped logs', async () => {
+    vi.mocked(accessLogsApi.list).mockResolvedValue(makeList(makeEntry('one', '/users')))
+    vi.mocked(accessLogsApi.aggregate).mockResolvedValue({ group_by: 'host', duration: 'all', total_groups: 0, page: 1, per_page: 20, total_pages: 1, groups: [] })
+    await renderWithI18n(<AccessLogsPage />, { locale: 'en' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Domain' }), { target: { value: 'api.example.com' } })
+    await act(async () => { vi.advanceTimersByTime(300) })
+    const calls = vi.mocked(accessLogsApi.list).mock.calls
+    const listParams = calls[calls.length - 1][0]
+    expect(accessLogsApi.stats).toHaveBeenLastCalledWith(expect.objectContaining({ host: listParams.host, start_time: listParams.start_time, end_time: listParams.end_time }))
+    fireEvent.click(screen.getByRole('button', { name: 'Aggregate' }))
+    await act(async () => { await Promise.resolve() })
+    expect(accessLogsApi.aggregate).toHaveBeenLastCalledWith(expect.objectContaining({ host: listParams.host, start_time: listParams.start_time, end_time: listParams.end_time }))
+    expect(screen.getByRole('textbox', { name: 'Domain' })).toHaveValue('api.example.com')
+  })
+
+  it('renders zero errors without NaN and uses real authentication failures', async () => {
+    vi.mocked(accessLogsApi.list).mockResolvedValue({ entries: [], total: 0, page: 1, per_page: 20, total_pages: 1 })
+    vi.mocked(accessLogsApi.stats).mockResolvedValue({ ...stats, total_requests: 0, auth_failures: 0 })
+    await renderWithI18n(<AccessLogsPage />, { locale: 'en' })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByText('NaN%')).not.toBeInTheDocument()
+    expect(screen.getByText('0.0%')).toBeInTheDocument()
+  })
+
+  it('does not count backend HTTP errors as authentication failures', async () => {
+    vi.mocked(accessLogsApi.list).mockResolvedValue(makeList(makeEntry('one', '/users')))
+    vi.mocked(accessLogsApi.stats).mockResolvedValue({ ...stats, total_requests: 10, error_count: 7, auth_failures: 2 })
+    await renderWithI18n(<AccessLogsPage />, { locale: 'en' })
+    await act(async () => { await Promise.resolve() })
+    expect(within(screen.getByText('Auth Failures').parentElement!).getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('70.0%')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear logs' })).not.toBeInTheDocument()
+  })
+
+  it('translates table headers, unknown hosts and full timestamps when the language changes', async () => {
+    const entry = makeEntry('locale-request', '/locale')
+    vi.mocked(accessLogsApi.list).mockResolvedValue(makeList(entry))
+    const view = await renderWithI18n(<AccessLogsPage />, { locale: 'zh-CN' })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByRole('columnheader', { name: '域名' })).toBeInTheDocument()
+    expect(screen.getByText('未记录')).toBeInTheDocument()
+    expect(screen.getByText(new Date(entry.timestamp).toLocaleString('zh-CN'))).toBeInTheDocument()
+    await act(async () => view.i18n.changeLanguage('en'))
+    expect(screen.getByRole('columnheader', { name: 'Domain' })).toBeInTheDocument()
+    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText(new Date(entry.timestamp).toLocaleString('en'))).toBeInTheDocument()
+    expect(accessLogsApi.list).toHaveBeenCalledTimes(1)
   })
 })

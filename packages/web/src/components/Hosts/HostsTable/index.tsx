@@ -21,11 +21,11 @@ export const HostsTable = ({ entries, canManage, onEdit, onDelete, onToggleEnabl
       <table className="min-w-full text-sm">
         <thead>
           <tr>
-            <th className="px-2 py-2 text-left">IP</th>
-            <th className="px-2 py-2 text-left">Hostnames</th>
-            <th className="px-2 py-2 text-left">Comment</th>
-            <th className="px-2 py-2 text-left">Enabled</th>
-            {canManage && <th className="px-2 py-2 text-left">Actions</th>}
+            <th className="px-2 py-2 text-left">{t('form.ip')}</th>
+            <th className="px-2 py-2 text-left">{t('table.hostnames')}</th>
+            <th className="px-2 py-2 text-left">{t('table.comment')}</th>
+            <th className="px-2 py-2 text-left">{t('form.enabled')}</th>
+            {canManage && <th className="px-2 py-2 text-left">{t('common:table.actions')}</th>}
           </tr>
         </thead>
         <tbody>
@@ -39,20 +39,20 @@ export const HostsTable = ({ entries, canManage, onEdit, onDelete, onToggleEnabl
                   <Switch
                     checked={e.enabled}
                     onChange={(event) => onToggleEnabled(e, event.target.checked)}
-                    aria-label="Enabled"
+                    aria-label={t('form.enabled')}
                   />
                 ) : (
-                  e.enabled ? '✓' : '—'
+                  <span aria-label={e.enabled ? t('form.enabled') : t('table.disabled')}>{e.enabled ? '✓' : '—'}</span>
                 )}
               </td>
               {canManage && (
                 <td className="px-2 py-2">
                   <div className="flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => onEdit(e)}>
-                      Edit
+                      {t('common:actions.edit')}
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => onDelete(e)}>
-                      Delete
+                      {t('common:actions.delete')}
                     </Button>
                   </div>
                 </td>

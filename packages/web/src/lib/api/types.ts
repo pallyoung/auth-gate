@@ -329,6 +329,7 @@ export interface HostEntryReorderInput {
 
 export interface AccessLogEntry {
   request_id: string
+  host?: string
   route_id: string
   route_name?: string
   method: string
@@ -355,6 +356,10 @@ export interface AccessLogStats {
   total_requests: number
   success_count: number
   error_count: number
+  auth_failures?: number
+  bucket_interval_seconds?: number
+  period_start?: string
+  period_end?: string
   avg_latency_ms: number
   p95_latency_ms: number
   requests_per_minute: TimeBucket[]
@@ -386,6 +391,7 @@ export interface IPCount {
 }
 
 export interface AccessLogQueryParams {
+  host?: string
   client_ip?: string
   path?: string
   username?: string
@@ -398,13 +404,29 @@ export interface AccessLogQueryParams {
   per_page?: number
 }
 
-export interface AccessLogAggregateParams {
-  group_by: 'route_id' | 'client_ip' | 'username' | 'status_code' | 'auth_result'
+export interface AccessLogAggregateParams extends AccessLogQueryParams {
+  group_by: 'host' | 'route_id' | 'client_ip' | 'username' | 'status_code' | 'auth_result'
   duration?: string
   sort_by?: 'count' | 'errors' | 'avg_latency' | 'p95_latency'
   sort_order?: 'asc' | 'desc'
   page?: number
   per_page?: number
+}
+
+export type AccessLogPurgeMode = 'expired' | 'filtered' | 'all'
+
+export interface AccessLogPurgeRequest {
+  mode: AccessLogPurgeMode
+  filters?: AccessLogQueryParams
+  preview: boolean
+  cutoff_time?: string
+}
+
+export interface AccessLogPurgeResult {
+  matched?: number
+  removed?: number
+  cutoff_time: string
+  retention_days?: number
 }
 
 export interface AccessLogAggregateGroup {

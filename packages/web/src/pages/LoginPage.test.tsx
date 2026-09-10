@@ -27,6 +27,9 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: '登录控制台' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
     expect(screen.getByLabelText('用户名')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '记住登录' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '忘记密码？' })).toBeInTheDocument()
+    expect(screen.getByText('企业安全')).toBeInTheDocument()
   })
 
   it('exposes username and password autocomplete hints', async () => {

@@ -61,6 +61,7 @@ const (
 
 // accessLogEntry is a structured JSON log entry written to stdout on every proxied request.
 type accessLogEntry struct {
+	Host             string `json:"host"`
 	RequestID        string `json:"request_id"`
 	RouteID          string `json:"route_id"`
 	RouteName        string `json:"route_name,omitempty"`
@@ -444,10 +445,10 @@ func selectRuntimeBackend(route *router.Route) (*url.URL, store.Backend, error) 
 }
 
 func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gin.HandlerFunc {
-	setAccessLogStore(accessLogStore)
-
 	return func(c *gin.Context) {
 		startedAt := time.Now()
+		incomingHost := store.NormalizeLogHost(c.Request.Host)
+		c.Set(accessLogContextKey, requestLogContext{store: accessLogStore, host: incomingHost, startedAt: startedAt})
 		host := requestMatchHost(c.Request.Host)
 		path := c.Request.URL.Path
 
@@ -533,7 +534,9 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			// Gateway 登录认证
 			if !authenticated && cfg.GatewayEnabled {
 				if claims, ok := routeAccessClaims(c, routerMgr.DB()); ok && routeAllowedByClaims(claims, route.ID) {
+					c.Set("jwt_username", claims.Username)
 					if !pathAllowedByClaims(claims, route.ID, path) {
+						recordAuthFailure(c, route, http.StatusForbidden)
 						c.JSON(http.StatusForbidden, httpresponse.ErrorEnvelope{
 							Error: httpresponse.ErrorDetail{
 								Code:    "path_access_denied",
@@ -551,6 +554,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 			if !authenticated {
 				// Gateway 登录：重定向到登录页
 				if cfg.GatewayEnabled {
+					recordAuthFailure(c, route, http.StatusFound)
 					loginURL := buildAccessLoginURL(route, c.Request.URL.RequestURI())
 					c.Redirect(http.StatusFound, loginURL)
 					c.Abort()
@@ -575,7 +579,11 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 				allowed, retryAfter := middleware.Check(route.ID, c.ClientIP(), cfg.RateLimit, cfg.Burst, cfg.Whitelist)
 				if !allowed {
 					metrics.RecordRateLimitExceeded(route.ID)
-					recordAuthFailure(c, route, http.StatusTooManyRequests)
+					authResult := "none"
+					if authenticated {
+						authResult = "pass"
+					}
+					recordRejectedRequest(c, route, http.StatusTooManyRequests, authResult)
 					c.Header("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
 					c.AbortWithStatusJSON(http.StatusTooManyRequests, httpresponse.ErrorEnvelope{
 						Error: httpresponse.ErrorDetail{
@@ -754,11 +762,12 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		}
 
 		accessLog := accessLogEntry{
+			Host:             incomingHost,
 			RequestID:        requestID,
 			RouteID:          route.ID,
 			RouteName:        routeDisplayName(route),
 			Method:           c.Request.Method,
-			Path:             c.Request.URL.Path,
+			Path:             path,
 			BackendURL:       backendHost,
 			BackendLatencyMs: latency.Milliseconds(),
 			StatusCode:       finalStatus,
@@ -774,6 +783,7 @@ func Handler(routerMgr *router.Manager, accessLogStore *store.AccessLogStore) gi
 		// Record to access log store
 		if accessLogStore != nil {
 			accessLogStore.Record(store.AccessLogEntry{
+				Host:             incomingHost,
 				RequestID:        accessLog.RequestID,
 				RouteID:          accessLog.RouteID,
 				RouteName:        accessLog.RouteName,
@@ -1038,12 +1048,12 @@ func pathAllowedByClaims(claims *auth.Claims, routeID, requestPath string) bool 
 	return false
 }
 
-// accessLogStoreInstance is the package-level access log store instance.
-var accessLogStoreInstance *store.AccessLogStore
+const accessLogContextKey = "authgate.request_log"
 
-// setAccessLogStore sets the package-level access log store.
-func setAccessLogStore(s *store.AccessLogStore) {
-	accessLogStoreInstance = s
+type requestLogContext struct {
+	store     *store.AccessLogStore
+	host      string
+	startedAt time.Time
 }
 
 // routeDisplayName returns a human-readable label for the route.
@@ -1059,11 +1069,18 @@ func routeDisplayName(r *router.Route) string {
 
 // recordAuthFailure records a failed authentication attempt.
 func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
-	if accessLogStoreInstance == nil {
+	recordRejectedRequest(c, route, statusCode, "fail")
+}
+
+func recordRejectedRequest(c *gin.Context, route *router.Route, statusCode int, authResult string) {
+	value, _ := c.Get(accessLogContextKey)
+	capture, ok := value.(requestLogContext)
+	if !ok || capture.store == nil {
 		return
 	}
-
-	accessLogStoreInstance.Record(store.AccessLogEntry{
+	username, _ := c.Get("jwt_username")
+	capture.store.Record(store.AccessLogEntry{
+		Host:       capture.host,
 		RequestID:  uuid.New().String(),
 		RouteID:    route.ID,
 		RouteName:  routeDisplayName(route),
@@ -1072,8 +1089,9 @@ func recordAuthFailure(c *gin.Context, route *router.Route, statusCode int) {
 		StatusCode: statusCode,
 		ClientIP:   c.ClientIP(),
 		UserAgent:  c.Request.UserAgent(),
-		AuthResult: "fail",
-		Timestamp:  time.Now(),
+		Username:   safeString(username),
+		AuthResult: authResult,
+		Timestamp:  capture.startedAt,
 	})
 }
 

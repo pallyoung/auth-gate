@@ -60,8 +60,17 @@ func (s *Service) Stats(duration time.Duration) (*store.AccessLogStats, error) {
 	return s.store.Stats(since)
 }
 
+func (s *Service) StatsFiltered(filter store.AccessLogFilter) (*store.AccessLogStats, error) {
+	return s.store.StatsFiltered(filter)
+}
+
 // Aggregate groups access log entries by the specified dimension.
 func (s *Service) Aggregate(duration time.Duration, groupBy, sortBy, sortOrder string, page, perPage int) store.AggregateResult {
+	since := time.Now().Add(-duration)
+	return s.AggregateFiltered(store.AccessLogFilter{StartTime: &since}, groupBy, sortBy, sortOrder, page, perPage)
+}
+
+func (s *Service) AggregateFiltered(filter store.AccessLogFilter, groupBy, sortBy, sortOrder string, page, perPage int) store.AggregateResult {
 	if page < 1 {
 		page = 1
 	}
@@ -74,7 +83,7 @@ func (s *Service) Aggregate(duration time.Duration, groupBy, sortBy, sortOrder s
 
 	// Validate groupBy
 	switch groupBy {
-	case "route_id", "client_ip", "username", "status_code", "auth_result":
+	case "host", "route_id", "client_ip", "username", "status_code", "auth_result":
 		// valid
 	default:
 		groupBy = "client_ip"
@@ -92,11 +101,10 @@ func (s *Service) Aggregate(duration time.Duration, groupBy, sortBy, sortOrder s
 		sortOrder = "desc"
 	}
 
-	since := time.Now().Add(-duration)
 	offset := (page - 1) * perPage
 
 	return s.store.Aggregate(store.AggregateFilter{
-		Since:     &since,
+		Filter:    filter,
 		GroupBy:   groupBy,
 		SortBy:    sortBy,
 		SortOrder: sortOrder,

@@ -183,10 +183,10 @@ export function LoginPage({
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--primary-500)] focus:ring-[var(--primary-500)]"
                 />
-                <span className="text-xs">Remember me</span>
+                <span className="text-xs">{t('card.rememberMe')}</span>
               </label>
               <a href="#" className="text-xs font-medium text-[var(--primary-600)] hover:text-[var(--primary-500)]">
-                Forgot Password?
+                {t('card.forgotPassword')}
               </a>
             </div>
 
@@ -211,7 +211,7 @@ export function LoginPage({
             <Shield className="h-3 w-3" />
             <span>Auth Gate v2.4.0</span>
             <span className="text-[var(--text-subtle)]">•</span>
-            <span>Enterprise Security</span>
+            <span>{t('common:brand.security')}</span>
           </div>
         </div>
       </div>

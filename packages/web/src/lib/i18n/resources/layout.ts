@@ -2,8 +2,10 @@ export const layoutEn = {
   brand: {
     name: 'Auth Gate',
     controlPlane: 'Control Plane',
+    gateway: 'API Gateway',
     currentFocus: 'Current Focus',
   },
+  theme: { system: 'System', dark: 'Dark Mode', light: 'Light Mode' },
   navigation: {
     main: 'Main navigation',
     mobile: 'Mobile navigation',
@@ -57,8 +59,10 @@ export const layoutZhCN = {
   brand: {
     name: 'Auth Gate',
     controlPlane: '控制台',
+    gateway: 'API 网关',
     currentFocus: '当前焦点',
   },
+  theme: { system: '跟随系统', dark: '深色模式', light: '浅色模式' },
   navigation: {
     main: '主导航',
     mobile: '移动端导航',

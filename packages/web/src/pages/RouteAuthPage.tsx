@@ -71,22 +71,6 @@ function parseNonNegativeInteger(value: string): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
-const EXPIRATION_OPTIONS = [
-  { value: '', label: 'Never' },
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
-  { value: '1y', label: '1 year' },
-]
-
-const EXPIRATION_OPTIONS_ZH = [
-  { value: '', label: '永不过期' },
-  { value: '7d', label: '7 天' },
-  { value: '30d', label: '30 天' },
-  { value: '90d', label: '90 天' },
-  { value: '1y', label: '1 年' },
-]
-
 function parseExpiration(value: string): string | undefined {
   if (!value) return undefined
   const now = new Date()
@@ -100,9 +84,10 @@ function parseExpiration(value: string): string | undefined {
   return now.toISOString()
 }
 
-function formatDate(iso?: string | null): string {
+function formatDate(locale: string, iso?: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString()
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(locale).format(date)
 }
 
 function getActiveAuthTypes(
@@ -117,8 +102,8 @@ function getActiveAuthTypes(
 
 export function RouteAuthPage() {
   const { t, i18n } = useTranslation(['authRules', 'common'])
-  const isZh = i18n.resolvedLanguage === 'zh-CN'
-  const expirationOptions = isZh ? EXPIRATION_OPTIONS_ZH : EXPIRATION_OPTIONS
+  const locale = i18n.resolvedLanguage || 'en'
+  const expirationOptions = ['', '7d', '30d', '90d', '1y'].map(value => ({ value, label: t(`expiration.${value || 'never'}`) }))
 
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [configs, setConfigs] = React.useState<Map<string, RouteAuthConfig>>(new Map())
@@ -191,11 +176,11 @@ export function RouteAuthPage() {
       setConfigLoadFailures(configFailures)
       setKeyCounts(countMap)
     } catch {
-      setError(t('errors.routeStoreFailure'))
+      setError('errors.routeStoreFailure')
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [])
 
   React.useEffect(() => { loadAll() }, [loadAll])
 
@@ -257,13 +242,13 @@ export function RouteAuthPage() {
       setDetailConfig(null)
       setDetailDraft(null)
       setDetailKeys([])
-      setDetailError(t('errors.routeAuthConfigLoadFailure'))
+      setDetailError('errors.routeAuthConfigLoadFailure')
     } finally {
       if (requestGeneration === detailLoadGenerationRef.current && detailRouteIdRef.current === routeId) {
         setDetailLoading(false)
       }
     }
-  }, [t])
+  }, [])
 
   React.useEffect(() => {
     if (detailRouteId) loadDetail(detailRouteId)
@@ -289,7 +274,7 @@ export function RouteAuthPage() {
         return next
       })
     } catch {
-      setError(t('errors.authRuleStoreFailure'))
+      setError('errors.authRuleStoreFailure')
     }
   }
 
@@ -309,12 +294,12 @@ export function RouteAuthPage() {
     const corsMaxAge = parseNonNegativeInteger(detailDraft.cors_max_age)
     const corsAllowedMethods = normalizeCORSMethods(detailDraft.cors_allowed_methods)
     const nextFieldErrors: DetailFieldErrors = {}
-    const numberError = t('form.nonNegativeIntegerError')
+    const numberError = 'form.nonNegativeIntegerError'
     if (rateLimit == null) nextFieldErrors.rateLimit = numberError
     if (burst == null) nextFieldErrors.burst = numberError
     if (corsMaxAge == null) nextFieldErrors.corsMaxAge = numberError
     if (corsAllowedMethods == null) {
-      nextFieldErrors.corsAllowedMethods = t('form.allowedMethodsError')
+      nextFieldErrors.corsAllowedMethods = 'form.allowedMethodsError'
     }
     if (Object.keys(nextFieldErrors).length > 0) {
       setDetailFieldErrors(nextFieldErrors)
@@ -370,7 +355,7 @@ export function RouteAuthPage() {
       }
     } catch {
       if (activeDetailSaveRef.current === saveToken && saveGeneration === detailSaveGenerationRef.current && detailRouteIdRef.current === routeId) {
-        setDetailError(t('errors.authRuleStoreFailure'))
+        setDetailError('errors.authRuleStoreFailure')
       }
     } finally {
       if (activeDetailSaveRef.current === saveToken && saveGeneration === detailSaveGenerationRef.current && detailRouteIdRef.current === routeId) {
@@ -421,7 +406,7 @@ export function RouteAuthPage() {
       await refreshDetailKeys(routeId)
     } catch {
       if (isCurrentKeyMutation(token, routeId)) {
-        setDetailError(t('errors.apiKeyListRefreshFailure'))
+        setDetailError('errors.apiKeyListRefreshFailure')
       }
     }
   }
@@ -445,7 +430,7 @@ export function RouteAuthPage() {
       }
     } catch {
       if (isCurrentKeyMutation(mutationToken, routeId)) {
-        setDetailError(t('errors.missingAPIKeySecret'))
+        setDetailError('errors.missingAPIKeySecret')
       }
     } finally {
       finishKeyMutation(mutationToken, routeId)
@@ -467,7 +452,7 @@ export function RouteAuthPage() {
       }
     } catch {
       if (isCurrentKeyMutation(mutationToken, routeId)) {
-        setDetailError(t('errors.authRuleStoreFailure'))
+        setDetailError('errors.authRuleStoreFailure')
       }
     } finally {
       finishKeyMutation(mutationToken, routeId)
@@ -486,7 +471,7 @@ export function RouteAuthPage() {
       }
     } catch {
       if (isCurrentKeyMutation(mutationToken, routeId)) {
-        setDetailError(t('errors.authRuleStoreFailure'))
+        setDetailError('errors.authRuleStoreFailure')
       }
     } finally {
       finishKeyMutation(mutationToken, routeId)
@@ -505,7 +490,7 @@ export function RouteAuthPage() {
       }
     } catch {
       if (isCurrentKeyMutation(mutationToken, routeId)) {
-        setDetailError(t('errors.authRuleStoreFailure'))
+        setDetailError('errors.authRuleStoreFailure')
       }
     } finally {
       finishKeyMutation(mutationToken, routeId)
@@ -568,15 +553,16 @@ export function RouteAuthPage() {
   const typeBadge = (type: string) => {
     switch (type) {
       case 'apikey': return <Badge variant="primary" badgeSize="sm">API Key</Badge>
-      case 'gateway': return <Badge variant="primary" badgeSize="sm">Gateway</Badge>
+      case 'gateway': return <Badge variant="primary" badgeSize="sm">{t('screen.gateway')}</Badge>
       default: return null
     }
   }
 
   const keyStatusBadge = (status: string) => {
     switch (status) {
-      case 'active': return <Badge variant="success" badgeSize="sm">{isZh ? '有效' : 'Active'}</Badge>
-      case 'revoked': return <Badge variant="error" badgeSize="sm">{isZh ? '已吊销' : 'Revoked'}</Badge>
+      case 'active': return <Badge variant="success" badgeSize="sm">{t('screen.active')}</Badge>
+      case 'revoked': return <Badge variant="error" badgeSize="sm">{t('screen.revoked')}</Badge>
+      case 'expired': return <Badge variant="warning" badgeSize="sm">{t('screen.expired')}</Badge>
       default: return <Badge variant="warning" badgeSize="sm">{status}</Badge>
     }
   }
@@ -606,13 +592,13 @@ export function RouteAuthPage() {
         description={t('page.description')}
         meta={
           routes.length > 0 ? (
-            <Badge variant="primary">{isZh ? `${routes.length} 个路由` : `${routes.length} routes`}</Badge>
+            <Badge variant="primary">{t('screen.routeCount', { count: routes.length })}</Badge>
           ) : undefined
         }
       />
 
       {error && (
-        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">{error}</Alert>
+        <Alert variant="error" title={t('page.errorTitle')} className="mb-5">{t(error)}</Alert>
       )}
 
       {loading ? (
@@ -626,10 +612,10 @@ export function RouteAuthPage() {
         <div className="space-y-2">
           {/* List Header */}
           <div className="hidden items-center px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)] md:flex">
-            <div className="min-w-0 flex-1">{isZh ? '路由' : 'Route'}</div>
-            <div className="w-24 text-center">{isZh ? 'API Key' : 'API Key'}</div>
-            <div className="w-24 text-center">{isZh ? '网关' : 'Gateway'}</div>
-            <div className="w-20 text-center">{isZh ? '密钥数' : 'Keys'}</div>
+            <div className="min-w-0 flex-1">{t('screen.route')}</div>
+            <div className="w-24 text-center">{"API Key"}</div>
+            <div className="w-24 text-center">{t('screen.gateway')}</div>
+            <div className="w-20 text-center">{t('screen.keys')}</div>
             <div className="w-16" />
           </div>
 
@@ -653,9 +639,9 @@ export function RouteAuthPage() {
                     {configUnavailable ? (
                       <Badge variant="warning" badgeSize="sm">{t('page.configUnavailable')}</Badge>
                     ) : hasAuth ? (
-                      <Badge variant="success" badgeSize="sm">{isZh ? '已保护' : 'Protected'}</Badge>
+                      <Badge variant="success" badgeSize="sm">{t('screen.protected')}</Badge>
                     ) : (
-                      <Badge variant="default" badgeSize="sm">{isZh ? '公开' : 'Public'}</Badge>
+                      <Badge variant="default" badgeSize="sm">{t('screen.public')}</Badge>
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-3 text-xs text-[var(--text-muted)]">
@@ -669,7 +655,8 @@ export function RouteAuthPage() {
                         <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
                           <input
                             type="checkbox"
-                            checked={cfg?.api_key_enabled || false}
+                            aria-label={t('screen.apiKeyForRoute', { name: route.name || route.path_prefix })}
+                        checked={cfg?.api_key_enabled || false}
                             disabled={configUnavailable}
                             onChange={(e) => quickToggle(route.id, { api_key_enabled: e.target.checked })}
                             className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--primary-500)]"
@@ -679,16 +666,17 @@ export function RouteAuthPage() {
                         <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
                           <input
                             type="checkbox"
-                            checked={cfg?.gateway_enabled || false}
+                            aria-label={t('screen.gatewayForRoute', { name: route.name || route.path_prefix })}
+                        checked={cfg?.gateway_enabled || false}
                             disabled={configUnavailable}
                             onChange={(e) => quickToggle(route.id, { gateway_enabled: e.target.checked })}
                             className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--bg-input)] text-[var(--primary-500)]"
                           />
-                          GW
+                          {t('screen.gateway')}
                         </label>
                       </>
                     )}
-                    <span className="ml-auto text-xs text-[var(--text-muted)]">{keyCount} {isZh ? '个密钥' : 'keys'}</span>
+                    <span className="ml-auto text-xs text-[var(--text-muted)]">{t('screen.keyCount', { count: keyCount })}</span>
                   </div>
                 </div>
 
@@ -698,13 +686,14 @@ export function RouteAuthPage() {
                     {canManageAuth ? (
                       <Switch
                         switchSize="sm"
+                        aria-label={t('screen.apiKeyForRoute', { name: route.name || route.path_prefix })}
                         checked={cfg?.api_key_enabled || false}
                         disabled={configUnavailable}
                         onChange={(e) => quickToggle(route.id, { api_key_enabled: e.target.checked })}
                       />
                     ) : (
                       <Badge variant={configUnavailable ? 'warning' : cfg?.api_key_enabled ? 'success' : 'default'} badgeSize="sm">
-                        {configUnavailable ? t('page.configUnknown') : cfg?.api_key_enabled ? 'ON' : 'OFF'}
+                        {configUnavailable ? t('page.configUnknown') : cfg?.api_key_enabled ? t('screen.on') : t('screen.off')}
                       </Badge>
                     )}
                   </div>
@@ -712,25 +701,26 @@ export function RouteAuthPage() {
                     {canManageAuth ? (
                       <Switch
                         switchSize="sm"
+                        aria-label={t('screen.gatewayForRoute', { name: route.name || route.path_prefix })}
                         checked={cfg?.gateway_enabled || false}
                         disabled={configUnavailable}
                         onChange={(e) => quickToggle(route.id, { gateway_enabled: e.target.checked })}
                       />
                     ) : (
                       <Badge variant={configUnavailable ? 'warning' : cfg?.gateway_enabled ? 'success' : 'default'} badgeSize="sm">
-                        {configUnavailable ? t('page.configUnknown') : cfg?.gateway_enabled ? 'ON' : 'OFF'}
+                        {configUnavailable ? t('page.configUnknown') : cfg?.gateway_enabled ? t('screen.on') : t('screen.off')}
                       </Badge>
                     )}
                   </div>
                   <div className="w-20 flex justify-center">
-                    <span className="text-sm font-medium text-[var(--text-secondary)]">{keyCount}</span>
+                    <span className="text-sm font-medium text-[var(--text-secondary)]">{new Intl.NumberFormat(locale).format(keyCount)}</span>
                   </div>
                   <div className="w-16 flex justify-center">
                     <button
                       type="button"
                       onClick={() => openDetail(route.id)}
                       className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-default)] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-                      aria-label={isZh ? '编辑' : 'Edit'}
+                      aria-label={t('screen.edit')}
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -742,7 +732,7 @@ export function RouteAuthPage() {
                   type="button"
                   onClick={() => openDetail(route.id)}
                   className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-default)] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:hidden"
-                  aria-label={isZh ? '编辑' : 'Edit'}
+                  aria-label={t('screen.edit')}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -756,7 +746,7 @@ export function RouteAuthPage() {
       <Modal
         open={!!detailRouteId}
         onClose={requestCloseDetail}
-        title={selectedRoute ? `${isZh ? '鉴权配置' : 'Auth Config'} — ${selectedRoute.name || selectedRoute.path_prefix}` : ''}
+        title={selectedRoute ? t('screen.configurationTitle', { name: selectedRoute.name || selectedRoute.path_prefix }) : ''}
         modalSize="lg"
         closeDisabled={detailSaving || detailKeyMutation != null}
         inactive={showDiscardConfirmation}
@@ -767,12 +757,12 @@ export function RouteAuthPage() {
           </div>
         ) : !detailDraft ? (
           <Alert variant="error" title={t('page.errorTitle')}>
-            {detailError || t('errors.routeAuthConfigLoadFailure')}
+            {t(detailError || 'errors.routeAuthConfigLoadFailure')}
           </Alert>
         ) : (
           <div className="space-y-6">
             {detailError && (
-              <Alert variant="error" title={t('page.errorTitle')}>{detailError}</Alert>
+              <Alert variant="error" title={t('page.errorTitle')}>{t(detailError)}</Alert>
             )}
 
             {detailSaved && (
@@ -780,19 +770,19 @@ export function RouteAuthPage() {
             )}
 
             {createdSecret && (
-              <Alert variant="success" title={isZh ? 'API Key 已创建' : 'API Key Created'}>
+              <Alert variant="success" title={t('screen.apiKeyCreated')}>
                 <div className="mt-2 flex items-center gap-2">
                   <code className="flex-1 break-all rounded bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)]">{createdSecret}</code>
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(createdSecret, 'created')}>
+                  <Button variant="ghost" size="sm" aria-label={t('screen.copyKey')} onClick={() => copyToClipboard(createdSecret, 'created')}>
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
                 {copiedId === 'created' && (
-                  <div className="mt-1 text-sm text-[var(--success)]">{isZh ? '已复制到剪贴板' : 'Copied to clipboard'}</div>
+                  <div className="mt-1 text-sm text-[var(--success)]">{t('screen.copiedToClipboard')}</div>
                 )}
                 <div className="mt-2">
                   <Button size="sm" variant="ghost" onClick={() => setCreatedSecret(null)}>
-                    {isZh ? '关闭' : 'Dismiss'}
+                    {t('screen.dismiss')}
                   </Button>
                 </div>
               </Alert>
@@ -813,7 +803,7 @@ export function RouteAuthPage() {
                     <span key={type}>{typeBadge(type)}</span>
                   ))}
                   {getActiveAuthTypes(detailCfg).length === 0 && (
-                    <Badge variant="default" badgeSize="sm">{isZh ? '无鉴权' : 'No auth'}</Badge>
+                    <Badge variant="default" badgeSize="sm">{t('screen.noAuth')}</Badge>
                   )}
                 </div>
               </div>
@@ -822,7 +812,7 @@ export function RouteAuthPage() {
             {/* Auth Toggles */}
             <div className="space-y-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                {isZh ? '鉴权方式' : 'Authentication Methods'}
+                {t('screen.authenticationMethods')}
               </div>
               <div className="space-y-3">
                 {/* API Key */}
@@ -844,12 +834,13 @@ export function RouteAuthPage() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-[var(--text-primary)]">API Key</div>
                       <div className="text-xs text-[var(--text-muted)]">
-                        {isZh ? '通过请求头传递 API Key 进行鉴权' : 'Authenticate via request header with an API key'}
+                        {t('screen.apiKeyDescription')}
                       </div>
                     </div>
                     {canManageAuth && (
                       <Switch
                         switchSize="sm"
+                        aria-label={t('types.apikey')}
                         checked={detailCfg.api_key_enabled}
                         disabled={detailSaving}
                         onChange={(e) => updateDetailDraft({ api_key_enabled: e.target.checked })}
@@ -859,7 +850,7 @@ export function RouteAuthPage() {
                   {detailCfg.api_key_enabled && (
                     <div className="border-t border-[var(--border-soft)] px-4 py-3">
                       <Input
-                        label={isZh ? 'Header 名称' : 'Header Name'}
+                        label={t('screen.headerName')}
                         value={detailCfg.api_key_header || ''}
                         disabled={detailSaving}
                         onChange={(e) => updateDetailDraft({ api_key_header: e.target.value })}
@@ -886,14 +877,15 @@ export function RouteAuthPage() {
                       <KeyRound className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-[var(--text-primary)]">{isZh ? '网关登录' : 'Gateway Login'}</div>
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{t('screen.gatewayLogin')}</div>
                       <div className="text-xs text-[var(--text-muted)]">
-                        {isZh ? '未登录用户自动跳转至登录页' : 'Unauthenticated users are redirected to the login page'}
+                        {t('screen.gatewayDescription')}
                       </div>
                     </div>
                     {canManageAuth && (
                       <Switch
                         switchSize="sm"
+                        aria-label={t('types.gateway')}
                         checked={detailCfg.gateway_enabled}
                         disabled={detailSaving}
                         onChange={(e) => updateDetailDraft({ gateway_enabled: e.target.checked })}
@@ -903,9 +895,7 @@ export function RouteAuthPage() {
                   {detailCfg.gateway_enabled && (
                     <div className="border-t border-[var(--border-soft)] px-4 py-3">
                       <div className="rounded-[10px] bg-[var(--bg-surface-tint)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                        {isZh
-                          ? '用户访问此路由时将自动跳转到统一登录页，登录后可访问所有已授权路由'
-                          : 'Users visiting this route will be redirected to a unified login page. After login, they can access all authorized routes'}
+                        {t('screen.gatewayHint')}
                       </div>
                     </div>
                   )}
@@ -918,11 +908,11 @@ export function RouteAuthPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    {isZh ? 'API Key 管理' : 'API Key Management'}
+                    {t('screen.apiKeyManagement')}
                   </div>
                   {canManageAuth && (
                     <Button size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} disabled={keyControlsDisabled} onClick={() => setShowCreateKey(true)}>
-                      {isZh ? '新建 Key' : 'New Key'}
+                      {t('screen.newKey')}
                     </Button>
                   )}
                 </div>
@@ -930,21 +920,21 @@ export function RouteAuthPage() {
                 {showCreateKey && canManageAuth && (
                   <div className="flex items-end gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-surface-tint)] p-4">
                     <Select
-                      label={isZh ? '过期时间' : 'Expiration'}
+                      label={t('screen.expiration')}
                       value={newKeyExpiration}
                       disabled={keyControlsDisabled}
                       onChange={(e) => setNewKeyExpiration(e.target.value)}
                       options={expirationOptions}
                       className="flex-1"
                     />
-                    <Button disabled={detailSaving} loading={detailKeyMutation?.kind === 'create'} onClick={handleCreateKey}>{isZh ? '创建' : 'Create'}</Button>
-                    <Button variant="ghost" disabled={keyControlsDisabled} onClick={() => setShowCreateKey(false)}>{isZh ? '取消' : 'Cancel'}</Button>
+                    <Button disabled={detailSaving} loading={detailKeyMutation?.kind === 'create'} onClick={handleCreateKey}>{t('screen.create')}</Button>
+                    <Button variant="ghost" disabled={keyControlsDisabled} onClick={() => setShowCreateKey(false)}>{t('screen.cancel')}</Button>
                   </div>
                 )}
 
                 {detailKeys.length === 0 ? (
                   <div className="rounded-[12px] border border-dashed border-[var(--border-default)] p-6 text-center text-sm text-[var(--text-muted)]">
-                    {isZh ? '暂无 API Key' : 'No API keys yet'}
+                    {t('screen.noApiKeysYet')}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -952,7 +942,7 @@ export function RouteAuthPage() {
                       <div key={key.id} className="flex items-center gap-3 rounded-[12px] border border-[var(--border-default)] bg-[var(--bg-card)] px-4 py-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-[var(--text-primary)]">{key.name || (isZh ? '未命名' : 'Unnamed')}</span>
+                            <span className="text-sm font-medium text-[var(--text-primary)]">{key.name || (t('screen.unnamed'))}</span>
                             {keyStatusBadge(key.status)}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
@@ -961,30 +951,30 @@ export function RouteAuthPage() {
                                 ? (revealedIds.has(key.id) ? key.secret : key.key_prefix + '••••••••')
                                 : key.key_prefix + '...'}
                             </code>
-                            <span>{isZh ? '过期' : 'Exp'}: {formatDate(key.expires_at)}</span>
-                            {key.last_used_at && <span>{isZh ? '最后使用' : 'Used'}: {formatDate(key.last_used_at)}</span>}
+                            <span>{t('screen.expires')}: {formatDate(locale, key.expires_at)}</span>
+                            {key.last_used_at && <span>{t('screen.lastUsed')}: {formatDate(locale, key.last_used_at)}</span>}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
                           {key.secret && (
                             <>
-                              <Button variant="ghost" size="sm" onClick={() => toggleReveal(key.id)}>
+                              <Button variant="ghost" size="sm" aria-label={revealedIds.has(key.id) ? t('screen.hideKey') : t('screen.showKey')} onClick={() => toggleReveal(key.id)}>
                                 {revealedIds.has(key.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => copyToClipboard(key.secret!, key.id)}>
-                                {copiedId === key.id ? <span className="text-xs text-[var(--success)]">{isZh ? '已复制' : 'Copied'}</span> : <Copy className="h-3.5 w-3.5" />}
+                              <Button variant="ghost" size="sm" aria-label={t('screen.copyKey')} onClick={() => copyToClipboard(key.secret!, key.id)}>
+                                {copiedId === key.id ? <span className="text-xs text-[var(--success)]">{t('screen.copied')}</span> : <Copy className="h-3.5 w-3.5" />}
                               </Button>
                             </>
                           )}
                           {canManageAuth && key.status === 'active' && (
                             <>
-                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'rotate' && detailKeyMutation.keyId === key.id} onClick={() => handleRotateKey(key.id)} title={isZh ? '轮换 Key' : 'Rotate key'}>
+                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'rotate' && detailKeyMutation.keyId === key.id} onClick={() => handleRotateKey(key.id)} title={t('screen.rotateKey')}>
                                 <RefreshCw className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'expire' && detailKeyMutation.keyId === key.id} onClick={() => handleExpireKey(key.id)} title={isZh ? '吊销' : 'Revoke'}>
+                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'expire' && detailKeyMutation.keyId === key.id} onClick={() => handleExpireKey(key.id)} title={t('screen.revoke')}>
                                 <XCircle className="h-3.5 w-3.5 text-[var(--error)]" />
                               </Button>
-                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'delete' && detailKeyMutation.keyId === key.id} onClick={() => handleDeleteKey(key.id)} title={isZh ? '删除' : 'Delete'}>
+                              <Button variant="ghost" size="sm" disabled={keyControlsDisabled} loading={detailKeyMutation?.kind === 'delete' && detailKeyMutation.keyId === key.id} onClick={() => handleDeleteKey(key.id)} title={t('screen.delete')}>
                                 <Trash2 className="h-3.5 w-3.5 text-[var(--error)]" />
                               </Button>
                             </>
@@ -1000,33 +990,33 @@ export function RouteAuthPage() {
             {/* Rate Limiting */}
             <div className="space-y-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                {isZh ? '速率限制' : 'Rate Limiting'}
+                {t('screen.rateLimiting')}
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Input
-                  label={isZh ? '限流 (次/秒)' : 'Rate (req/s)'}
+                  label={t('screen.rateLimit')}
                   type="number"
                   min={0}
                   step={1}
                   value={detailCfg.rate_limit}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ rate_limit: e.target.value })}
-                  error={detailFieldErrors.rateLimit}
-                  placeholder={isZh ? '不限制' : 'Unlimited'}
+                  error={detailFieldErrors.rateLimit ? t(detailFieldErrors.rateLimit!) : undefined}
+                  placeholder={t('screen.unlimited')}
                 />
                 <Input
-                  label={isZh ? '突发上限' : 'Burst'}
+                  label={t('screen.burst')}
                   type="number"
                   min={0}
                   step={1}
                   value={detailCfg.burst}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ burst: e.target.value })}
-                  error={detailFieldErrors.burst}
-                  placeholder={isZh ? '不限制' : 'Unlimited'}
+                  error={detailFieldErrors.burst ? t(detailFieldErrors.burst!) : undefined}
+                  placeholder={t('screen.unlimited')}
                 />
                 <Input
-                  label={isZh ? '白名单' : 'Whitelist'}
+                  label={t('screen.whitelist')}
                   value={detailCfg.whitelist}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ whitelist: e.target.value })}
@@ -1042,42 +1032,42 @@ export function RouteAuthPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
-                  label={isZh ? '允许来源' : 'Allowed Origins'}
+                  label={t('screen.allowedOrigins')}
                   value={detailCfg.cors_allowed_origins || ''}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ cors_allowed_origins: e.target.value })}
                   placeholder="https://app.example.com, *"
                 />
                 <Input
-                  label={isZh ? '允许方法' : 'Allowed Methods'}
+                  label={t('screen.allowedMethods')}
                   value={detailCfg.cors_allowed_methods || ''}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ cors_allowed_methods: e.target.value })}
-                  error={detailFieldErrors.corsAllowedMethods}
+                  error={detailFieldErrors.corsAllowedMethods ? t(detailFieldErrors.corsAllowedMethods!) : undefined}
                   placeholder="GET,POST,OPTIONS"
                 />
                 <Input
-                  label={isZh ? '允许请求头' : 'Allowed Headers'}
+                  label={t('screen.allowedHeaders')}
                   value={detailCfg.cors_allowed_headers || ''}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ cors_allowed_headers: e.target.value })}
                   placeholder="Authorization,Content-Type"
                 />
                 <Input
-                  label={isZh ? '缓存时长 (秒)' : 'Max Age (s)'}
+                  label={t('screen.maxAge')}
                   type="number"
                   min={0}
                   step={1}
                   value={detailCfg.cors_max_age}
                   disabled={detailSaving}
                   onChange={(e) => updateDetailDraft({ cors_max_age: e.target.value })}
-                  error={detailFieldErrors.corsMaxAge}
+                  error={detailFieldErrors.corsMaxAge ? t(detailFieldErrors.corsMaxAge!) : undefined}
                   placeholder="86400"
                 />
               </div>
               <Switch
-                label={isZh ? '允许携带凭证' : 'Allow Credentials'}
-                description={isZh ? '返回 Access-Control-Allow-Credentials' : 'Return Access-Control-Allow-Credentials'}
+                label={t('screen.allowCredentials')}
+                description={t('screen.allowCredentialsHint')}
                 checked={detailCfg.cors_allow_credentials || false}
                 disabled={detailSaving}
                 onChange={(e) => updateDetailDraft({ cors_allow_credentials: e.target.checked })}

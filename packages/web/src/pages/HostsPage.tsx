@@ -129,7 +129,7 @@ export function HostsPage() {
 
   const handleDeleteEntry = async (entry: HostEntry) => {
     if (!activeProfileId) return
-    if (!confirm(t('errors.host_entry_not_found'))) return
+    if (!confirm(t('deleteEntryConfirm', { hostnames: entry.hostnames }))) return
     await hostsApi.deleteEntry(activeProfileId, entry.id)
     await fetchEntries(activeProfileId)
   }

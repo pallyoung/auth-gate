@@ -8,13 +8,15 @@ import type { AccessLogQueryParams } from '../lib/api/types'
 interface AccessLogFiltersProps {
   filters: AccessLogQueryParams
   onChange: (filters: AccessLogQueryParams) => void
+  onPendingChange?: (pending: boolean) => void
 }
 
-type TextFilterKey = 'client_ip' | 'path' | 'username'
+type TextFilterKey = 'host' | 'client_ip' | 'path' | 'username'
 type TextFilterDraft = Record<TextFilterKey, string>
 
 function getTextFilterDraft(filters: AccessLogQueryParams): TextFilterDraft {
   return {
+    host: filters.host ?? '',
     client_ip: filters.client_ip ?? '',
     path: filters.path ?? '',
     username: filters.username ?? '',
@@ -33,15 +35,17 @@ function mergeTextFilters(
   return next
 }
 
-export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onChange }) => {
+export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onChange, onPendingChange }) => {
   const { t } = useTranslation('accessLogs')
   const [textDraft, setTextDraft] = React.useState<TextFilterDraft>(() => getTextFilterDraft(filters))
   const textDraftRef = React.useRef(textDraft)
   const filtersRef = React.useRef(filters)
   const onChangeRef = React.useRef(onChange)
+  const onPendingChangeRef = React.useRef(onPendingChange)
   const composingRef = React.useRef(false)
   const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRefs = React.useRef<Record<TextFilterKey, HTMLInputElement | null>>({
+    host: null,
     client_ip: null,
     path: null,
     username: null,
@@ -49,11 +53,17 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
 
   filtersRef.current = filters
   onChangeRef.current = onChange
+  onPendingChangeRef.current = onPendingChange
 
   React.useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
     const nextDraft = getTextFilterDraft(filters)
     textDraftRef.current = nextDraft
     setTextDraft(nextDraft)
+    onPendingChangeRef.current?.(false)
   }, [filters])
 
   React.useEffect(() => () => {
@@ -69,6 +79,7 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
   }, [])
 
   const handleTextChange = (key: TextFilterKey, value: string) => {
+    onPendingChangeRef.current?.(true)
     const nextDraft = { ...textDraftRef.current, [key]: value }
     textDraftRef.current = nextDraft
     setTextDraft(nextDraft)
@@ -76,6 +87,7 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
   }
 
   const handleCompositionStart = () => {
+    onPendingChangeRef.current?.(true)
     composingRef.current = true
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current)
@@ -105,7 +117,7 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
       type="button"
       onClick={() => clearTextFilter(key)}
       className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[8px] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)]"
-      aria-label={`${t('filters.clear')} ${label}`}
+      aria-label={t('filters.clearField', { field: label })}
     >
       <X className="h-4 w-4" aria-hidden="true" />
     </button>
@@ -127,7 +139,20 @@ export const AccessLogFilters: React.FC<AccessLogFiltersProps> = ({ filters, onC
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div>
+        <label htmlFor="access-log-host" className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">{t('filters.host')}</label>
+        <div className="relative">
+          <Input
+            ref={(node) => { inputRefs.current.host = node }}
+            id="access-log-host" placeholder="api.example.com" value={textDraft.host}
+            onChange={(e) => handleTextChange('host', e.target.value)}
+            onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd}
+            className={textDraft.host ? 'pr-11' : undefined}
+          />
+          {clearButton('host', t('filters.host'))}
+        </div>
+      </div>
       <div>
         <label htmlFor="access-log-client-ip" className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">
           {t('filters.clientIP')}

@@ -51,14 +51,14 @@ func TestAccessLogStore_RingBufferOverflow(t *testing.T) {
 	}
 
 	// Should have entries 2, 3, 4 (oldest 2 were overwritten)
-	if entries[0].RequestID != "req-2" {
-		t.Errorf("expected req-2, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-4" {
+		t.Errorf("expected req-4, got %s", entries[0].RequestID)
 	}
 	if entries[1].RequestID != "req-3" {
 		t.Errorf("expected req-3, got %s", entries[1].RequestID)
 	}
-	if entries[2].RequestID != "req-4" {
-		t.Errorf("expected req-4, got %s", entries[2].RequestID)
+	if entries[2].RequestID != "req-2" {
+		t.Errorf("expected req-2, got %s", entries[2].RequestID)
 	}
 }
 
@@ -156,8 +156,8 @@ func TestAccessLogStore_QueryPagination(t *testing.T) {
 	if len(entries) != 3 {
 		t.Errorf("expected 3 entries, got %d", len(entries))
 	}
-	if entries[0].RequestID != "req-0" {
-		t.Errorf("expected req-0, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-9" {
+		t.Errorf("expected req-9, got %s", entries[0].RequestID)
 	}
 
 	// Get second page
@@ -165,8 +165,8 @@ func TestAccessLogStore_QueryPagination(t *testing.T) {
 	if len(entries) != 3 {
 		t.Errorf("expected 3 entries, got %d", len(entries))
 	}
-	if entries[0].RequestID != "req-3" {
-		t.Errorf("expected req-3, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-6" {
+		t.Errorf("expected req-6, got %s", entries[0].RequestID)
 	}
 
 	// Get last page
@@ -174,8 +174,8 @@ func TestAccessLogStore_QueryPagination(t *testing.T) {
 	if len(entries) != 1 {
 		t.Errorf("expected 1 entry, got %d", len(entries))
 	}
-	if entries[0].RequestID != "req-9" {
-		t.Errorf("expected req-9, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-0" {
+		t.Errorf("expected req-0, got %s", entries[0].RequestID)
 	}
 
 	// Get page beyond total
@@ -297,11 +297,11 @@ func TestAccessLogStore_Persistence(t *testing.T) {
 	if total != 2 {
 		t.Errorf("expected 2 entries loaded, got %d", total)
 	}
-	if entries[0].RequestID != "req-1" {
-		t.Errorf("expected req-1, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-2" {
+		t.Errorf("expected req-2, got %s", entries[0].RequestID)
 	}
-	if entries[1].RequestID != "req-2" {
-		t.Errorf("expected req-2, got %s", entries[1].RequestID)
+	if entries[1].RequestID != "req-1" {
+		t.Errorf("expected req-1, got %s", entries[1].RequestID)
 	}
 }
 
@@ -340,13 +340,13 @@ func TestAccessLogStore_PersistenceRingBuffer(t *testing.T) {
 	}
 
 	// Should have entries 2, 3, 4
-	if entries[0].RequestID != "req-2" {
-		t.Errorf("expected req-2, got %s", entries[0].RequestID)
+	if entries[0].RequestID != "req-4" {
+		t.Errorf("expected req-4, got %s", entries[0].RequestID)
 	}
 	if entries[1].RequestID != "req-3" {
 		t.Errorf("expected req-3, got %s", entries[1].RequestID)
 	}
-	if entries[2].RequestID != "req-4" {
-		t.Errorf("expected req-4, got %s", entries[2].RequestID)
+	if entries[2].RequestID != "req-2" {
+		t.Errorf("expected req-2, got %s", entries[2].RequestID)
 	}
 }

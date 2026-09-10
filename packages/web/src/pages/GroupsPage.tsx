@@ -13,7 +13,7 @@ import { getSessionUser } from '../lib/session-store'
 import type { PermissionGroup, PermissionGroupInput, Route } from '../lib/api/types'
 
 export function GroupsPage() {
-  const { t } = useTranslation('groups')
+  const { t, i18n } = useTranslation('groups')
   const [groups, setGroups] = React.useState<PermissionGroup[]>([])
   const [routes, setRoutes] = React.useState<Route[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -114,7 +114,7 @@ export function GroupsPage() {
       className: 'w-32',
       render: (value: string[]) => {
         const count = value?.length ?? 0
-        return count === 0 ? '—' : `${count}`
+        return count === 0 ? '—' : new Intl.NumberFormat(i18n.resolvedLanguage).format(count)
       },
     },
     {

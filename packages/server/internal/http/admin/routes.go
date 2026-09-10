@@ -139,6 +139,9 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 		adminOnly.GET("/settings/log-retention", getLogRetention(db))
 		adminOnly.PUT("/settings/log-retention", updateLogRetention(db))
 		adminOnly.POST("/settings/log-retention/purge", purgeLogs(db, accessLogStore))
+		if accessLogStore != nil {
+			adminOnly.POST("/access-logs/purge", purgeAccessLogs(db, accessLogStore))
+		}
 		adminOnly.GET("/users", listUsers(userSvc))
 		adminOnly.POST("/users", createUser(userSvc))
 		adminOnly.PUT("/users/:id", updateUser(userSvc))
@@ -949,30 +952,10 @@ func listAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gi
 			return
 		}
 
-		filter := store.AccessLogFilter{
-			ClientIP:   params.ClientIP,
-			Path:       params.Path,
-			Username:   params.Username,
-			AuthResult: params.AuthResult,
-			RouteID:    params.RouteID,
-			StatusCode: params.StatusCode,
-		}
-
-		if params.StartTime != "" {
-			t, err := time.Parse(time.RFC3339, params.StartTime)
-			if err != nil {
-				writeError(c, http.StatusBadRequest, "invalid_start_time", "invalid start_time format")
-				return
-			}
-			filter.StartTime = &t
-		}
-		if params.EndTime != "" {
-			t, err := time.Parse(time.RFC3339, params.EndTime)
-			if err != nil {
-				writeError(c, http.StatusBadRequest, "invalid_end_time", "invalid end_time format")
-				return
-			}
-			filter.EndTime = &t
+		filter, err := parseAccessLogFilter(params.AccessLogFilterParams, params.Duration, "")
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_params", err.Error())
+			return
 		}
 
 		page := params.Page
@@ -1015,6 +998,7 @@ func listAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gi
 			}
 			entries[i] = dto.AccessLogEntry{
 				RequestID:        entry.RequestID,
+				Host:             entry.Host,
 				RouteID:          entry.RouteID,
 				RouteName:        routeName,
 				Method:           entry.Method,
@@ -1026,7 +1010,7 @@ func listAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gi
 				UserAgent:        entry.UserAgent,
 				Username:         entry.Username,
 				AuthResult:       entry.AuthResult,
-				Timestamp:        entry.Timestamp.Format(time.RFC3339),
+				Timestamp:        entry.Timestamp.Format(time.RFC3339Nano),
 			}
 		}
 
@@ -1042,14 +1026,17 @@ func listAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manager) gi
 
 func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		durationStr := c.DefaultQuery("duration", "1h")
-		duration, err := time.ParseDuration(durationStr)
-		if err != nil {
-			writeError(c, http.StatusBadRequest, "invalid_duration", "invalid duration format")
+		var params dto.AccessLogQueryParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_params", "invalid query parameters")
 			return
 		}
-
-		stats, err := svc.Stats(duration)
+		filter, err := parseAccessLogFilter(params.AccessLogFilterParams, params.Duration, "1h")
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_params", err.Error())
+			return
+		}
+		stats, err := svc.StatsFiltered(filter)
 		if err != nil {
 			writeError(c, http.StatusInternalServerError, "stats_failed", "failed to get access log stats")
 			return
@@ -1059,7 +1046,7 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 		requestsPerMinute := make([]dto.TimeBucket, len(stats.RequestsPerMinute))
 		for i, bucket := range stats.RequestsPerMinute {
 			requestsPerMinute[i] = dto.TimeBucket{
-				Time:  bucket.Time.Format(time.RFC3339),
+				Time:  bucket.Time.Format(time.RFC3339Nano),
 				Count: bucket.Count,
 			}
 		}
@@ -1067,7 +1054,7 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 		errorRatePerHour := make([]dto.TimeBucket, len(stats.ErrorRatePerHour))
 		for i, bucket := range stats.ErrorRatePerHour {
 			errorRatePerHour[i] = dto.TimeBucket{
-				Time:  bucket.Time.Format(time.RFC3339),
+				Time:  bucket.Time.Format(time.RFC3339Nano),
 				Count: bucket.Count,
 			}
 		}
@@ -1075,7 +1062,7 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 		latencyPerHour := make([]dto.LatencyBucket, len(stats.LatencyPerHour))
 		for i, bucket := range stats.LatencyPerHour {
 			latencyPerHour[i] = dto.LatencyBucket{
-				Time:  bucket.Time.Format(time.RFC3339),
+				Time:  bucket.Time.Format(time.RFC3339Nano),
 				AvgMs: bucket.AvgMs,
 				P95Ms: bucket.P95Ms,
 			}
@@ -1098,16 +1085,20 @@ func getAccessLogStats(svc *accesslogservice.Service) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, dto.AccessLogStatsResponse{
-			TotalRequests:     stats.TotalRequests,
-			SuccessCount:      stats.SuccessCount,
-			ErrorCount:        stats.ErrorCount,
-			AvgLatencyMs:      stats.AvgLatencyMs,
-			P95LatencyMs:      stats.P95LatencyMs,
-			RequestsPerMinute: requestsPerMinute,
-			ErrorRatePerHour:  errorRatePerHour,
-			LatencyPerHour:    latencyPerHour,
-			TopPaths:          topPaths,
-			TopIPs:            topIPs,
+			TotalRequests:         stats.TotalRequests,
+			AuthFailures:          stats.AuthFailures,
+			BucketIntervalSeconds: stats.BucketIntervalSeconds,
+			PeriodStart:           stats.PeriodStart.Format(time.RFC3339Nano),
+			PeriodEnd:             stats.PeriodEnd.Format(time.RFC3339Nano),
+			SuccessCount:          stats.SuccessCount,
+			ErrorCount:            stats.ErrorCount,
+			AvgLatencyMs:          stats.AvgLatencyMs,
+			P95LatencyMs:          stats.P95LatencyMs,
+			RequestsPerMinute:     requestsPerMinute,
+			ErrorRatePerHour:      errorRatePerHour,
+			LatencyPerHour:        latencyPerHour,
+			TopPaths:              topPaths,
+			TopIPs:                topIPs,
 		})
 	}
 }
@@ -1124,13 +1115,18 @@ func aggregateAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manage
 		if durationStr == "" {
 			durationStr = "24h"
 		}
-		duration, err := time.ParseDuration(durationStr)
+		filter, err := parseAccessLogFilter(params.AccessLogFilterParams, params.Duration, "24h")
 		if err != nil {
-			writeError(c, http.StatusBadRequest, "invalid_duration", "invalid duration format")
+			writeError(c, http.StatusBadRequest, "invalid_params", err.Error())
 			return
 		}
-
-		result := svc.Aggregate(duration, params.GroupBy, params.SortBy, params.SortOrder, params.Page, params.PerPage)
+		switch params.GroupBy {
+		case "host", "route_id", "client_ip", "username", "status_code", "auth_result":
+		default:
+			writeError(c, http.StatusBadRequest, "invalid_group_by", "invalid group_by")
+			return
+		}
+		result := svc.AggregateFiltered(filter, params.GroupBy, params.SortBy, params.SortOrder, params.Page, params.PerPage)
 
 		groups := make([]dto.AccessLogAggregateGroup, len(result.Groups))
 		for i, g := range result.Groups {
@@ -1142,8 +1138,8 @@ func aggregateAccessLogs(svc *accesslogservice.Service, routerMgr *router.Manage
 				AuthFailures: g.AuthFailures,
 				AvgLatencyMs: g.AvgLatencyMs,
 				P95LatencyMs: g.P95LatencyMs,
-				FirstSeen:    g.FirstSeen.Format(time.RFC3339),
-				LastSeen:     g.LastSeen.Format(time.RFC3339),
+				FirstSeen:    g.FirstSeen.Format(time.RFC3339Nano),
+				LastSeen:     g.LastSeen.Format(time.RFC3339Nano),
 			}
 			// Resolve route names when grouping by route_id
 			if result.GroupBy == "route_id" && routerMgr != nil {

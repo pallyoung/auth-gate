@@ -1,14 +1,17 @@
 package proxy
 
+import "github.com/pallyoung/auth-gate/packages/server/internal/pagei18n"
+
 // badGatewayPageHTML is a self-contained HTML page shown when the upstream
 // backend is unreachable or returns an error. It is served when the client
 // accepts text/html; otherwise a JSON error envelope is returned for API clients.
 const badGatewayPageHTML = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>502 - 服务暂不可用</title>
+<title data-i18n="title">502 - Service unavailable</title>
+` + pagei18n.Runtime + `
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;background:#0a0f1a;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#e0e6f0}
@@ -31,25 +34,27 @@ p{color:#6b7a90;font-size:15px;line-height:1.7;margin-bottom:32px}
 </head>
 <body>
 <div class="container">
+  ` + pagei18n.Switcher + `
   <div class="code">502</div>
   <div class="icon">
     <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   </div>
-  <h1>服务暂不可用</h1>
-  <p>后端服务暂时无法访问，<br>请稍后再试或联系管理员。</p>
+  <h1 data-i18n="heading">Service unavailable</h1>
+  <p data-i18n="description">The backend service is temporarily unavailable. Try again later or contact your administrator.</p>
   <div class="host" id="host-info"></div>
   <div class="actions">
     <button class="btn btn-ghost" onclick="location.reload()">
       <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-      刷新重试
+      <span data-i18n="retry">Retry</span>
     </button>
     <button class="btn btn-ghost" onclick="history.back()">
       <svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-      返回上一页
+      <span data-i18n="back">Go Back</span>
     </button>
   </div>
 </div>
 <script>
+window.authGateI18n.init({"en":{"title":"502 - Service unavailable","heading":"Service unavailable","description":"The backend service is temporarily unavailable. Try again later or contact your administrator.","back":"Go Back","retry":"Retry"},"zh-CN":{"title":"502 - 服务暂不可用","heading":"服务暂不可用","description":"后端服务暂时无法访问，请稍后再试或联系管理员。","back":"返回上一页","retry":"刷新重试"}});
 document.getElementById('host-info').textContent = window.location.hostname + window.location.pathname;
 </script>
 </body>
