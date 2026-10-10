@@ -747,17 +747,23 @@ func (s *JSONStore) DeleteHostProfile(id string) error {
 func (s *JSONStore) SetActiveHostProfile(profileID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.data.HostProfiles[profileID]; !ok {
+	if _, ok := s.data.HostProfiles[profileID]; profileID != "" && !ok {
 		return sql.ErrNoRows
 	}
 	now := time.Now()
+	previous := make(map[string]HostProfile, len(s.data.HostProfiles))
 	for id := range s.data.HostProfiles {
 		p := s.data.HostProfiles[id]
+		previous[id] = p
 		p.IsActive = (id == profileID)
 		p.UpdatedAt = now
 		s.data.HostProfiles[id] = p
 	}
-	return s.save()
+	if err := s.save(); err != nil {
+		s.data.HostProfiles = previous
+		return err
+	}
+	return nil
 }
 
 // ---- Host Entries ----

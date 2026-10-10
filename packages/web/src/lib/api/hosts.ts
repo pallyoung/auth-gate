@@ -18,6 +18,8 @@ export const hostsApi = {
   delete: (id: string) => request<{ status: string }>(`/host-profiles/${id}`, { method: 'DELETE' }),
   activate: (id: string) =>
     request<HostProfile>(`/host-profiles/${id}/activate`, { method: 'POST' }),
+  deactivate: (id: string) =>
+    request<HostProfile>(`/host-profiles/${id}/deactivate`, { method: 'POST' }),
   listEntries: (profileId: string) =>
     request<HostEntry[]>(`/host-profiles/${profileId}/entries`),
   createEntry: (profileId: string, data: HostEntryInput) =>

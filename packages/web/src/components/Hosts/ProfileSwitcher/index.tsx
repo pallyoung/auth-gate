@@ -1,15 +1,16 @@
 import { useTranslation } from 'react-i18next'
 import type { HostProfile } from '../../../lib/api/types'
+import { Badge } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 
 interface ProfileSwitcherProps {
   profiles: HostProfile[]
-  activeId: string
-  canManage: boolean
+  selectedId: string
+  disabled?: boolean
   onChange: (id: string) => void
 }
 
-export const ProfileSwitcher = ({ profiles, activeId, canManage, onChange }: ProfileSwitcherProps) => {
+export const ProfileSwitcher = ({ profiles, selectedId, disabled, onChange }: ProfileSwitcherProps) => {
   const { t } = useTranslation('hosts')
   if (profiles.length === 0) return null
   return (
@@ -17,18 +18,17 @@ export const ProfileSwitcher = ({ profiles, activeId, canManage, onChange }: Pro
       {profiles.map((p) => (
         <Button
           key={p.id}
-          variant={p.id === activeId ? 'primary' : 'secondary'}
+          variant={p.id === selectedId ? 'primary' : 'secondary'}
+          disabled={disabled}
           onClick={() => onChange(p.id)}
-          aria-pressed={p.id === activeId}
+          aria-label={p.name}
+          aria-describedby={p.is_active ? `profile-active-${p.id}` : undefined}
+          aria-pressed={p.id === selectedId}
         >
           {p.name}
+          {p.is_active && <Badge variant="success" className="ml-2" id={`profile-active-${p.id}`}>{t('active')}</Badge>}
         </Button>
       ))}
-      {!canManage && (
-        <span className="ml-2 text-xs text-[var(--text-muted)]">
-          {activeId ? t('active') : null}
-        </span>
-      )}
     </div>
   )
 }

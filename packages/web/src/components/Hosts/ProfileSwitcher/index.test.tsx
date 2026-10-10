@@ -15,7 +15,7 @@ describe('ProfileSwitcher', () => {
     const user = userEvent.setup()
 
     await renderWithI18n(
-      <ProfileSwitcher profiles={profiles} activeId="a" canManage onChange={onChange} />,
+      <ProfileSwitcher profiles={profiles} selectedId="a" onChange={onChange} />,
       { locale: 'en' }
     )
 
@@ -28,7 +28,7 @@ describe('ProfileSwitcher', () => {
 
   it('hides admin actions when canManage is false', async () => {
     await renderWithI18n(
-      <ProfileSwitcher profiles={profiles} activeId="a" canManage={false} onChange={vi.fn()} />,
+      <ProfileSwitcher profiles={profiles} selectedId="a" onChange={vi.fn()} />,
       { locale: 'en' }
     )
     expect(screen.queryByRole('button', { name: /activate/i })).not.toBeInTheDocument()

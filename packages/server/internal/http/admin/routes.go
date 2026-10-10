@@ -53,6 +53,7 @@ type HostService interface {
 	UpdateProfile(id string, in hostservice.ProfileInput) (*store.HostProfile, error)
 	DeleteProfile(id string) error
 	ActivateProfile(id string) (*store.HostProfile, error)
+	DeactivateProfile(id string) (*store.HostProfile, error)
 	ListEntries(profileID string) ([]store.HostEntry, error)
 	CreateEntry(profileID string, in hostservice.EntryInput) (*store.HostEntry, error)
 	UpdateEntry(profileID, entryID string, in hostservice.EntryInput) (*store.HostEntry, error)
@@ -160,6 +161,7 @@ func RegisterRoutes(group *gin.RouterGroup, routerMgr *router.Manager, db store.
 			adminOnly.PUT("/host-profiles/:id", updateHostProfile(hostSvc))
 			adminOnly.DELETE("/host-profiles/:id", deleteHostProfile(hostSvc))
 			adminOnly.POST("/host-profiles/:id/activate", activateHostProfile(hostSvc))
+			adminOnly.POST("/host-profiles/:id/deactivate", deactivateHostProfile(hostSvc))
 			adminOnly.POST("/host-profiles/:id/entries", createHostEntry(hostSvc))
 			adminOnly.PUT("/host-profiles/:id/entries/reorder", reorderHostEntries(hostSvc))
 			adminOnly.PUT("/host-profiles/:id/entries/:eid", updateHostEntry(hostSvc))

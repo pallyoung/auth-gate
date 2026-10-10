@@ -1,14 +1,45 @@
 package hostservice
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	syshosts "github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
+	syshosts "github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 )
+
+type failingActivationStore struct{ store.Store }
+
+func (s failingActivationStore) SetActiveHostProfile(string) error {
+	return errors.New("storage unavailable")
+}
+
+func TestService_StateSaveFailureRestoresHosts(t *testing.T) {
+	svc, db := newTestService(t)
+	p, _ := svc.CreateProfile(ProfileInput{Name: "dev"})
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	original := "127.0.0.1 localhost\r\n# user comment\r\n"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	svc.renderer = &syshosts.Renderer{HostsPath: path, BackupDir: filepath.Join(dir, "backup")}
+	svc.db = failingActivationStore{db}
+	if _, err := svc.ActivateProfile(p.ID); Code(err) != ErrCodeStoreFailure {
+		t.Fatalf("error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != original {
+		t.Fatalf("hosts not restored: %q, %v", data, err)
+	}
+	got, _ := db.GetHostProfile(p.ID)
+	if got.IsActive {
+		t.Fatal("failed state save activated profile")
+	}
+}
 
 func newTestService(t *testing.T) (*Service, store.Store) {
 	t.Helper()
@@ -18,6 +49,104 @@ func newTestService(t *testing.T) (*Service, store.Store) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return NewService(db, nil), db
+}
+
+func TestService_FailedActivationKeepsPreviousProfile(t *testing.T) {
+	svc, db := newTestService(t)
+	previous, _ := svc.CreateProfile(ProfileInput{Name: "previous"})
+	next, _ := svc.CreateProfile(ProfileInput{Name: "next"})
+	if err := db.SetActiveHostProfile(previous.ID); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	// A damaged marker block makes the real renderer reject the write.
+	original := "127.0.0.1 localhost\n" + syshosts.BeginMarker + "\n"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	svc.renderer = &syshosts.Renderer{HostsPath: path, BackupDir: filepath.Join(dir, "backups")}
+	if _, err := svc.ActivateProfile(next.ID); Code(err) != ErrCodeMarkerMissing {
+		t.Fatalf("error = %v", err)
+	}
+	got, _ := svc.GetProfile(previous.ID)
+	if !got.IsActive {
+		t.Fatal("failed write cleared the previous active profile")
+	}
+	got, _ = svc.GetProfile(next.ID)
+	if got.IsActive {
+		t.Fatal("failed write activated the new profile")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != original {
+		t.Fatalf("hosts changed: %q, %v", data, err)
+	}
+}
+
+func TestService_DeactivatePreservesOtherHostsAndSavedEntries(t *testing.T) {
+	svc, db := newTestService(t)
+	p, _ := svc.CreateProfile(ProfileInput{Name: "dev"})
+	other, _ := svc.CreateProfile(ProfileInput{Name: "other"})
+	_, err := svc.CreateEntry(p.ID, EntryInput{IP: "10.0.0.1", Hostnames: []string{"dev.local"}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	original := "127.0.0.1 localhost\n" + syshosts.BeginMarker + "\n\n" + syshosts.EndMarker + "\n::1 localhost\n"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	svc.renderer = &syshosts.Renderer{HostsPath: path, BackupDir: filepath.Join(dir, "backups")}
+	if _, err := svc.ActivateProfile(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	deactivator, ok := any(svc).(interface {
+		DeactivateProfile(string) (*store.HostProfile, error)
+	})
+	if !ok {
+		t.Fatal("service does not support deactivation")
+	}
+	// Deactivating an inactive profile must not clear the currently active one.
+	if _, err := deactivator.DeactivateProfile(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	active, _ := db.GetHostProfile(p.ID)
+	if !active.IsActive {
+		t.Fatal("deactivated the wrong profile")
+	}
+	result, err := deactivator.DeactivateProfile(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsActive {
+		t.Fatal("profile remains active")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != original {
+		t.Fatalf("hosts = %q, err = %v", data, err)
+	}
+	entries, _ := svc.ListEntries(p.ID)
+	if len(entries) != 1 {
+		t.Fatal("deactivation deleted saved entries")
+	}
+	if _, err := deactivator.DeactivateProfile(p.ID); err != nil {
+		t.Fatal("repeat deactivation:", err)
+	}
+	if _, err := svc.ActivateProfile(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Reject a damaged file without claiming successful deactivation.
+	if err := os.WriteFile(path, []byte(syshosts.BeginMarker+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deactivator.DeactivateProfile(p.ID); Code(err) != ErrCodeMarkerMissing {
+		t.Fatalf("error = %v", err)
+	}
+	active, _ = db.GetHostProfile(p.ID)
+	if !active.IsActive {
+		t.Fatal("failed deactivation cleared status")
+	}
 }
 
 func TestService_CreateAndListProfiles(t *testing.T) {

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -12,9 +15,10 @@ import (
 	"github.com/pallyoung/auth-gate/packages/server/internal/auth"
 	hostservice "github.com/pallyoung/auth-gate/packages/server/internal/service/hosts"
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
+	"github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 )
 
-func newTestHostRouter(t *testing.T) (*gin.Engine, store.Store) {
+func newTestHostRouter(t *testing.T, renderers ...*syshosts.Renderer) (*gin.Engine, store.Store) {
 	t.Helper()
 
 	db, err := store.NewJSONStore(t.TempDir())
@@ -26,13 +30,80 @@ func newTestHostRouter(t *testing.T) (*gin.Engine, store.Store) {
 	})
 
 	auth.ConfigureJWTSecret("test-secret")
-	svc := hostservice.NewService(db, nil)
+	var renderer *syshosts.Renderer
+	if len(renderers) > 0 {
+		renderer = renderers[0]
+	}
+	svc := hostservice.NewService(db, renderer)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	group := r.Group("/_authgate/api")
 	group.Use(auth.AuthMiddleware(db))
 	RegisterRoutes(group, nil, db, nil, svc, nil, nil, nil)
 	return r, db
+}
+
+func TestHTTP_DeactivateProfile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	r, db := newTestHostRouter(t, &syshosts.Renderer{HostsPath: path, BackupDir: filepath.Join(dir, "backups")})
+	p := &store.HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateHostEntry(&store.HostEntry{ProfileID: p.ID, IP: "10.0.0.1", Hostnames: "dev.local", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	tok := hostToken(t, db, store.RoleAdmin)
+	base := "/_authgate/api/host-profiles/" + p.ID
+	w := hostDo(r, http.MethodPost, base+"/activate", tok, "")
+	if w.Code != 200 {
+		t.Fatalf("activate: %d %s", w.Code, w.Body.String())
+	}
+	w = hostDo(r, http.MethodPost, base+"/deactivate", "", "")
+	if w.Code != 401 {
+		t.Fatalf("anonymous: %d", w.Code)
+	}
+	viewer := hostToken(t, db, store.RoleViewer)
+	w = hostDo(r, http.MethodPost, base+"/deactivate", viewer, "")
+	if w.Code != 403 {
+		t.Fatalf("viewer: %d", w.Code)
+	}
+	tok = hostToken(t, db, store.RoleAdmin)
+	w = hostDo(r, http.MethodPost, base+"/deactivate", tok, "")
+	if w.Code != 200 {
+		t.Fatalf("deactivate: %d %s", w.Code, w.Body.String())
+	}
+	var result struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.IsActive {
+		t.Fatal("response claims active")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(data), "dev.local") || !strings.Contains(string(data), "127.0.0.1 localhost") {
+		t.Fatalf("hosts = %q, err = %v", data, err)
+	}
+	w = hostDo(r, http.MethodGet, "/_authgate/api/host-profiles?active_id="+p.ID, tok, "")
+	var list struct {
+		ActiveID string `json:"active_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if list.ActiveID != "" {
+		t.Fatalf("stale active ID = %s", list.ActiveID)
+	}
+	w = hostDo(r, http.MethodPost, "/_authgate/api/host-profiles/missing/deactivate", tok, "")
+	if w.Code != 404 {
+		t.Fatalf("missing profile: %d", w.Code)
+	}
 }
 
 func hostToken(t *testing.T, db store.Store, role string) string {

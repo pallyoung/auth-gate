@@ -15,18 +15,21 @@ import type { HostEntry, HostEntryInput, HostProfile, HostProfileInput } from '.
 export function HostsPage() {
   const { t } = useTranslation('hosts')
   const [profiles, setProfiles] = React.useState<HostProfile[]>([])
-  const [activeProfileId, setActiveProfileId] = React.useState<string | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = React.useState<string | null>(null)
   const [entries, setEntries] = React.useState<HostEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [success, setSuccess] = React.useState<string | null>(null)
+  const [pendingAction, setPendingAction] = React.useState<'activate' | 'deactivate' | null>(null)
+  const actionInFlight = React.useRef(false)
   const [markerBanner, setMarkerBanner] = React.useState(false)
   const [showProfileForm, setShowProfileForm] = React.useState(false)
   const [editingProfile, setEditingProfile] = React.useState<HostProfile | null>(null)
   const [showEntryForm, setShowEntryForm] = React.useState(false)
   const [editingEntry, setEditingEntry] = React.useState<HostEntry | null>(null)
   const canManage = getSessionUser()?.permissions?.can_manage_hosts ?? false
-  const activeProfileIdRef = React.useRef(activeProfileId)
-  activeProfileIdRef.current = activeProfileId
+  const selectedProfileIdRef = React.useRef(selectedProfileId)
+  selectedProfileIdRef.current = selectedProfileId
 
   const fetchEntries = React.useCallback(async (profileId: string) => {
     try {
@@ -46,8 +49,8 @@ export function HostsPage() {
         if (cancelled) return
         setProfiles(data.profiles)
         if (data.profiles.length > 0) {
-          const activeId = data.active_id || data.profiles[0].id
-          setActiveProfileId(activeId)
+          const activeId = data.profiles.find((p) => p.is_active)?.id || data.profiles[0].id
+          setSelectedProfileId(activeId)
           await fetchEntries(activeId)
         }
       } catch (err) {
@@ -60,28 +63,41 @@ export function HostsPage() {
   }, [fetchEntries])
 
   React.useEffect(() => {
-    if (activeProfileId && !loading) {
-      fetchEntries(activeProfileId)
+    if (selectedProfileId && !loading) {
+      fetchEntries(selectedProfileId)
     }
-  }, [activeProfileId, loading, fetchEntries])
+  }, [selectedProfileId, loading, fetchEntries])
 
   const handleSelectProfile = (id: string) => {
-    setActiveProfileId(id)
+    setSelectedProfileId(id)
   }
 
-  const handleActivate = async () => {
-    if (!activeProfileId) return
+  const handleApply = async (action: 'activate' | 'deactivate') => {
+    const profile = profiles.find((p) => p.id === selectedProfileId)
+    if (!profile || actionInFlight.current) return
+    actionInFlight.current = true
+    setPendingAction(action)
     setMarkerBanner(false)
+    setError(null)
+    setSuccess(null)
     try {
-      await hostsApi.activate(activeProfileId)
-      const data = await hostsApi.list()
-      setProfiles(data.profiles)
+      const updated = await hostsApi[action](profile.id)
+      setProfiles((current) => current.map((p) => {
+        if (p.id === updated.id) return updated
+        return action === 'activate' ? { ...p, is_active: false } : p
+      }))
+      setSuccess(t(action === 'activate' ? 'activated' : 'deactivated', { name: profile.name }))
     } catch (err) {
       if (err instanceof ApiError && err.code === 'host_marker_missing') {
         setMarkerBanner(true)
+      } else if (err instanceof ApiError && err.code && ['host_permission_denied', 'host_render_failure'].includes(err.code)) {
+        setError(t(`errors.${err.code}`))
       } else {
         setError((err as Error).message)
       }
+    } finally {
+      actionInFlight.current = false
+      setPendingAction(null)
     }
   }
 
@@ -90,8 +106,8 @@ export function HostsPage() {
     setShowProfileForm(false)
     const result = await hostsApi.list()
     setProfiles(result.profiles)
-    if (!activeProfileIdRef.current && result.profiles.length > 0) {
-      setActiveProfileId(result.profiles[0].id)
+    if (!selectedProfileIdRef.current && result.profiles.length > 0) {
+      setSelectedProfileId(result.profiles[0].id)
     }
   }
 
@@ -108,44 +124,45 @@ export function HostsPage() {
     await hostsApi.delete(profile.id)
     const result = await hostsApi.list()
     setProfiles(result.profiles)
-    if (activeProfileId === profile.id) {
-      setActiveProfileId(result.profiles.length > 0 ? result.profiles[0].id : null)
+    if (selectedProfileId === profile.id) {
+      setSelectedProfileId(result.profiles.length > 0 ? result.profiles[0].id : null)
     }
   }
 
   const handleCreateEntry = async (data: HostEntryInput) => {
-    if (!activeProfileId) return
-    await hostsApi.createEntry(activeProfileId, data)
+    if (!selectedProfileId) return
+    await hostsApi.createEntry(selectedProfileId, data)
     setShowEntryForm(false)
-    await fetchEntries(activeProfileId)
+    await fetchEntries(selectedProfileId)
   }
 
   const handleUpdateEntry = async (data: HostEntryInput) => {
-    if (!activeProfileId || !editingEntry) return
-    await hostsApi.updateEntry(activeProfileId, editingEntry.id, data)
+    if (!selectedProfileId || !editingEntry) return
+    await hostsApi.updateEntry(selectedProfileId, editingEntry.id, data)
     setEditingEntry(null)
-    await fetchEntries(activeProfileId)
+    await fetchEntries(selectedProfileId)
   }
 
   const handleDeleteEntry = async (entry: HostEntry) => {
-    if (!activeProfileId) return
+    if (!selectedProfileId) return
     if (!confirm(t('deleteEntryConfirm', { hostnames: entry.hostnames }))) return
-    await hostsApi.deleteEntry(activeProfileId, entry.id)
-    await fetchEntries(activeProfileId)
+    await hostsApi.deleteEntry(selectedProfileId, entry.id)
+    await fetchEntries(selectedProfileId)
   }
 
   const handleToggleEntry = async (entry: HostEntry, enabled: boolean) => {
-    if (!activeProfileId) return
-    await hostsApi.updateEntry(activeProfileId, entry.id, {
+    if (!selectedProfileId) return
+    await hostsApi.updateEntry(selectedProfileId, entry.id, {
       ip: entry.ip,
       hostnames: entry.hostnames.split(/\s+/).filter(Boolean),
       comment: entry.comment,
       enabled,
     })
-    await fetchEntries(activeProfileId)
+    await fetchEntries(selectedProfileId)
   }
 
-  const activeProfile = profiles.find((p) => p.id === activeProfileId)
+  const selectedProfile = profiles.find((p) => p.id === selectedProfileId)
+  const activatedProfile = profiles.find((p) => p.is_active)
 
   if (loading) {
     return (
@@ -171,8 +188,12 @@ export function HostsPage() {
         }
       />
 
-      {error && <Alert variant="error">{error}</Alert>}
-      {markerBanner && <Alert variant="warning">{t('markerBanner')}</Alert>}
+      {error && <Alert variant="error" role="alert">{error}</Alert>}
+      {success && <Alert variant="success" role="status">{success}</Alert>}
+      <Alert variant={activatedProfile ? 'success' : 'info'}>
+        <span>{activatedProfile ? t('activeProfile', { name: activatedProfile.name }) : t('noActiveProfile')}</span>
+      </Alert>
+      {markerBanner && <Alert variant="warning" role="alert">{t('markerBanner')}</Alert>}
 
       {profiles.length === 0 ? (
         <Card>
@@ -180,32 +201,41 @@ export function HostsPage() {
         </Card>
       ) : (
         <>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <ProfileSwitcher
               profiles={profiles}
-              activeId={activeProfileId ?? ''}
-              canManage={canManage}
+              selectedId={selectedProfileId ?? ''}
+              disabled={!!pendingAction}
               onChange={handleSelectProfile}
             />
-            {canManage && activeProfileId && (
-              <Button variant="secondary" onClick={handleActivate}>
-                {t('activate')}
-              </Button>
+            {canManage && selectedProfileId && (
+              <>
+                <Button variant="secondary" disabled={!!pendingAction} loading={pendingAction === 'activate'} onClick={() => handleApply('activate')}>
+                  {t(pendingAction === 'activate' ? 'activating' : selectedProfile?.is_active ? 'reapply' : 'activate')}
+                </Button>
+                {selectedProfile?.is_active && (
+                  <Button variant="secondary" disabled={!!pendingAction} loading={pendingAction === 'deactivate'} onClick={() => handleApply('deactivate')}>
+                    {t(pendingAction === 'deactivate' ? 'deactivating' : 'deactivate')}
+                  </Button>
+                )}
+              </>
             )}
           </div>
 
+          <p className="text-sm text-[var(--text-muted)]">{t('applyHint')}</p>
           <Card>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-                    {activeProfile?.name ?? t('title')}
+                    {selectedProfile?.name ?? t('title')}
                   </h3>
-                  {canManage && activeProfile && (
+                  {canManage && selectedProfile && (
                     <>
                       <button
                         type="button"
-                        onClick={() => setEditingProfile(activeProfile)}
+                        disabled={!!pendingAction}
+                        onClick={() => setEditingProfile(selectedProfile)}
                         className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                         title={t('editProfile')}
                       >
@@ -213,7 +243,8 @@ export function HostsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeleteProfile(activeProfile)}
+                        disabled={!!pendingAction}
+                        onClick={() => handleDeleteProfile(selectedProfile)}
                         className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--color-danger-500)]"
                         title={t('deleteProfile')}
                       >
@@ -222,8 +253,8 @@ export function HostsPage() {
                     </>
                   )}
                 </div>
-                {activeProfile?.description && (
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">{activeProfile.description}</p>
+                {selectedProfile?.description && (
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">{selectedProfile.description}</p>
                 )}
               </div>
               {canManage && (

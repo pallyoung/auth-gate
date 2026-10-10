@@ -16,7 +16,7 @@ func listHostProfiles(svc HostService) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
-		activeID := c.Query("active_id")
+		activeID := ""
 		c.JSON(http.StatusOK, dto.HostProfileListEnvelope(profiles, activeID))
 	}
 }
@@ -160,5 +160,15 @@ func deleteHostEntry(svc HostService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+func deactivateHostProfile(svc HostService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p, err := svc.DeactivateProfile(c.Param("id"))
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, dto.HostProfileResponse(*p))
 	}
 }

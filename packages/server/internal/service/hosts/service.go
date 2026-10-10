@@ -4,14 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/pallyoung/auth-gate/packages/server/internal/store"
 	"github.com/pallyoung/auth-gate/packages/server/internal/syshosts"
 )
 
 const (
-	ErrCodeProfileNotFound     = "host_profile_not_found"
-	ErrCodeEntryNotFound       = "host_entry_not_found"
+	ErrCodeProfileNotFound      = "host_profile_not_found"
+	ErrCodeEntryNotFound        = "host_entry_not_found"
 	ErrCodeDuplicateProfileName = "duplicate_host_profile_name"
 	ErrCodeInvalidProfileName   = "invalid_host_profile_name"
 	ErrCodeInvalidIP            = "invalid_host_ip"
@@ -59,6 +60,7 @@ type EntryInput struct {
 }
 
 type Service struct {
+	mu       sync.Mutex // Serializes hosts writes and activation state changes.
 	db       store.Store
 	renderer *syshosts.Renderer
 }
@@ -103,6 +105,8 @@ func (s *Service) CreateProfile(in ProfileInput) (*store.HostProfile, error) {
 }
 
 func (s *Service) UpdateProfile(id string, in ProfileInput) (*store.HostProfile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	p, err := s.GetProfile(id)
 	if err != nil {
 		return nil, err
@@ -128,6 +132,8 @@ func (s *Service) UpdateProfile(id string, in ProfileInput) (*store.HostProfile,
 }
 
 func (s *Service) DeleteProfile(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, err := s.GetProfile(id); err != nil {
 		return err
 	}
@@ -318,6 +324,8 @@ func (s *Service) nextEntryPosition(profileID string) (int, error) {
 }
 
 func (s *Service) ActivateProfile(id string) (*store.HostProfile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, err := s.GetProfile(id); err != nil {
 		return nil, err
 	}
@@ -327,32 +335,50 @@ func (s *Service) ActivateProfile(id string) (*store.HostProfile, error) {
 	}
 	content := renderEntries(entries)
 
-	if s.renderer == nil {
-		return nil, newError(ErrCodeRenderFailure, "renderer not configured", nil)
+	if err := s.applyProfile(id, content); err != nil {
+		return nil, err
 	}
+	return s.GetProfile(id)
+}
 
-	if err := s.db.SetActiveHostProfile(id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, newError(ErrCodeProfileNotFound, "host profile not found", err)
-		}
-		return nil, newError(ErrCodeStoreFailure, "failed to set active host profile", err)
-	}
-
-	if err := s.renderer.Apply(content); err != nil {
-		if errors.Is(err, syshosts.ErrPermissionDenied) {
-			return nil, newError(ErrCodePermissionDenied, err.Error(), err)
-		}
-		if errors.Is(err, syshosts.ErrMarkerMissing) {
-			return nil, newError(ErrCodeMarkerMissing, "managed marker block is missing in hosts file; append the markers manually before activating", err)
-		}
-		return nil, newError(ErrCodeRenderFailure, "failed to apply hosts file change", err)
-	}
-
+func (s *Service) DeactivateProfile(id string) (*store.HostProfile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	p, err := s.GetProfile(id)
 	if err != nil {
 		return nil, err
 	}
-	return p, nil
+	if !p.IsActive {
+		return p, nil
+	}
+	if err := s.applyProfile("", ""); err != nil {
+		return nil, err
+	}
+	return s.GetProfile(id)
+}
+
+func (s *Service) applyProfile(id, content string) error {
+	if s.renderer == nil {
+		return newError(ErrCodeRenderFailure, "renderer not configured", nil)
+	}
+	if err := s.renderer.ApplyAndCommit(content, func() error {
+		if err := s.db.SetActiveHostProfile(id); err != nil {
+			return newError(ErrCodeStoreFailure, "failed to save activation state", err)
+		}
+		return nil
+	}); err != nil {
+		if Code(err) == ErrCodeStoreFailure {
+			return newError(ErrCodeStoreFailure, err.Error(), err)
+		}
+		if errors.Is(err, syshosts.ErrPermissionDenied) {
+			return newError(ErrCodePermissionDenied, err.Error(), err)
+		}
+		if errors.Is(err, syshosts.ErrMarkerMissing) {
+			return newError(ErrCodeMarkerMissing, "managed marker block is missing or inconsistent", err)
+		}
+		return newError(ErrCodeRenderFailure, "failed to apply hosts file change", err)
+	}
+	return nil
 }
 
 func renderEntries(entries []store.HostEntry) string {

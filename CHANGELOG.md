@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-10-10
+
+### Added
+- Hosts profile deactivation and reapplication, with visible activation state and operation feedback.
+- Filtered access log cleanup and expanded Chinese/English localization.
+
+### Fixed
+- Keep the previous Hosts activation state when writing the system hosts file fails.
+- Restore the original hosts file when saving activation state fails.
+- Distinguish the selected Hosts profile from the active profile and explain Windows write-permission errors.
+
 ## [0.0.5] - 2026-06-27
 
 ### Added

@@ -62,6 +62,13 @@ func NewRenderer(dataDir string) *Renderer {
 // not contain a valid marker block and is non-empty, ErrMarkerMissing is
 // returned and the file is not modified.
 func (r *Renderer) Apply(content string) error {
+	return r.ApplyAndCommit(content, nil)
+}
+
+// ApplyAndCommit writes the managed block, then persists its activation state.
+// If commit fails, the original file bytes are restored. Callers must serialize
+// calls, including the commit, with other hosts-file changes.
+func (r *Renderer) ApplyAndCommit(content string, commit func() error) error {
 	if r.HostsPath == "" {
 		return errors.New("syshosts: HostsPath is empty")
 	}
@@ -107,6 +114,14 @@ func (r *Renderer) Apply(content string) error {
 	}
 	if err := r.writeAtomic(data); err != nil {
 		return fmt.Errorf("write hosts file: %w", err)
+	}
+	if commit != nil {
+		if err := commit(); err != nil {
+			if restoreErr := r.writeAtomic(existing); restoreErr != nil {
+				return fmt.Errorf("activation state could not be saved and hosts restoration failed: %w", errors.Join(err, restoreErr))
+			}
+			return err
+		}
 	}
 	return nil
 }

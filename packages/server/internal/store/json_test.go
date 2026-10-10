@@ -3,9 +3,45 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestActivationStateSaveFailureKeepsMemoryAndDisk(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewJSONStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &HostProfile{Name: "dev"}
+	if err := db.CreateHostProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetActiveHostProfile(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Prevent the store's temporary file from being written.
+	if err := os.Mkdir(filepath.Join(dir, "store.json.tmp"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetActiveHostProfile(""); err == nil {
+		t.Fatal("expected save failure")
+	}
+	got, _ := db.GetHostProfile(p.ID)
+	if !got.IsActive {
+		t.Fatal("memory changed despite failed save")
+	}
+	reopened, err := NewJSONStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ = reopened.GetHostProfile(p.ID)
+	if !got.IsActive {
+		t.Fatal("persisted state changed despite failed save")
+	}
+}
 
 func newTestStore(t *testing.T) Store {
 	t.Helper()

@@ -20,6 +20,7 @@ vi.mock('../lib/api/hosts', () => ({
     list: vi.fn(),
     get: vi.fn(),
     activate: vi.fn(),
+    deactivate: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -41,13 +42,71 @@ vi.mock('../lib/session-store', () => ({
 
 describe('HostsPage', () => {
   beforeEach(() => {
+    vi.resetAllMocks()
     vi.mocked(hostsApi.list).mockResolvedValue({ profiles, active_id: 'p1' })
     vi.mocked(hostsApi.get).mockImplementation((id) => Promise.resolve(profiles.find((p) => p.id === id)!))
     vi.mocked(hostsApi.listEntries).mockResolvedValue(entries)
     vi.mocked(hostsApi.activate).mockReset()
+    vi.mocked(hostsApi.deactivate).mockReset()
     vi.mocked(hostsApi.create).mockReset()
     vi.mocked(hostsApi.createEntry).mockReset()
     vi.mocked(hostsApi.delete).mockReset()
+  })
+
+  it('keeps the active status visible when browsing a different profile', async () => {
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+    expect(await screen.findByText('Active profile: Dev')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Staging' }))
+    expect(screen.getByText('Active profile: Dev')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activate this profile' })).toBeInTheDocument()
+  })
+
+  it('disables repeated activation until the write finishes and then switches the active marker', async () => {
+    let finish!: (value: typeof profiles[number]) => void
+    vi.mocked(hostsApi.activate).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+    await user.click(await screen.findByRole('button', { name: 'Staging' }))
+    await user.click(screen.getByRole('button', { name: 'Activate this profile' }))
+    expect(screen.getByRole('button', { name: 'Activating…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Dev' })).toBeDisabled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    await act(async () => finish({ ...profiles[1], is_active: true }))
+    expect(screen.getByRole('status')).toHaveTextContent('Profile "Staging" activated')
+    expect(screen.getByText('Active profile: Staging')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Staging' })).toHaveAccessibleDescription('Active')
+    expect(screen.getByRole('button', { name: 'Dev' })).not.toHaveAttribute('aria-describedby')
+    expect(screen.getByRole('button', { name: 'Deactivate' })).toBeEnabled()
+  })
+
+  it('shows no active profile even when a saved profile is selected', async () => {
+    vi.mocked(hostsApi.list).mockResolvedValue({ profiles: profiles.map((p) => ({ ...p, is_active: false })), active_id: '' })
+    await renderWithI18n(<HostsPage />, { locale: 'zh-CN' })
+    expect(await screen.findByText('暂无激活方案')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '激活此配置方案' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '取消激活' })).not.toBeInTheDocument()
+  })
+
+  it('shows success and clears the active status after deactivation', async () => {
+    vi.mocked(hostsApi.deactivate).mockResolvedValue({ ...profiles[0], is_active: false })
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+    await user.click(await screen.findByRole('button', { name: 'Deactivate' }))
+    expect(await screen.findByText('Profile "Dev" deactivated')).toBeInTheDocument()
+    expect(screen.getByText('No active profile')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activate this profile' })).toBeInTheDocument()
+    expect(screen.getByText('api.local')).toBeInTheDocument()
+  })
+
+  it('keeps the active status and reports a failed deactivation', async () => {
+    vi.mocked(hostsApi.deactivate).mockRejectedValue(new ApiError('Access denied', 500, 'host_permission_denied'))
+    const user = userEvent.setup()
+    await renderWithI18n(<HostsPage />, { locale: 'en' })
+    await user.click(await screen.findByRole('button', { name: 'Deactivate' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Administrator/)
+    expect(screen.getByText('Active profile: Dev')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deactivate' })).toBeEnabled()
   })
 
   it('renders profiles in ProfileSwitcher and entries in table', async () => {
@@ -95,12 +154,12 @@ describe('HostsPage', () => {
     await renderWithI18n(<HostsPage />, { locale: 'en' })
 
     await screen.findByRole('button', { name: 'Dev' })
-    await user.click(screen.getByRole('button', { name: 'Activate this profile' }))
+    await user.click(screen.getByRole('button', { name: 'Reapply' }))
 
     expect(await screen.findByText(/AUTH-GATE MANAGED BLOCK/)).toBeInTheDocument()
   })
 
-  it('calls activate API and refreshes profiles on success', async () => {
+  it('shows success after reapplying the active profile', async () => {
     vi.mocked(hostsApi.activate).mockResolvedValue({ ...profiles[0], is_active: true })
     const updatedProfiles = profiles.map((p) => ({ ...p, is_active: p.id === 'p1' }))
     vi.mocked(hostsApi.list).mockResolvedValueOnce({ profiles, active_id: 'p1' })
@@ -110,10 +169,11 @@ describe('HostsPage', () => {
     await renderWithI18n(<HostsPage />, { locale: 'en' })
 
     await screen.findByRole('button', { name: 'Dev' })
-    await user.click(screen.getByRole('button', { name: 'Activate this profile' }))
+    await user.click(screen.getByRole('button', { name: 'Reapply' }))
 
     await waitFor(() => {
       expect(hostsApi.activate).toHaveBeenCalledWith('p1')
+      expect(screen.getByRole('status')).toHaveTextContent('Profile "Dev" activated')
     })
   })
 

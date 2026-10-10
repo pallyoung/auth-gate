@@ -1,5 +1,14 @@
 # Hosts Management (SwitchHosts-style)
 
+## Activation workflow update (2026-10-10)
+
+- Browsing a profile and activating a profile are separate states. The page always names the active profile (or shows that none is active); the switcher marks activation independently of selection.
+- Only one profile is active at a time. Activation and reapplication show pending, success and error feedback. Editing saved entries still requires explicit reapplication.
+- Admin-only `POST /api/host-profiles/:id/deactivate` clears the managed hosts block, retains its markers and the saved profile/entries, and leaves other hosts mappings intact. Deactivating an inactive profile is a no-op.
+- Active state is saved only after the hosts write succeeds. A state-save failure restores the original file; restoration failure is reported explicitly. Activation/deactivation writes are serialized. The store accepts an empty active ID to clear activation and restores its in-memory state if persistence fails.
+- Windows permission errors explain how to run as Administrator. UI messages refer to the system hosts file without assuming a Unix path.
+- Regression tests use temporary files, including failed writes, failed state persistence, deactivation, access control, state display and operation feedback. No tests modify the machine's real hosts file.
+
 ## Context
 
 The auth-gate server today is a reverse proxy with route / auth / cert / user management, but offers no way to manage `/etc/hosts` on the host. Operators who want local DNS overrides for testing (e.g. point `api.local` at `127.0.0.1`) have to SSH in, edit the file as root, and lose their entries the next time something rewrites `/etc/hosts`. We need a control-plane UI that mirrors the workflow of SwitchHosts: maintain several named **profiles** of `IP + hostnames` entries, switch between them from the browser, and write the active profile back to the real `/etc/hosts` so the system resolver picks it up.

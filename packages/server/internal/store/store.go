@@ -64,6 +64,7 @@ type Store interface {
 	CreateHostProfile(p *HostProfile) error
 	UpdateHostProfile(p *HostProfile) error
 	DeleteHostProfile(id string) error
+	// SetActiveHostProfile selects one profile; an empty ID clears activation.
 	SetActiveHostProfile(profileID string) error
 
 	// Host entries
